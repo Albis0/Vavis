@@ -455,8 +455,8 @@ pub fn system_prompt(assistant_name: &str, language: &str) -> String {
          çalışıyorsun. {lang} konuş. Kısa, net ve doğrudan cevap ver — gereksiz \
          nezaket cümleleri kurma. Bilmediğin bir şeyi uydurma, bilmiyorum de.\n\n\
          Sana her istekte yalnızca o iş için gerekli görünen araçlar veriliyor. \
-         İhtiyacın olan bir araç elinde yoksa uydurma: `arac_iste` ile ne yapmak \
-         istediğini yaz, ilgili araçlar bir sonraki adımda elinde olur."
+         İhtiyacın olan bir araç elinde yoksa uydurma: `request_tools` ile ne \
+         yapmak istediğini yaz, ilgili araçlar bir sonraki adımda elinde olur."
     )
 }
 
@@ -623,6 +623,22 @@ mod tests {
         assert!(p.contains("Vavis"));
         assert!(p.contains("Türkçe"));
         assert!(system_prompt("Vavis", "en").contains("English"));
+    }
+
+    /// İstem bir araç adı anıyorsa o ad **gerçek** olmalı.
+    ///
+    /// Yeniden adlandırmada burası atlanmıştı: istem hâlâ `arac_iste`
+    /// diyordu, oysa araç `request_tools` olmuştu. Model, var olmayan bir
+    /// adı çağırmaya davet ediliyordu — derleyici de test de göremez,
+    /// çünkü ad burada düz metin.
+    ///
+    /// Araç adı değişirse bu test kırılmaz; en azından adın Türkçe eski
+    /// biçime geri dönmediğini garanti ediyor.
+    #[test]
+    fn the_prompt_names_a_tool_that_actually_exists() {
+        let p = system_prompt("Vavis", "tr");
+        assert!(p.contains("request_tools"), "{p}");
+        assert!(!p.contains("arac_iste"), "eski ad kalmış: {p}");
     }
 
     #[test]
