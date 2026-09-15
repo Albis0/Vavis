@@ -188,8 +188,15 @@ fn is_heading(trimmed_line: &str) -> bool {
 
 /// Extracts wikilink and embed targets.
 ///
-/// Handles `[[Note]]`, `[[Note|shown]]` and `[[Note#Heading]]`; the target is
-/// everything before the first `|` or `#`.
+/// Handles `[[Note]]`, `[[Note|shown]]`, `[[Note#Heading]]` and — inside a
+/// markdown table — `[[Note\|shown]]`, where Obsidian requires the alias pipe
+/// to be escaped so the table parser does not read it as a column break.
+///
+/// The escaped form is not an edge case: it is what Obsidian itself writes
+/// when you drop a link into a table. Missing it left a trailing backslash on
+/// the target, so `[[00 - Start Here\|context]]` resolved to
+/// `00 - Start Here\` and matched no note — the link looked broken in every
+/// tool that reported it, while Obsidian resolved it fine.
 fn extract_links(body: &str) -> (BTreeSet<String>, BTreeSet<String>) {
     let mut links = BTreeSet::new();
     let mut embeds = BTreeSet::new();
@@ -210,6 +217,10 @@ fn extract_links(body: &str) -> (BTreeSet<String>, BTreeSet<String>) {
                 .split(['|', '#'])
                 .next()
                 .unwrap_or_default()
+                .trim()
+                // The backslash of an escaped `\|` stays on the target after
+                // the split; it belongs to the table syntax, not to the name.
+                .trim_end_matches('\\')
                 .trim()
                 .to_string();
             if !target.is_empty() {
@@ -423,6 +434,21 @@ mod tests {
         assert!(note.has_tag("#project"), "leading hash is optional");
         assert!(note.has_tag("project/vavis"));
         assert!(!note.has_tag("proj"), "prefix alone must not match");
+    }
+
+    /// Obsidian escapes the alias pipe inside tables, and writes that form
+    /// itself. Leaving the backslash on made the target match no note.
+    #[test]
+    fn an_escaped_alias_pipe_inside_a_table_still_resolves() {
+        let note = Note::parse(
+            "n.md",
+            "| a | b |\n|---|---|\n| [[00 - Start Here\\|context]] | x |\n",
+        );
+        assert!(
+            note.links.contains("00 - Start Here"),
+            "ters bölü hedefte kalmamalı: {:?}",
+            note.links
+        );
     }
 
     #[test]
