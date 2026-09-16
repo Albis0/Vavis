@@ -2,7 +2,7 @@
 //!
 //! # Motorlar
 //!
-//! Beş tane, hepsi aynı arayüzün arkasında:
+//! Altı tane, hepsi aynı arayüzün arkasında:
 //!
 //! | Motor | Anahtar | Nerede çalışır | Not |
 //! |---|---|---|---|
@@ -11,6 +11,7 @@
 //! | **Kokoro** | yok | **kullanıcının kendi makinesi** | ayrı süreç, bkz. [`crate::kokoro`] |
 //! | **ElevenLabs** | var | bulut | en doğal, karakter başına ücretli |
 //! | **OpenAI** | var | bulut | anahtarı zaten olan için bedava kurulum |
+//! | **Gemini** | var | bulut | aynısı, Gemini anahtarıyla; ham PCM döner |
 //!
 //! # Neden hepsi bir zincir
 //!
@@ -55,6 +56,8 @@ pub enum TtsEngineKind {
     ElevenLabs,
     /// OpenAI TTS — iyi ses, çoğu kullanıcıda anahtarı zaten var.
     OpenAi,
+    /// Gemini TTS — sohbet için Gemini anahtarı girmiş olanın hazır sesi.
+    Gemini,
 }
 
 impl TtsEngineKind {
@@ -65,6 +68,7 @@ impl TtsEngineKind {
             "kokoro" | "yerel" | "local" => Some(Self::Kokoro),
             "elevenlabs" | "eleven" | "11labs" => Some(Self::ElevenLabs),
             "openai" | "gpt" => Some(Self::OpenAi),
+            "gemini" | "google" => Some(Self::Gemini),
             _ => None,
         }
     }
@@ -77,6 +81,7 @@ impl TtsEngineKind {
             Self::Kokoro => "kokoro",
             Self::ElevenLabs => "elevenlabs",
             Self::OpenAi => "openai",
+            Self::Gemini => "gemini",
         }
     }
 
@@ -87,6 +92,7 @@ impl TtsEngineKind {
             Self::Kokoro => "kokoro (yerel sunucu)",
             Self::ElevenLabs => "elevenlabs (en doğal)",
             Self::OpenAi => "openai",
+            Self::Gemini => "gemini (google sesi)",
         }
     }
 
@@ -103,6 +109,7 @@ impl TtsEngineKind {
             (Self::Kokoro, _) => "Kokoro",
             (Self::ElevenLabs, _) => "Eleven Labs",
             (Self::OpenAi, _) => "Open A I",
+            (Self::Gemini, _) => "Gemini",
         }
     }
 
@@ -111,15 +118,16 @@ impl TtsEngineKind {
     /// Arayüz bunu, anahtarı olmayan bir motoru seçtirmeden önce uyarmak
     /// için kullanıyor.
     pub fn needs_key(self) -> bool {
-        matches!(self, Self::ElevenLabs | Self::OpenAi)
+        matches!(self, Self::ElevenLabs | Self::OpenAi | Self::Gemini)
     }
 
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Sapi,
         Self::Edge,
         Self::Kokoro,
         Self::ElevenLabs,
         Self::OpenAi,
+        Self::Gemini,
     ];
 }
 
@@ -148,6 +156,10 @@ pub struct TtsConfig {
     pub openai_key: String,
     pub openai_voice: String,
     pub openai_model: String,
+    /// Gemini anahtarı — sohbet için girilmiş olanın aynısı.
+    pub gemini_key: String,
+    pub gemini_voice: String,
+    pub gemini_model: String,
     /// Asistanın konuştuğu dil (`"tr"`, `"en"`).
     ///
     /// Ses seçimi için gerekiyor: SAPI dile uyan sesi buradan buluyor, ve
@@ -200,6 +212,9 @@ impl Default for TtsConfig {
             openai_key: String::new(),
             openai_voice: crate::openai_tts::DEFAULT_VOICE.to_string(),
             openai_model: crate::openai_tts::DEFAULT_MODEL.to_string(),
+            gemini_key: String::new(),
+            gemini_voice: crate::gemini_tts::DEFAULT_VOICE.to_string(),
+            gemini_model: crate::gemini_tts::DEFAULT_MODEL.to_string(),
             language: "tr".to_string(),
         }
     }
@@ -217,7 +232,10 @@ fn fallback_chain(chosen: TtsEngineKind) -> Vec<TtsEngineKind> {
         TtsEngineKind::Sapi => vec![TtsEngineKind::Edge],
         // Ücretli motorlar önce ücretsiz doğal sese düşüyor: kullanıcı
         // kota bittiğinde robot ses yerine hâlâ iyi bir ses duysun.
-        TtsEngineKind::ElevenLabs | TtsEngineKind::OpenAi | TtsEngineKind::Kokoro => {
+        TtsEngineKind::ElevenLabs
+        | TtsEngineKind::OpenAi
+        | TtsEngineKind::Gemini
+        | TtsEngineKind::Kokoro => {
             vec![TtsEngineKind::Edge, TtsEngineKind::Sapi]
         }
         TtsEngineKind::Edge => vec![TtsEngineKind::Sapi],
@@ -459,6 +477,20 @@ impl TtsEngine {
                 )
                 .map_err(|e| TtsError::Speak(e.to_string()))?;
                 crate::playback::play_bytes(&mp3, "mp3", &self.cancel)
+                    .map_err(|e| TtsError::Speak(e.to_string()))
+            }
+            TtsEngineKind::Gemini => {
+                // "wav", not "mp3": Gemini returns raw PCM and the module
+                // puts a WAV header on it. The wrong extension here plays
+                // nothing at all and reports no error.
+                let wav = crate::gemini_tts::synthesize(
+                    text,
+                    &c.gemini_key,
+                    &c.gemini_voice,
+                    &c.gemini_model,
+                )
+                .map_err(|e| TtsError::Speak(e.to_string()))?;
+                crate::playback::play_bytes(&wav, "wav", &self.cancel)
                     .map_err(|e| TtsError::Speak(e.to_string()))
             }
         }

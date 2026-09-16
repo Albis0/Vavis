@@ -68,6 +68,18 @@ pub struct Voice {
     pub eleven_model: String,
     pub openai_voice: String,
     pub openai_model: String,
+    pub gemini_voice: String,
+    pub gemini_model: String,
+    /// Sohbet edilen sağlayıcının kendi sesi varsa onu kullan.
+    ///
+    /// Gemini ile konuşurken Google'ın sesini duymak beklenen şey; başka bir
+    /// firmanın motoruyla konuşmak değil. Açıkken sadece **anahtar isteyen**
+    /// bir motor seçilmişse devreye giriyor — SAPI ya da Edge seçen biri
+    /// yerel ve ücretsiz olanı seçmiş demektir, onu sessizce ücretli bir
+    /// buluta taşımak kotasını habersiz harcar.
+    ///
+    /// Kapatınca seçilen motor neyse o kalıyor.
+    pub match_provider: bool,
 }
 
 impl Default for Voice {
@@ -89,6 +101,13 @@ impl Default for Voice {
             eleven_model: String::new(),
             openai_voice: String::new(),
             openai_model: String::new(),
+            gemini_voice: String::new(),
+            gemini_model: String::new(),
+            // Açık: bir sağlayıcı seçtiğinde onun sesini duymak beklenen
+            // davranış. Zaten yalnızca anahtar isteyen bir motor seçilmişse
+            // devreye giriyor, yani kimseyi habersiz ücretli bir motora
+            // taşımıyor.
+            match_provider: true,
         }
     }
 }

@@ -362,7 +362,7 @@ fn tts_config_from(
         rate: v.rate,
         volume: v.volume,
         voice: v.sapi_voice.clone(),
-        engine: vavis_audio::TtsEngineKind::parse(&v.engine).unwrap_or_default(),
+        engine: effective_engine(config, keys),
         edge_voice: v.edge_voice.clone(),
         kokoro_url: v.kokoro_url.clone(),
         kokoro_voice: v.kokoro_voice.clone(),
@@ -374,8 +374,184 @@ fn tts_config_from(
         openai_key: keys.get("openai").unwrap_or_default().to_string(),
         openai_voice: v.openai_voice.clone(),
         openai_model: v.openai_model.clone(),
+        // Same reasoning as the OpenAI key above: the chat key is the speech
+        // key, so nobody pastes the same secret twice.
+        gemini_key: keys.get("gemini").unwrap_or_default().to_string(),
+        gemini_voice: v.gemini_voice.clone(),
+        gemini_model: v.gemini_model.clone(),
         // Which voice speaks depends on the language: a Turkish reply read by
         // an English voice is what "it says weird things" sounded like.
         language: config.general.language.clone(),
+    }
+}
+
+/// The engine to speak with, after letting the chat provider have a say.
+///
+/// When `match_provider` is on and the provider you are chatting with offers
+/// its own voice, that voice is used. The point is that picking Gemini for
+/// conversation should not leave you listening to a different company's
+/// speech engine when Google has one and your key already works for it.
+///
+/// Three rules keep this from being surprising:
+///
+/// 1. **Off by default is not the design — being overridable is.** The switch
+///    lives in settings (`voice.matchProvider`) and turning it off pins the
+///    engine you chose.
+/// 2. **A key is required.** Without one the matched engine would fail on
+///    every sentence and fall down the chain, which is a worse outcome than
+///    simply not matching.
+/// 3. **An engine that needs no key is never overridden.** Someone who chose
+///    SAPI or Edge chose something local and free; silently moving them onto
+///    a metered cloud voice spends their quota without asking.
+pub fn effective_engine(
+    config: &vavis_core::Config,
+    keys: &vavis_brain::KeyStore,
+) -> vavis_audio::TtsEngineKind {
+    let picked = vavis_audio::TtsEngineKind::parse(&config.voice.engine).unwrap_or_default();
+
+    if !config.voice.match_provider {
+        return picked;
+    }
+    // Rule 3: only swap between engines the user is already paying for.
+    if !picked.needs_key() {
+        return picked;
+    }
+
+    let Some(native) = provider_voice(&config.llm.provider) else {
+        return picked;
+    };
+    if native == picked {
+        return picked;
+    }
+    // Rule 2: no key, no swap.
+    let has_key = match native {
+        vavis_audio::TtsEngineKind::Gemini => keys.get("gemini").is_some(),
+        vavis_audio::TtsEngineKind::OpenAi => keys.get("openai").is_some(),
+        _ => false,
+    };
+    if has_key {
+        tracing::info!(
+            provider = %config.llm.provider,
+            engine = native.id(),
+            "speaking with the chat provider's own voice"
+        );
+        native
+    } else {
+        picked
+    }
+}
+
+/// The voice engine belonging to a chat provider, when it has one.
+///
+/// `None` for a provider with no speech of its own, or whose speech we cannot
+/// reach. Anthropic has no TTS API at all; Gemini's *native* audio models are
+/// WebSocket-only and out of reach, but its REST TTS models are not, and that
+/// is what [`vavis_audio::gemini_tts`] speaks to.
+fn provider_voice(provider: &str) -> Option<vavis_audio::TtsEngineKind> {
+    match vavis_brain::Provider::parse(provider)? {
+        vavis_brain::Provider::Gemini => Some(vavis_audio::TtsEngineKind::Gemini),
+        vavis_brain::Provider::OpenAI => Some(vavis_audio::TtsEngineKind::OpenAi),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use vavis_audio::TtsEngineKind as E;
+
+    /// Builds a config with the given chat provider and voice engine.
+    fn setup(provider: &str, engine: &str, match_provider: bool) -> vavis_core::Config {
+        let mut c = vavis_core::Config::default();
+        c.llm.provider = provider.into();
+        c.voice.engine = engine.into();
+        c.voice.match_provider = match_provider;
+        c
+    }
+
+    fn keys_with(names: &[&str]) -> KeyStore {
+        let mut k = KeyStore::default();
+        for n in names {
+            k.set(*n, "gizli");
+        }
+        k
+    }
+
+    /// The point of the feature: chatting with Gemini should sound like
+    /// Gemini, not like whichever cloud voice happened to be configured.
+    #[test]
+    fn a_gemini_chat_speaks_with_geminis_voice() {
+        let c = setup("gemini", "openai", true);
+        assert_eq!(effective_engine(&c, &keys_with(&["gemini", "openai"])), E::Gemini);
+    }
+
+    #[test]
+    fn an_openai_chat_speaks_with_openais_voice() {
+        let c = setup("openai", "elevenlabs", true);
+        assert_eq!(effective_engine(&c, &keys_with(&["openai"])), E::OpenAi);
+    }
+
+    /// Turning the switch off pins whatever was picked.
+    #[test]
+    fn the_switch_off_leaves_the_chosen_engine_alone() {
+        let c = setup("gemini", "elevenlabs", false);
+        assert_eq!(
+            effective_engine(&c, &keys_with(&["gemini", "elevenlabs"])),
+            E::ElevenLabs
+        );
+    }
+
+    /// A free local engine is never swapped for a metered cloud one.
+    ///
+    /// Someone on SAPI or Edge chose something offline and free; moving them
+    /// onto a paid voice without asking spends their quota silently.
+    #[test]
+    fn a_keyless_engine_is_never_traded_for_a_paid_one() {
+        for engine in ["sapi", "edge", "kokoro"] {
+            let c = setup("gemini", engine, true);
+            let got = effective_engine(&c, &keys_with(&["gemini"]));
+            assert_eq!(
+                got,
+                E::parse(engine).unwrap(),
+                "{engine} sessizce ücretli motora taşındı"
+            );
+        }
+    }
+
+    /// Without a key the matched engine would fail on every sentence and
+    /// fall down the chain — worse than simply not matching.
+    #[test]
+    fn no_key_means_no_swap() {
+        let c = setup("gemini", "openai", true);
+        assert_eq!(effective_engine(&c, &keys_with(&["openai"])), E::OpenAi);
+    }
+
+    /// A provider with no speech of its own changes nothing.
+    #[test]
+    fn a_provider_without_a_voice_leaves_the_choice_alone() {
+        for provider in ["groq", "anthropic", "mistral", "local"] {
+            let c = setup(provider, "elevenlabs", true);
+            assert_eq!(
+                effective_engine(&c, &keys_with(&["elevenlabs", "gemini", "openai"])),
+                E::ElevenLabs,
+                "{provider}"
+            );
+        }
+    }
+
+    /// An unreadable provider name must not panic or change the engine.
+    #[test]
+    fn an_unknown_provider_is_harmless() {
+        let c = setup("yok-böyle", "openai", true);
+        assert_eq!(effective_engine(&c, &keys_with(&["openai"])), E::OpenAi);
+    }
+
+    /// The chat key is the speech key: nobody pastes the same secret twice.
+    #[test]
+    fn the_chat_key_is_what_the_voice_uses() {
+        let mut keys = KeyStore::default();
+        keys.set("gemini", "anahtar-123");
+        let c = setup("gemini", "gemini", true);
+        assert_eq!(tts_config_from(&c, &keys).gemini_key, "anahtar-123");
     }
 }
