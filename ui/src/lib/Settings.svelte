@@ -43,37 +43,12 @@
     import { chat } from "./store.svelte";
     import { toast } from "./toast.svelte";
     import { openFolder } from "./actions";
+    import SearchPane from "./settings/panes/SearchPane.svelte";
+    import { onMount } from "svelte";
+    import { filterGroups } from "./settings/registry";
 
     const status = $derived(chat.status);
 
-    interface Category {
-        id: string;
-        label: string;
-        icon: string;
-        /** Extra words the search box should match — what people actually type. */
-        keywords: string;
-    }
-
-    const CATEGORIES: Category[] = [
-        { id: "general", label: "General", icon: "◈", keywords: "name language font window interface theme size assistant" },
-        // Model and API keys were two categories, and the split was arbitrary:
-        // picking a provider marked "no key" sent you to a second screen to do
-        // the one thing that pick implied. They are one pane now, a card per
-        // provider, with the key field on the card whose provider it belongs to.
-        { id: "provider", label: "Model & keys", icon: "◉", keywords: "provider model llm groq openai anthropic claude gemini local ollama temperature key token secret credential api auth" },
-        { id: "voice", label: "Voice", icon: "◍", keywords: "microphone speech tts stt wake word listen speak" },
-        { id: "memory", label: "Memory", icon: "◎", keywords: "facts remember forget knowledge history" },
-        { id: "search", label: "Web search", icon: "⌕", keywords: "tavily brave duckduckgo searx internet browse" },
-        { id: "canvas", label: "Image & video", icon: "◧", keywords: "canvas image video generate openai stability replicate dalle gallery disk" },
-        { id: "obsidian", label: "Obsidian", icon: "❒", keywords: "vault notes markdown wiki" },
-        { id: "spotify", label: "Spotify", icon: "♪", keywords: "music playback player oauth" },
-        { id: "steam", label: "Steam", icon: "▤", keywords: "games library achievements wishlist" },
-        { id: "mcp", label: "MCP servers", icon: "⁘", keywords: "model context protocol custom server stdio http tools" },
-        { id: "tools", label: "Tools", icon: "⚙", keywords: "tool registry risk domain permission approval" },
-        { id: "shortcuts", label: "Shortcuts", icon: "⌘", keywords: "keyboard keys hotkey binding" },
-        { id: "data", label: "Data", icon: "▦", keywords: "folder disk database storage conversation clear export" },
-        { id: "updates", label: "Updates", icon: "⇡", keywords: "update version release upgrade download new latest changelog" },
-    ];
 
     let active = $state("general");
     let query = $state("");
@@ -100,15 +75,8 @@
     let tests = $state<Record<string, ConnectionTest>>({});
     let testing = $state<string | null>(null);
 
-    const matches = $derived(
-        query.trim()
-            ? CATEGORIES.filter((c) =>
-                    `${c.label} ${c.keywords}`
-                        .toLowerCase()
-                        .includes(query.trim().toLowerCase()),
-                )
-            : CATEGORIES,
-    );
+    const groups = $derived(filterGroups(query));
+    const matches = $derived(groups.flatMap((g) => g.categories));
 
     // A search that narrows to one category should land on it rather than
     // leaving the reader looking at an unrelated pane.
@@ -153,8 +121,6 @@
      */
     let keyOpen = $state<string | null>(null);
     let keyDraft = $state("");
-    let searchKeyProvider = $state("tavily");
-    let searchKeyDraft = $state("");
     let canvasKeyProvider = $state("openai");
     let canvasKeyDraft = $state("");
     let steamIdDraft = $state("");
@@ -169,7 +135,6 @@
      */
     let spotifyOwnApp = $state(false);
 
-    let dragFrom = $state<number | null>(null);
     let canvasDragFrom = $state<number | null>(null);
     let mcpOpen = $state(false);
     let mcpExpanded = $state<string | null>(null);
@@ -183,14 +148,6 @@
         headerValue: "",
         secret: "",
     });
-
-    const KEYED_SEARCH = ["tavily", "brave", "custom"];
-    const SEARCH_BLURB: Record<string, string> = {
-        tavily: "written answer + sources, free tier",
-        brave: "independent index, 2000 queries/month free",
-        custom: "your own JSON endpoint",
-        duckduckgo: "no key needed — works out of the box, rate-limited when busy",
-    };
 
     const KEYED_CANVAS = ["openai", "stability", "replicate", "custom"];
     const CANVAS_BLURB: Record<string, string> = {
@@ -221,7 +178,11 @@
         ["Shift + Enter", "newline"],
     ];
 
-    $effect(() => {
+    // `onMount`, not `$effect`: this fires eleven IPC calls and an effect
+    // re-runs whenever anything it touched changes. One load per open is all
+    // this screen needs, and the repeated bursts were what made moving
+    // between categories feel slow.
+    onMount(() => {
         void load();
     });
 
@@ -443,35 +404,6 @@
         });
     }
 
-    async function saveSearchKey() {
-        if (!searchKeyDraft.trim()) return;
-        await run(async () => {
-            await api.setSearchKey(searchKeyProvider, searchKeyDraft.trim());
-            searchKeyDraft = "";
-            search = await api.searchSettings();
-        }, "Search key saved, encrypted.");
-    }
-
-    function moveProvider(from: number, to: number) {
-        if (!search || to < 0 || to >= search.order.length || from === to) return;
-        const order = [...search.order];
-        const [moved] = order.splice(from, 1);
-        order.splice(to, 0, moved);
-        search = { ...search, order };
-        void run(async () => {
-            await api.setSearchOrder(order);
-            search = await api.searchSettings();
-        });
-    }
-
-    async function saveCustomSearch() {
-        if (!search) return;
-        await run(async () => {
-            await api.setCustomSearch(search!.custom);
-            search = await api.searchSettings();
-        }, "Endpoint saved.");
-    }
-
     function moveCanvasProvider(from: number, to: number) {
         if (!canvas || to < 0 || to >= canvas.imageOrder.length || from === to)
             return;
@@ -618,15 +550,23 @@
                 aria-label="Search settings"
             />
 
-            {#each matches as category (category.id)}
-                <button
-                    class="category"
-                    class:active={active === category.id}
-                    onclick={() => (active = category.id)}
-                >
-                    <span class="cat-icon">{category.icon}</span>
-                    {category.label}
-                </button>
+            {#each groups as group (group.title)}
+                <!-- The heading is a signpost while browsing and noise while
+                     searching: a search already narrows the list, and four
+                     headings over one match each is worse than none. -->
+                {#if !query.trim()}
+                    <span class="group-title">{group.title}</span>
+                {/if}
+                {#each group.categories as category (category.id)}
+                    <button
+                        class="category"
+                        class:active={active === category.id}
+                        onclick={() => (active = category.id)}
+                    >
+                        <span class="cat-icon">{category.icon}</span>
+                        {category.label}
+                    </button>
+                {/each}
             {/each}
 
             {#if matches.length === 0}
@@ -1041,95 +981,7 @@
                     </div>
                 {/if}
             {:else if active === "search"}
-                <h2>Web search</h2>
-                {#if search}
-                    <p class="hint">
-                        Tried in order until one answers. Providers with no key are skipped,
-                        so the chain always ends somewhere that works.
-                    </p>
-
-                    <div class="chain">
-                        {#each search.order as id, i (id)}
-                            <div
-                                class="link"
-                                class:unconfigured={KEYED_SEARCH.includes(id) &&
-                                    !search.configured.includes(id)}
-                                draggable="true"
-                                role="listitem"
-                                ondragstart={() => (dragFrom = i)}
-                                ondragover={(e) => e.preventDefault()}
-                                ondrop={(e) => {
-                                    e.preventDefault();
-                                    if (dragFrom !== null) moveProvider(dragFrom, i);
-                                    dragFrom = null;
-                                }}
-                                ondragend={() => (dragFrom = null)}
-                            >
-                                <span class="rank">{i + 1}</span>
-                                <span class="link-main">
-                                    <span class="link-name">{id}</span>
-                                    <span class="link-note">
-                                        {#if KEYED_SEARCH.includes(id) && !search.configured.includes(id)}
-                                            no key — skipped
-                                        {:else}
-                                            {SEARCH_BLURB[id] ?? ""}
-                                        {/if}
-                                    </span>
-                                </span>
-                                <span class="link-actions">
-                                    <button class="tiny" disabled={i === 0} onclick={() => moveProvider(i, i - 1)}>↑</button>
-                                    <button
-                                        class="tiny"
-                                        disabled={i === search.order.length - 1}
-                                        onclick={() => moveProvider(i, i + 1)}>↓</button
-                                    >
-                                </span>
-                            </div>
-                        {/each}
-                    </div>
-
-                    <div class="row-group">
-                        <select bind:value={searchKeyProvider}>
-                            {#each KEYED_SEARCH as id (id)}
-                                <option value={id}>
-                                    {id}{search.configured.includes(id) ? " ✓" : ""}
-                                </option>
-                            {/each}
-                        </select>
-                        <input
-                            type="password"
-                            bind:value={searchKeyDraft}
-                            placeholder="paste key…"
-                            onkeydown={(e) => e.key === "Enter" && saveSearchKey()}
-                            onblur={saveSearchKey}
-                        />
-                    </div>
-
-                    <div class="actions">
-                        <button onclick={() => test("search")} disabled={testing !== null}>
-                            {testing === "search" ? "searching…" : "test"}
-                        </button>
-                    </div>
-                    {#if tests.search}
-                        <p class="result" class:bad={!tests.search.ok}>
-                            {tests.search.ok ? "✓" : "✕"} {tests.search.detail}
-                        </p>
-                    {/if}
-
-                    <h3>Custom endpoint</h3>
-                    <p class="hint">
-                        Any JSON search API — a self-hosted SearxNG, a company service. The
-                        address must contain <code>{"{query}"}</code>;
-                        <code>{"{key}"}</code> in the header value is filled from the stored key.
-                    </p>
-                    <input bind:value={search.custom.url} onchange={saveCustomSearch} placeholder="https://…?q={'{query}'}&format=json" />
-                    <input bind:value={search.custom.resultsPath} onchange={saveCustomSearch} placeholder="results path (e.g. results)" />
-                    <input bind:value={search.custom.titleKey} onchange={saveCustomSearch} placeholder="title field (default: title)" />
-                    <input bind:value={search.custom.urlKey} onchange={saveCustomSearch} placeholder="url field (default: url)" />
-                    <input bind:value={search.custom.snippetKey} onchange={saveCustomSearch} placeholder="snippet field (default: content)" />
-                    <input bind:value={search.custom.headerName} onchange={saveCustomSearch} placeholder="auth header (optional)" />
-                    <input bind:value={search.custom.headerValue} onchange={saveCustomSearch} placeholder="header value, e.g. Bearer {'{key}'}" />
-                {/if}
+                <SearchPane {search} reload={load} />
             {:else if active === "canvas"}
                 <h2>Image &amp; video</h2>
                 {#if canvas}
@@ -1642,6 +1494,20 @@
         color: var(--accent-text);
     }
 
+    /* Four signposts over fourteen entries: enough to turn "where would that
+       be?" into one guess, quiet enough not to compete with the entries. */
+    .group-title {
+        padding: var(--sp-4) var(--sp-3) var(--sp-1);
+        font-size: var(--text-xs);
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--text-faint);
+    }
+    .group-title:first-of-type {
+        padding-top: var(--sp-2);
+    }
+
     /* Selection is a filled row, not an outlined one. A border on the active
        item and nothing on the rest made the rail read as a form. */
     .category {
@@ -1693,8 +1559,14 @@
        Every row here is a label on the left and its control on the right; at
        full width on a wide monitor that put the two nine hundred pixels apart,
        and a form you have to track across the screen to read is not a form. */
+    /* `max-width` only. `width: 100%` used to be here too, and it applied to
+       every direct child including flex rows: a <select> beside an input ate
+       the whole row and left the input a few pixels wide, which is why the
+       search key box looked like it did not exist, and why the "full
+       authority" checkbox pushed its own label off to the side. Block
+       children already fill the column; the ones that lay out their own
+       contents now get to. */
     .pane > :global(*) {
-        width: 100%;
         max-width: 760px;
     }
 
