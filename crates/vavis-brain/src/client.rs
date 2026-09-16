@@ -716,6 +716,8 @@ fn finish_calls(pending: Vec<ToolCallBuilder>) -> Vec<ToolCall> {
         // Adı olmayan çağrı kullanılamaz — sessizce at.
         .filter(|b| !b.name.is_empty())
         .map(|b| ToolCall {
+            // OpenAI-shaped providers send no such state.
+            provider_state: None,
             id: if b.id.is_empty() {
                 format!("call_{}", b.index)
             } else {

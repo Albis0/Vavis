@@ -95,6 +95,26 @@ pub struct ToolCall {
     #[serde(rename = "type", default = "default_tool_type")]
     pub kind: String,
     pub function: FunctionCall,
+
+    /// Opaque state the provider handed us with this call, to be handed back
+    /// with the result.
+    ///
+    /// Gemini calls it a thought signature. It arrives beside the
+    /// `functionCall` in the response and **must** be echoed back in the same
+    /// position, or the next request is refused outright:
+    ///
+    /// ```text
+    /// 400  Function call is missing a thought_signature in functionCall
+    ///      parts. This is required for tools to work correctly
+    /// ```
+    ///
+    /// Measured against the live API on 2026-09-16: the same conversation
+    /// fails without it and answers with it.
+    ///
+    /// Deliberately untyped and unread — we never look inside, only carry it.
+    /// No other provider sends one, so it is absent almost everywhere.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_state: Option<String>,
 }
 
 fn default_tool_type() -> String {

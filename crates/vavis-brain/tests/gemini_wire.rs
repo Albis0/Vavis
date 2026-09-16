@@ -214,3 +214,117 @@ async fn a_function_call_survives_a_stream_that_just_ends() {
     assert_eq!(out.tool_calls[0].function.name, "saat");
     assert!(out.tool_calls[0].function.arguments.contains("bolge"));
 }
+
+
+/// Gemini hands a "thought signature" back with each function call and
+/// **requires** it on the next turn. Measured against the live API: without
+/// it the whole request is refused with
+/// `Function call is missing a thought_signature in functionCall parts`.
+#[tokio::test]
+async fn a_thought_signature_is_carried_out_of_the_stream() {
+    const CALL: &str = "data: {\"candidates\":[{\"content\":{\"parts\":[{                        \"functionCall\":{\"name\":\"saat\",\"args\":{}},                        \"thoughtSignature\":\"IMZA-123\"}]}}]}
+
+";
+    let (_, out) = run(CALL, &[]).await;
+    assert_eq!(out.tool_calls.len(), 1);
+    assert_eq!(
+        out.tool_calls[0].provider_state.as_deref(),
+        Some("IMZA-123"),
+        "imza akıştan çıkarılmadı"
+    );
+}
+
+/// And it must go back in the same place it came from: beside the call, not
+/// inside it.
+#[tokio::test]
+async fn the_signature_returns_beside_the_call_it_came_with() {
+    use vavis_brain::message::{FunctionCall, ToolCall};
+
+    let (url, rx) = recording_server(ONE_WORD);
+    let cfg = ChatConfig::new(Provider::Gemini, "gemini-3.5-flash", "k").with_url(url);
+
+    let mut assistant = Message::assistant("");
+    assistant.tool_calls = Some(vec![ToolCall {
+        id: "saat-1".into(),
+        kind: "function".into(),
+        provider_state: Some("IMZA-123".into()),
+        function: FunctionCall {
+            name: "saat".into(),
+            arguments: "{}".into(),
+        },
+    }]);
+
+    let _ = BrainClient::new()
+        .chat_stream_with_tools(
+            &cfg,
+            vec![
+                Message::user("saat kaç"),
+                assistant,
+                Message::tool_result("saat", "16:20"),
+            ],
+            &[],
+            |_| {},
+        )
+        .await
+        .expect("akış başarısız");
+
+    let seen = rx
+        .recv_timeout(std::time::Duration::from_secs(10))
+        .expect("istek gelmedi");
+
+    let model_turn = seen.body["contents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["role"] == "model")
+        .unwrap_or_else(|| panic!("model turu yok: {}", seen.body));
+    let part = &model_turn["parts"][0];
+
+    // Yanında, içinde değil.
+    assert_eq!(part["thoughtSignature"], "IMZA-123", "{part}");
+    assert!(
+        part["functionCall"].get("thoughtSignature").is_none(),
+        "imza çağrının içine konmuş: {part}"
+    );
+}
+
+/// A call with no signature must not grow an empty one -- every other
+/// provider sends none, and a null there is a different request.
+#[tokio::test]
+async fn no_signature_means_no_field() {
+    use vavis_brain::message::{FunctionCall, ToolCall};
+
+    let (url, rx) = recording_server(ONE_WORD);
+    let cfg = ChatConfig::new(Provider::Gemini, "gemini-3.5-flash", "k").with_url(url);
+
+    let mut assistant = Message::assistant("");
+    assistant.tool_calls = Some(vec![ToolCall {
+        id: "saat-1".into(),
+        kind: "function".into(),
+        provider_state: None,
+        function: FunctionCall {
+            name: "saat".into(),
+            arguments: "{}".into(),
+        },
+    }]);
+
+    let _ = BrainClient::new()
+        .chat_stream_with_tools(&cfg, vec![Message::user("x"), assistant], &[], |_| {})
+        .await
+        .expect("akış başarısız");
+
+    let seen = rx
+        .recv_timeout(std::time::Duration::from_secs(10))
+        .expect("istek gelmedi");
+    let model_turn = seen.body["contents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["role"] == "model")
+        .unwrap();
+    assert!(
+        model_turn["parts"][0].get("thoughtSignature").is_none(),
+        "{}",
+        seen.body
+    );
+}

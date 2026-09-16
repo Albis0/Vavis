@@ -154,7 +154,7 @@ pub fn build_contents(messages: &[Message]) -> (String, Vec<Value>) {
                     parts.push(json!({ "text": m.content }));
                 }
                 for call in m.tool_calls.iter().flatten() {
-                    parts.push(json!({
+                    let mut part = json!({
                         "functionCall": {
                             "name": call.function.name,
                             // Argümanlar bizde JSON **metni**, Gemini'de
@@ -162,7 +162,17 @@ pub fn build_contents(messages: &[Message]) -> (String, Vec<Value>) {
                             // olduğu gibi göndermek isteğin tamamını düşürür.
                             "args": parse_args(&call.function.arguments),
                         }
-                    }));
+                    });
+                    // The signature goes back exactly where it came from --
+                    // beside the call, not inside it. Omitting it fails the
+                    // request outright:
+                    //
+                    //   400  Function call is missing a thought_signature
+                    //        in functionCall parts
+                    if let Some(sig) = &call.provider_state {
+                        part["thoughtSignature"] = json!(sig);
+                    }
+                    parts.push(part);
                 }
                 // Tamamen boş bir içerik reddediliyor.
                 if parts.is_empty() {
@@ -344,6 +354,13 @@ impl StreamState {
                     // Buradaki kimlik sadece üst katmanın şeması için.
                     id: format!("{name}-{}", self.seen),
                     kind: "function".into(),
+                    // Sits beside `functionCall`, not inside it. Carried
+                    // along so the next turn can hand it straight back --
+                    // without it Gemini refuses the whole request.
+                    provider_state: part
+                        .get("thoughtSignature")
+                        .and_then(|v| v.as_str())
+                        .map(str::to_string),
                     function: FunctionCall {
                         arguments: call
                             .get("args")
@@ -419,6 +436,7 @@ mod tests {
 
     fn call(name: &str, args: &str) -> ToolCall {
         ToolCall {
+            provider_state: None,
             id: "yok".into(),
             kind: "function".into(),
             function: FunctionCall {

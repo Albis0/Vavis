@@ -263,6 +263,8 @@ impl StreamState {
             .into_iter()
             .filter(|(_, _, name, _)| !name.is_empty())
             .map(|(index, id, name, args)| ToolCall {
+                // Anthropic sends no such state.
+                provider_state: None,
                 id: if id.is_empty() {
                     format!("call_{index}")
                 } else {
@@ -357,6 +359,7 @@ mod tests {
                 tool_call_id: None,
                 image: None,
                 tool_calls: Some(vec![ToolCall {
+                    provider_state: None,
                     id: "call_x".into(),
                     kind: "function".into(),
                     function: FunctionCall {
