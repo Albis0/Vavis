@@ -46,6 +46,7 @@ impl AgentHost for ScriptedHost {
 
 fn call(name: &str, args: &str) -> ToolCall {
     ToolCall {
+        provider_state: None,
         id: format!("call_{name}"),
         kind: "function".into(),
         function: FunctionCall {
