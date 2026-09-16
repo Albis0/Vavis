@@ -33,7 +33,28 @@
     import { chat } from "./lib/store.svelte";
     import { toast } from "./lib/toast.svelte";
 
-    const appWindow = getCurrentWindow();
+    /**
+     * The Tauri window handle, or `null` when there is no Tauri runtime.
+     *
+     * `getCurrentWindow()` reads `window.__TAURI_INTERNALS__.metadata`, which
+     * only exists inside Tauri's WebView. This runs while the component is
+     * initialising, so outside Tauri it threw before anything mounted and the
+     * whole interface was a blank black page with no error on screen —
+     * discovered when a browser-driven test run found zero interactive
+     * elements at the dev server.
+     *
+     * Failing this softly costs two window buttons and keeps everything else
+     * working, which is the right trade: it makes the interface openable in
+     * an ordinary browser for inspection, and it means one missing global can
+     * never again take the entire app down silently.
+     */
+    const appWindow = (() => {
+        try {
+            return getCurrentWindow();
+        } catch {
+            return null;
+        }
+    })();
 
     const THEME_KEY = "vavis.theme";
     /**
@@ -342,15 +363,20 @@
                 </button>
             {/if}
 
-            <button class="wb" title="Minimise" onclick={() => appWindow.minimize()}>
-                <Icon name="minimise" size={15} />
-            </button>
+            <!-- Hidden outside Tauri, where there is no window to command. -->
+            {#if appWindow}
+                <button class="wb" title="Minimise" onclick={() => appWindow.minimize()}>
+                    <Icon name="minimise" size={15} />
+                </button>
+            {/if}
             <button class="wb" title="Window mode (F11)" onclick={cycleWindowMode}>
                 <Icon name="maximise" size={15} />
             </button>
-            <button class="wb close" title="Close" onclick={() => appWindow.close()}>
-                <Icon name="close" size={15} />
-            </button>
+            {#if appWindow}
+                <button class="wb close" title="Close" onclick={() => appWindow.close()}>
+                    <Icon name="close" size={15} />
+                </button>
+            {/if}
         </div>
     </div>
 
