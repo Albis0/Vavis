@@ -287,6 +287,26 @@ textarea::placeholder {
     border-color: var(--accent-line);
 }
 
+/* A checkbox and its label, on one line.
+   Global because more than one settings pane wants it, and because the
+   inputs above are reset to `width: 100%` -- a checkbox left at that
+   stretches across the row and pushes its own label off to the side. */
+.switch {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    font-size: var(--text-sm);
+    color: var(--text);
+    cursor: pointer;
+    padding: var(--sp-2) 0;
+}
+.switch input[type="checkbox"] {
+    flex: 0 0 auto;
+    width: auto;
+    margin: 0;
+    cursor: pointer;
+}
+
 /* -- Section headings --------------------------------------------- */
 /* Small, muted, plain case. The old all-caps monospace labels were the
    loudest thing on screen and said the least. */

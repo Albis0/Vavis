@@ -178,15 +178,26 @@ export interface VoiceSettings {
     kokoroVoice: string;
     elevenVoice: string;
     openaiVoice: string;
+    geminiVoice: string;
     /** Whether a key is stored. Keys themselves never cross this bridge. */
     hasElevenKey: boolean;
     hasOpenaiKey: boolean;
+    hasGeminiKey: boolean;
+    /** Speak with the chat provider's own voice when it has one. */
+    matchProvider: boolean;
+    /**
+     * The engine actually speaking. Differs from `engine` when
+     * `matchProvider` swapped it, so the screen can say why the picker and
+     * what you hear disagree.
+     */
+    effectiveEngine: string;
     sapiVoices: string[];
     /** [id, label] pairs, so the user picks a name rather than typing an id. */
     edgeVoices: [string, string][];
     kokoroVoices: [string, string][];
     elevenVoices: [string, string][];
     openaiVoices: [string, string][];
+    geminiVoices: [string, string][];
     /** Where Kokoro listens by default — shown as the placeholder. */
     kokoroDefaultUrl: string;
     /** Which Edge voice an empty choice resolves to, for the current language. */
