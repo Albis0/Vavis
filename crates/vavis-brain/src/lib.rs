@@ -8,12 +8,14 @@
 
 pub mod anthropic;
 pub mod budget;
+pub mod builtin;
 pub mod client;
 pub mod keys;
 pub mod message;
 pub mod provider;
 
 pub use budget::{estimate_cost, estimate_tokens, fit_request, FitResult, ModelCaps};
+pub use builtin::{tool_support, ToolSupport};
 pub use client::{
     system_prompt, BrainClient, BrainError, ChatConfig, ChatResponse, Result, StreamEvent,
 };

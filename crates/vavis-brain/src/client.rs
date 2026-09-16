@@ -7,6 +7,7 @@
 //! Ağ çağrıları tokio üzerinde; UI iş parçacığı **asla bloklanmaz.**
 
 use crate::budget::{estimate_tokens, fit_request, ModelCaps};
+use crate::builtin;
 use crate::message::{Message, ToolCall};
 use crate::provider::Provider;
 use futures_util::StreamExt;
@@ -154,6 +155,18 @@ impl BrainClient {
                 .await;
         }
 
+        // Bazı modeller araçlarını sunucu tarafında kendileri çalıştırıyor ve
+        // bizimkilerden **tek bir tanesini** bile kabul etmiyor: istek 400
+        // ile tamamen düşüyor. Süzgeç burada, gövdenin kurulduğu tek yerde —
+        // çağıran tarafın atlaması mümkün değil.
+        let tools: &[serde_json::Value] =
+            if builtin::tool_support(cfg.provider, &cfg.model).accepts_functions() {
+                tools
+            } else {
+                tracing::debug!(model = %cfg.model, "model kendi araçlarını çalıştırıyor; şemalar gönderilmedi");
+                &[]
+            };
+
         // Tool şemaları da bütçeye sayılır — 413'ün kök nedeni buydu.
         let fitted = fit_request(messages, tools.to_vec(), caps);
         if fitted.history_dropped > 0 || fitted.tools_dropped > 0 {
@@ -175,8 +188,13 @@ impl BrainClient {
         // `fitted.tools`, not `tools`: the trimmed list is the one that fits.
         // Sending the full set here is exactly the bug that made the budget
         // module's trimming pointless.
-        if !fitted.tools.is_empty() {
-            body["tools"] = serde_json::Value::Array(fitted.tools.clone());
+        //
+        // Yerleşik araçlar bütçeye sığdırılmıyor: şema değil tek satırlık tip
+        // nesneleri, toplamı birkaç token. Budanacak bir şey yok.
+        let mut wire_tools = fitted.tools.clone();
+        wire_tools.extend(builtin::extra_tools(cfg.provider, &cfg.model));
+        if !wire_tools.is_empty() {
+            body["tools"] = serde_json::Value::Array(wire_tools);
             body["tool_choice"] = serde_json::Value::String("auto".into());
         }
 
