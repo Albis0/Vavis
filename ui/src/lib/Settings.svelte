@@ -44,6 +44,7 @@
     import { toast } from "./toast.svelte";
     import SearchPane from "./settings/panes/SearchPane.svelte";
     import CanvasPane from "./settings/panes/CanvasPane.svelte";
+    import ToolsPane from "./settings/panes/ToolsPane.svelte";
     import { onMount } from "svelte";
     import { filterGroups } from "./settings/registry";
 
@@ -1119,43 +1120,11 @@
                     <button class="primary" onclick={saveMcp}>add and connect</button>
                 {/if}
             {:else if active === "tools"}
-                <h2>Tools</h2>
-                <p class="hint">
-                    {tools.length} registered. Each request is offered only the ones it
-                    needs — how many that can be at most depends on the model, since a
-                    small one loses its way in a long list where a large one does not.
-                </p>
-
-                <h2>Permissions</h2>
-                <p class="hint">
-                    By default Vavis asks before anything destructive, and asks again
-                    after three such actions in one turn — or after reading a web page
-                    that tried to give it orders.
-                </p>
-                <label class="switch">
-                    <input
-                        type="checkbox"
-                        checked={status?.fullAuthority ?? false}
-                        onchange={(e) => toggleFullAuthority(e.currentTarget.checked)}
-                    />
-                    <span>Full authority — never ask me anything</span>
-                </label>
-                <div class="list scroll">
-                    {#each tools as tool (tool.name)}
-                        <div class="entry">
-                            <div class="entry-main">
-                                <span class="tool-name">
-                                    {tool.name}
-                                    <span class="risk" data-risk={tool.risk}>{tool.risk}</span>
-                                </span>
-                                <span class="tool-desc">{tool.description}</span>
-                            </div>
-                            <div class="entry-actions">
-                                <span class="domain">{tool.domain}</span>
-                            </div>
-                        </div>
-                    {/each}
-                </div>
+                <ToolsPane
+                    {tools}
+                    fullAuthority={status?.fullAuthority ?? false}
+                    ontoggle={toggleFullAuthority}
+                />
             {:else if active === "shortcuts"}
                 <h2>Shortcuts</h2>
                 <div class="list">
@@ -1477,20 +1446,6 @@
     /* A checkbox and its label as one clickable row. The label leads and the
        box follows, matching `.field`, so the two read as the same kind of
        control rather than two different ideas of a setting. */
-    .switch {
-        display: flex;
-        align-items: center;
-        gap: var(--sp-2);
-        font-size: var(--text-sm);
-        color: var(--text);
-        cursor: pointer;
-        padding: var(--sp-2) 0;
-    }
-    .switch input {
-        flex: 0 0 auto;
-        margin: 0;
-        cursor: pointer;
-    }
 
 
     .actions {
@@ -1630,11 +1585,6 @@
         border-color: rgba(245, 158, 11, 0.4);
     }
 
-    .domain {
-        font-family: var(--font-mono);
-        font-size: 10px;
-        color: var(--text-faint);
-    }
 
     .disclosure {
         align-self: flex-start;
