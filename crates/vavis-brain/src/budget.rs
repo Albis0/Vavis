@@ -111,11 +111,31 @@ impl ModelCaps {
             ("gpt-4.1", 128_000, 16_384, 32),
             ("gpt-5", 128_000, 16_384, 48),
             ("o1", 128_000, 16_384, 32),
-            ("qwen", 128_000, 8_192, 16),
+            // Measured against Groq's own /models endpoint, 2026-09-16.
+            // gpt-oss reports a 65536 reply ceiling, but `new` holds the reply
+            // to a quarter of the window anyway, so the table states the real
+            // figure and lets that rule bind.
+            ("gpt-oss", 131_072, 65_536, 24),
+            ("qwen", 131_042, 16_384, 16),
             ("kimi", 128_000, 8_192, 16),
+            // Groq's own agentic systems. They refuse our schemas outright
+            // (see `crate::builtin`), so the tool budget is moot -- but the
+            // window is real and used for trimming history.
+            ("compound", 131_072, 8_192, 6),
+            // Guard/classifier models, not chat models: a 512-token window.
+            // Ahead of the general llama row, which would otherwise hand them
+            // a 32000 window and let every request overflow.
+            ("prompt-guard", 512, 512, 6),
+            ("llama-guard", 512, 512, 6),
             ("llama-3.3", 128_000, 8_192, 14),
             ("llama-3.1", 128_000, 8_192, 14),
             ("llama", 32_000, 4_096, 12),
+            // Speech and audio models reached through the chat table only by
+            // accident; a tiny window keeps a mistaken pick from sending a
+            // request that cannot be answered.
+            ("whisper", 448, 448, 6),
+            ("orpheus", 4_000, 4_096, 6),
+            ("allam", 4_096, 4_096, 8),
             ("grok", 131_072, 8_192, 24),
             ("deepseek", 64_000, 8_192, 16),
             ("mistral", 32_000, 4_096, 12),
@@ -518,6 +538,44 @@ mod tests {
             estimate_tokens(&turkish) < 200,
             "karakter sayılmalı, bayt değil"
         );
+    }
+
+    /// A model whose real window is tiny must not be handed a large one.
+    ///
+    /// Measured against Groq's `/models` endpoint on 2026-09-16: these are
+    /// classifiers and speech models with windows between 448 and 4096
+    /// tokens. The general `llama` row was claiming 32000 for the guard
+    /// models, so every request to one overflowed at the provider with
+    /// nothing on our side having tried to trim.
+    #[test]
+    fn a_tiny_window_is_not_rounded_up_to_a_chat_sized_one() {
+        for (model, real) in [
+            ("meta-llama/llama-prompt-guard-2-86m", 512),
+            ("meta-llama/llama-prompt-guard-2-22m", 512),
+            ("whisper-large-v3", 448),
+            ("allam-2-7b", 4_096),
+        ] {
+            let ours = ModelCaps::for_model(model).context_window;
+            assert!(
+                ours <= real,
+                "{model}: bize göre {ours}, gerçekte {real} — taşar"
+            );
+        }
+    }
+
+    /// The opposite error: claiming a model is smaller than it is costs
+    /// history on every turn for no reason.
+    #[test]
+    fn groqs_large_models_get_the_window_they_actually_have() {
+        for model in [
+            "openai/gpt-oss-120b",
+            "openai/gpt-oss-20b",
+            "groq/compound",
+            "groq/compound-mini",
+        ] {
+            let w = ModelCaps::for_model(model).context_window;
+            assert!(w >= 131_000, "{model}: {w}, gerçekte 131072");
+        }
     }
 
     #[test]
