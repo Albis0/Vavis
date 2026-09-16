@@ -18,7 +18,7 @@ hepsi canlı API'ye sorularak ortaya çıktı.
 |---|---|---|
 | **Groq** | ✅ tam tarandı | 6 hata bulundu, hepsi düzeltildi — aşağıda |
 | OpenAI | ⬜ | |
-| **Gemini** | 🟡 kod hazır, anahtar bekliyor | Yerel API'ye taşındı — OpenAI-uyumlu kapı bırakıldı |
+| **Gemini** | ✅ tam tarandı | Yerel API'ye taşındı; 3 hata bulundu ve düzeltildi |
 | Mistral | ⬜ | |
 | DeepSeek | ⬜ | |
 | XAI (Grok) | ⬜ | |
@@ -76,6 +76,9 @@ söylüyor. Groq her model için şunları veriyor:
 - [ ] `supported_features` araç desteğini söylüyor mu?
 - [ ] Listede **sohbet olmayan** modeller var mı? (TTS, whisper, guard, embed)
 - [ ] Fiyat bilgisi var mı? (`PRICES` tablosu elle yazılmış, eskiyor)
+- [ ] **Listedeki her modele gerçekten istek at.** Groq ve Gemini'de
+      listede duran ama kullanılınca hata veren modeller çıktı. "Listede
+      var" ile "çalışıyor" aynı şey değil.
 
 > **Groq'ta çıkan:** listedeki 13 modelin 4'ü sohbet modeli bile değildi ve
 > ikisi kullanıcıya gösteriliyordu. Tablomuz 7 modele gerçekte olmayan pencere
@@ -288,6 +291,70 @@ orada ölçülüyor.
 5. Hata biçimleri: geçersiz anahtar, olmayan model, bağlam taşması, hız sınırı
 6. Güvenlik eşikleri bir şeyi engelliyor mu? (`safetySettings` şu an
    gönderilmiyor — Google varsayılanları uygulanıyor)
+
+### Anahtarla doğrulandı (2026-09-16)
+
+Kod yazıldıktan sonra anahtar girildi ve 9 başlık canlı API'ye soruldu.
+**Üç hata çıktı**, üçü de belge okuyarak görülemezdi.
+
+#### 1. Listede duran ama çalışmayan modeller
+
+`gemini-2.5-flash` — bizim **varsayılanımızdı** — kullanılınca 404 veriyor:
+
+```
+This model models/gemini-2.5-flash is no longer available to new users.
+Please update your code to use models/gemini-3.6-flash
+```
+
+`2.5-pro` ve `2.5-flash-lite` de aynı. Üçü de `/models` listesinde
+duruyor. Yani Gemini'yi seçen kullanıcı, ses modeline hiç dokunmasa bile
+ilk mesajda hata alırdı.
+
+> **Ders — bu listeye eklenmeli:** "`/models` listesinde var" ile
+> "çalışıyor" **aynı şey değil**. Sağlayıcı emekli ettiği modeli listeden
+> çıkarmayabiliyor. Süzgeçten geçen her modele bir istek atıp doğrulamak
+> gerekiyor.
+
+#### 2. Sadece WebSocket konuşan modeller
+
+`*-native-audio-*` ve `*-live` modelleri yalnızca `bidiGenerateContent`
+beyan ediyor. Kullanıcının aldığı hata buydu. Yetenek süzgeci zaten
+doğruydu, çalışan sürüm ondan eskiydi; yine de ada dayalı ikinci bir
+savunma eklendi.
+
+Bir alt ajan burada **yanlış bilgi verdi**: "ses modelleri
+`generateContent` de beyan ediyor, `streamGenerateContent` ile süz" dedi.
+Canlı API'ye sorunca ikisi de yanlış çıktı — ses modelleri
+`generateContent` beyan etmiyor, ve **58 modelin hiçbiri**
+`streamGenerateContent` beyan etmiyor. O süzgeç tüm listeyi silerdi.
+
+> **Ders:** alt ajan çıktısı da ölçülmeden kabul edilmemeli.
+
+#### 3. Sonuç
+
+Süzgeçten 11 model geçiyor, hiçbiri emekli ya da WebSocket-only değil.
+Düz sohbet ve araç çağırma canlı API'ye karşı doğrulandı.
+
+### Gemini TTS — yeni ses motoru
+
+Gemini'nin **gerçek** kendi sesi Live API'de (WebSocket), ona erişemiyoruz.
+Ama REST üzerinden çalışan TTS modeli var ve çalışıyor:
+
+| | |
+|---|---|
+| Model | `gemini-3.1-flash-tts-preview` |
+| Biçim | **ham PCM** (`audio/l16; rate=24000`) — başlıksız |
+| Doğrulandı | 111 KB, 24 kHz, mono, 2.32 sn, Windows oynatıcısı yükledi |
+
+> **Dikkat:** herkes MP3 dönerken Gemini başlıksız PCM dönüyor. Dosyaya
+> yazıp çalmaya kalkınca **hiçbir oynatıcı tanımıyor ve hata da vermiyor** —
+> sessiz başarısızlık. WAV başlığı eklemek gerekiyor.
+
+Sohbet sağlayıcısı Gemini iken ses motoru otomatik ona geçiyor
+(`voice.matchProvider`). Üç kural: kapatılabiliyor, anahtar şart, ve
+**anahtar istemeyen bir motor asla değiştirilmiyor** — SAPI/Edge seçen biri
+yerel ve ücretsiz olanı seçmiştir.
+
 
 ---
 
