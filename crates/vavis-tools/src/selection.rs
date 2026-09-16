@@ -939,6 +939,48 @@ mod tests {
         assert!(match_domains("nasılsın bugün").is_empty());
     }
 
+    /// "bilgisayar" kontrol alanına gitmeli, hafızaya değil.
+    ///
+    /// Eşleşme ek toleranslı olduğu için `"bilgi"` anahtar kelimesi
+    /// `"bilgisayar"` kelimesini de yakalıyordu. Sonucu sessizdi: kullanıcı
+    /// "bilgisayarı kapat" dediğinde modele kontrol araçları hiç
+    /// ulaşmıyor, hafıza araçları gidiyordu. Bir asistanda bu kelime en sık
+    /// geçenlerden biri, yani tek bir anahtar kelime çok sayıda isteği
+    /// yanlış yere gönderiyordu.
+    #[test]
+    fn the_word_computer_reaches_the_control_tools() {
+        for msg in [
+            "bilgisayarı kapat",
+            "bilgisayari kapat",
+            "bilgisayarımı yeniden başlat",
+            "bilgisayarda ne var",
+        ] {
+            let d = match_domains(msg);
+            assert!(
+                d.contains(&Domain::Control),
+                "'{msg}' kontrol alanına gitmeli: {d:?}"
+            );
+            assert!(
+                !d.contains(&Domain::Memory),
+                "'{msg}' hafızaya gitmemeli: {d:?}"
+            );
+        }
+    }
+
+    /// Zayıf fiillere eşlik edecek güçlü bir kelime olmalı.
+    ///
+    /// "aç" ve "kapat" tek başına alan tetiklemiyor (doğru: "gözlerini aç").
+    /// Kullanıcının söylediği nesne o eşliği sağlamalı.
+    #[test]
+    fn a_named_target_pairs_with_a_weak_verb() {
+        for msg in ["tarayıcı aç", "chrome aç", "spotify kapat"] {
+            assert!(
+                match_domains(msg).contains(&Domain::Control),
+                "'{msg}' kontrol alanına gitmeli"
+            );
+        }
+    }
+
     /// **Regresyon testi.** Zayıf fiil tek başına alan tetiklememeli.
     ///
     /// Bu tam olarak kullanıcının "tool'lar aşırı gidiyor" şikayetinin
