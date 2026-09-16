@@ -392,7 +392,7 @@ const DOMAIN_KEYWORDS: &[DomainKeywords] = &[
     //
     // Bu satır uzun süre eksikti ve sonucu şuydu: "saat kaç" hiçbir alanı
     // tetiklemiyor, alan listesi boş kalınca `select_named` erkenden dönüyor,
-    // `simdiki_zaman` modele **hiç** sunulmuyordu. Model de saati uyduruyordu.
+    // `get_current_time` modele **hiç** sunulmuyordu. Model de saati uyduruyordu.
     //
     // Çekirdek tool'lar başka bir alan tetiklendiğinde zaten ekleniyor; bu
     // satır onları **tek başlarına** da erişilebilir yapıyor.
@@ -1025,7 +1025,7 @@ mod tests {
     ///
     /// Uzun süre `DOMAIN_KEYWORDS` içinde Core satırı yoktu. Sonuç: "saat kaç"
     /// hiçbir alanı tetiklemiyor, alan listesi boş kalınca `select_named`
-    /// erkenden dönüyor, `simdiki_zaman` modele hiç ulaşmıyordu — ve model
+    /// erkenden dönüyor, `get_current_time` modele hiç ulaşmıyordu — ve model
     /// saati uyduruyordu ("2023-10-27 14:30").
     #[test]
     fn a_bare_time_question_offers_the_clock() {

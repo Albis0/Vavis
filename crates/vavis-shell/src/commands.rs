@@ -612,7 +612,7 @@ async fn run_turn(
     let picked = route_tools(client, cfg, router_model, agent, user_message, budget).await;
 
     // Mutable because the model can ask for more mid-turn -- see the
-    // `arac_iste` handling further down. The starting set is what the router
+    // `request_tools` handling further down. The starting set is what the router
     // (or the keyword table) chose from the message alone.
     let mut offered: Vec<String> = picked.clone();
     let mut tools = {
