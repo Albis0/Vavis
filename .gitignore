@@ -1,7 +1,9 @@
 /target
 /dist
 *.pdb
-ui/node_modules
+# Any node_modules, not just the interface's: running vitest from the
+# repository root leaves a cache folder here.
+node_modules/
 ui/dist
 
 # npm is not what builds this -- CI installs with bun, from ui/bun.lock.

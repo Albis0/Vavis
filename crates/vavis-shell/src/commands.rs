@@ -1532,6 +1532,18 @@ pub fn get_search_settings(state: State<AppState>) -> SearchSettings {
         configured: KEYED_SEARCH_PROVIDERS
             .iter()
             .filter(|id| {
+                // `custom` runs on its address alone -- its key only fills
+                // `{key}` in an optional header. Judging it by the key said
+                // "no key -- skipped" about a provider that was about to
+                // answer, which is the image side's rule and the opposite of
+                // what the search chain actually does:
+                //
+                //   fn is_usable(&self) -> bool {
+                //       !self.url.trim().is_empty() && self.url.contains("{query}")
+                //   }
+                if **id == "custom" {
+                    return custom.url.contains("{query}") && !custom.url.trim().is_empty();
+                }
                 search_key_name(id)
                     .and_then(|name| keys.get(name))
                     .is_some()
