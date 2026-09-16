@@ -42,8 +42,8 @@
     import Modal from "./Modal.svelte";
     import { chat } from "./store.svelte";
     import { toast } from "./toast.svelte";
-    import { openFolder } from "./actions";
     import SearchPane from "./settings/panes/SearchPane.svelte";
+    import CanvasPane from "./settings/panes/CanvasPane.svelte";
     import { onMount } from "svelte";
     import { filterGroups } from "./settings/registry";
 
@@ -121,8 +121,6 @@
      */
     let keyOpen = $state<string | null>(null);
     let keyDraft = $state("");
-    let canvasKeyProvider = $state("openai");
-    let canvasKeyDraft = $state("");
     let steamIdDraft = $state("");
     let steamKeyDraft = $state("");
     let spotifyIdDraft = $state("");
@@ -135,7 +133,6 @@
      */
     let spotifyOwnApp = $state(false);
 
-    let canvasDragFrom = $state<number | null>(null);
     let mcpOpen = $state(false);
     let mcpExpanded = $state<string | null>(null);
     let draft = $state({
@@ -148,14 +145,6 @@
         headerValue: "",
         secret: "",
     });
-
-    const KEYED_CANVAS = ["openai", "stability", "replicate", "custom"];
-    const CANVAS_BLURB: Record<string, string> = {
-        openai: "gpt-image-1 — uses your chat key if you have one",
-        stability: "reports the seed it used, so results repeat",
-        replicate: "the only one here that also does video",
-        custom: "your own OpenAI-compatible endpoint",
-    };
 
     const LANGUAGES: [string, string][] = [
         ["en", "English"],
@@ -404,60 +393,6 @@
         });
     }
 
-    function moveCanvasProvider(from: number, to: number) {
-        if (!canvas || to < 0 || to >= canvas.imageOrder.length || from === to)
-            return;
-        const order = [...canvas.imageOrder];
-        const [moved] = order.splice(from, 1);
-        order.splice(to, 0, moved);
-        canvas = { ...canvas, imageOrder: order };
-        void run(async () => {
-            await api.setCanvasOrder("image", order);
-            canvas = await api.canvasSettings();
-        });
-    }
-
-    async function saveCanvasKey() {
-        if (!canvasKeyDraft.trim()) return;
-        await run(async () => {
-            await api.setCanvasKey(canvasKeyProvider, canvasKeyDraft.trim());
-            canvasKeyDraft = "";
-            canvas = await api.canvasSettings();
-        }, "Generation key saved, encrypted.");
-    }
-
-    async function saveCanvasDefaults() {
-        if (!canvas) return;
-        await run(async () => {
-            await api.setCanvasDefaults({
-                imageModel: canvas!.imageModel,
-                videoModel: canvas!.videoModel,
-                size: canvas!.size,
-                count: canvas!.count,
-                customUrl: canvas!.customUrl,
-                customHeaderName: canvas!.customHeaderName,
-                customHeaderValue: canvas!.customHeaderValue,
-                customModel: canvas!.customModel,
-            });
-            canvas = await api.canvasSettings();
-        }, "Saved.");
-    }
-
-    async function clearGallery() {
-        const confirmed = await ask({
-            title: "Delete generated files?",
-            body: "Everything in the gallery goes except the results you starred. The files are removed from disk and cannot be recovered.",
-            confirmLabel: "Delete",
-            danger: true,
-        });
-        if (!confirmed) return;
-
-        await run(async () => {
-            const freed = await api.clearGallery(true);
-            canvas = await api.canvasSettings();
-            toast.success(`Freed ${bytes(freed)}.`);
-        });
-    }
 
     async function pickVault(path: string) {
         await run(async () => {
@@ -983,114 +918,7 @@
             {:else if active === "search"}
                 <SearchPane {search} reload={load} />
             {:else if active === "canvas"}
-                <h2>Image &amp; video</h2>
-                {#if canvas}
-                    <p class="hint">
-                        Same idea as the search chain: tried in order, no key means skipped.
-                        Results land in the canvas interface, not in the conversation.
-                    </p>
-
-                    <div class="chain">
-                        {#each canvas.imageOrder as id, i (id)}
-                            <div
-                                class="link"
-                                class:unconfigured={!canvas.configured.includes(id)}
-                                draggable="true"
-                                role="listitem"
-                                ondragstart={() => (canvasDragFrom = i)}
-                                ondragover={(e) => e.preventDefault()}
-                                ondrop={(e) => {
-                                    e.preventDefault();
-                                    if (canvasDragFrom !== null) moveCanvasProvider(canvasDragFrom, i);
-                                    canvasDragFrom = null;
-                                }}
-                                ondragend={() => (canvasDragFrom = null)}
-                            >
-                                <span class="rank">{i + 1}</span>
-                                <span class="link-main">
-                                    <span class="link-name">{id}</span>
-                                    <span class="link-note">
-                                        {#if !canvas.configured.includes(id)}
-                                            {id === "custom" ? "no endpoint — skipped" : "no key — skipped"}
-                                        {:else}
-                                            {CANVAS_BLURB[id] ?? ""}
-                                        {/if}
-                                    </span>
-                                </span>
-                                <span class="link-actions">
-                                    <button class="tiny" disabled={i === 0} onclick={() => moveCanvasProvider(i, i - 1)}>↑</button>
-                                    <button
-                                        class="tiny"
-                                        disabled={i === canvas.imageOrder.length - 1}
-                                        onclick={() => moveCanvasProvider(i, i + 1)}>↓</button
-                                    >
-                                </span>
-                            </div>
-                        {/each}
-                    </div>
-
-                    <div class="row-group">
-                        <select bind:value={canvasKeyProvider}>
-                            {#each KEYED_CANVAS as id (id)}
-                                <option value={id}>
-                                    {id}{canvas.configured.includes(id) ? " ✓" : ""}
-                                </option>
-                            {/each}
-                        </select>
-                        <input
-                            type="password"
-                            bind:value={canvasKeyDraft}
-                            placeholder="paste key…"
-                            onkeydown={(e) => e.key === "Enter" && saveCanvasKey()}
-                            onblur={saveCanvasKey}
-                        />
-                    </div>
-
-                    <div class="actions">
-                        <button onclick={() => test("canvas")} disabled={testing !== null}>
-                            test
-                        </button>
-                    </div>
-                    {#if tests.canvas}
-                        <p class="result" class:bad={!tests.canvas.ok}>
-                            {tests.canvas.ok ? "✓" : "✕"} {tests.canvas.detail}
-                        </p>
-                    {/if}
-                    <p class="hint">
-                        The test reports what is configured rather than generating something
-                        — a test that charged you a few cents per press would not be one.
-                    </p>
-
-                    <h3>Models</h3>
-                    <p class="hint">
-                        Empty means the provider's own default, so a new model upstream needs
-                        no update here.
-                    </p>
-                    <input bind:value={canvas.imageModel} onchange={saveCanvasDefaults} placeholder="image model (optional)" />
-                    <input bind:value={canvas.videoModel} onchange={saveCanvasDefaults} placeholder="video model (optional)" />
-
-                    <h3>Custom endpoint</h3>
-                    <p class="hint">
-                        Must speak the OpenAI <code>/images/generations</code> shape.
-                        <code>{"{key}"}</code> in the header value is filled from the stored key.
-                    </p>
-                    <input bind:value={canvas.customUrl} onchange={saveCanvasDefaults} placeholder="http://localhost:8080/v1/images/generations" />
-                    <input bind:value={canvas.customModel} onchange={saveCanvasDefaults} placeholder="model (optional)" />
-                    <input bind:value={canvas.customHeaderName} onchange={saveCanvasDefaults} placeholder="auth header (optional)" />
-                    <input bind:value={canvas.customHeaderValue} onchange={saveCanvasDefaults} placeholder="header value, e.g. Bearer {'{key}'}" />
-
-                    <h3>Storage</h3>
-                    <div class="row-between">
-                        <span class="hint">
-                            {canvas.items} results · {bytes(canvas.bytes)} on disk
-                        </span>
-                        <span class="link-actions">
-                            <button class="tiny" onclick={() => openFolder()}>folder</button>
-                            <button class="tiny" onclick={clearGallery}>clear</button>
-                        </span>
-                    </div>
-                    <p class="hint">Clearing spares anything you starred.</p>
-                {/if}
+                <CanvasPane {canvas} reload={load} />
             {:else if active === "obsidian"}
                 <h2>Obsidian</h2>
                 {#if vaults.length === 0}
@@ -1664,17 +1492,6 @@
         cursor: pointer;
     }
 
-    .row-group {
-        display: flex;
-        gap: var(--sp-1);
-    }
-    .row-group select {
-        flex: 0 0 auto;
-    }
-    .row-group input {
-        flex: 1;
-        min-width: 0;
-    }
 
     .actions {
         display: flex;
@@ -1682,12 +1499,6 @@
         flex-wrap: wrap;
     }
 
-    .row-between {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--sp-2);
-    }
 
     .result {
         margin: 0;
@@ -1756,51 +1567,12 @@
         color: var(--accent-hover);
     }
 
-    .chain {
-        display: flex;
-        flex-direction: column;
-        gap: var(--sp-1);
-    }
 
-    .link {
-        display: flex;
-        align-items: center;
-        gap: var(--sp-2);
-        padding: var(--sp-1) var(--sp-2);
-        background: var(--surface-raised);
-        border: 1px solid var(--line);
-        border-radius: var(--r-md);
-        cursor: grab;
-    }
-    .link.unconfigured {
-        opacity: 0.55;
-    }
 
-    .rank {
-        font-family: var(--font-mono);
-        font-size: 10px;
-        color: var(--accent);
-        flex: 0 0 auto;
-    }
 
-    .link-main {
-        display: flex;
-        flex-direction: column;
-        flex: 1;
-        min-width: 0;
-    }
 
-    .link-name {
-        font-size: var(--text-xs);
-        color: var(--text);
-    }
 
-    .link-note {
-        font-size: 10px;
-        color: var(--text-faint);
-    }
 
-    .link-actions,
     .entry-actions {
         display: flex;
         gap: var(--sp-1);
