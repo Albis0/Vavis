@@ -45,6 +45,16 @@ pub struct VoiceState {
     api_key: String,
     language: String,
     wake_word: String,
+    /// Text streamed in this turn that has not been spoken yet.
+    ///
+    /// Speech used to wait for the whole answer: the screen filled with
+    /// words while the speaker stayed silent, and on a long reply that gap
+    /// was most of the wait. Sentences are now handed over as they complete,
+    /// so the first one plays while the model is still writing the rest.
+    ///
+    /// `Mutex` because the stream callback runs on the request thread while
+    /// the interface reads state from its own.
+    pending: std::sync::Mutex<String>,
 }
 
 impl VoiceState {
@@ -70,6 +80,7 @@ impl VoiceState {
             api_key,
             language,
             wake_word,
+            pending: std::sync::Mutex::new(String::new()),
         }
     }
 
@@ -166,6 +177,11 @@ impl VoiceState {
     /// Order matters: clear the queue first so no further utterance can
     /// start, then stop what is playing.
     pub fn stop_speaking(&self) {
+        // The buffer goes with it: a barge-in cancels the rest of the
+        // answer, and a sentence left here would be spoken after it.
+        if let Ok(mut buf) = self.pending.lock() {
+            buf.clear();
+        }
         self.queue.stop();
         self.tts.stop();
         self.speaking.store(false, Ordering::Relaxed);
@@ -175,12 +191,59 @@ impl VoiceState {
         let _ = self.tx.send(VoiceEvent::Speaking { active: false });
     }
 
-    /// Speaks a reply.
+    /// Starts a new spoken turn, discarding anything buffered from the last.
     ///
-    /// The text is split into sentences so the first one starts playing
-    /// while the rest is still being synthesised — waiting for the whole
-    /// answer made speech feel late.
-    pub fn speak(&self, text: &str) {
+    /// Called when a request begins, so an abandoned turn cannot leak a
+    /// half-sentence into the next answer.
+    pub fn begin_stream(&self) {
+        if let Ok(mut buf) = self.pending.lock() {
+            buf.clear();
+        }
+        // Clearing the barge-in flag belongs here, once per turn: doing it
+        // per chunk would undo a stop the user made mid-answer.
+        self.tts.reset();
+    }
+
+    /// Feeds a chunk of the reply as it arrives and speaks whole sentences.
+    ///
+    /// Only **complete** sentences are handed over: a fragment read aloud
+    /// stops mid-thought and the next chunk restarts it, which sounds worse
+    /// than waiting. The tail stays buffered until [`Self::finish_stream`].
+    pub fn push_stream(&self, chunk: &str) {
+        if self.mode == VoiceMode::Off || chunk.is_empty() {
+            return;
+        }
+
+        let ready = {
+            let Ok(mut buf) = self.pending.lock() else {
+                return;
+            };
+            buf.push_str(chunk);
+
+            // Split at the last sentence end; everything after it is still
+            // being written.
+            let Some(cut) = buf.rfind(['.', '!', '?', '\n']) else {
+                return;
+            };
+            let ready: String = buf[..=cut].to_string();
+            buf.drain(..=cut);
+            ready
+        };
+
+        self.enqueue(&ready);
+    }
+
+    /// Speaks whatever is left over once the reply is complete.
+    pub fn finish_stream(&self) {
+        let rest = match self.pending.lock() {
+            Ok(mut buf) => std::mem::take(&mut *buf),
+            Err(_) => return,
+        };
+        self.enqueue(&rest);
+    }
+
+    /// Cleans one piece of text and queues it for speaking.
+    fn enqueue(&self, text: &str) {
         if self.mode == VoiceMode::Off || text.trim().is_empty() {
             return;
         }
@@ -194,7 +257,6 @@ impl VoiceState {
             return;
         }
 
-        self.tts.reset();
         for piece in split_sentences(&spoken) {
             self.queue.push(piece);
         }
@@ -337,6 +399,17 @@ mod tests {
         VoiceState::new("vavis".into(), "en".into(), String::new())
     }
 
+    /// A state that will actually buffer speech.
+    ///
+    /// `set_mode` cannot be used here: a listening mode opens a real
+    /// microphone and needs a key. The field is set directly because these
+    /// tests are about the text buffer, not about the device.
+    fn speaking_state() -> VoiceState {
+        let mut v = state();
+        v.mode = VoiceMode::Continuous;
+        v
+    }
+
     #[test]
     fn starts_off_and_silent() {
         let v = state();
@@ -357,8 +430,54 @@ mod tests {
     #[test]
     fn speaking_is_a_no_op_while_voice_is_off() {
         let v = state();
-        v.speak("hello");
+        v.begin_stream();
+        v.push_stream("hello. there.");
+        v.finish_stream();
         assert!(!v.is_speaking());
+    }
+
+    /// Only finished sentences are spoken as they stream.
+    ///
+    /// A fragment read aloud stops mid-thought and the next chunk restarts
+    /// it, which sounds worse than waiting a beat. The tail stays buffered.
+    #[test]
+    fn a_half_sentence_waits_for_its_ending() {
+        let v = speaking_state();
+        v.begin_stream();
+        v.push_stream("bu cümle daha");
+        assert_eq!(
+            v.pending.lock().unwrap().as_str(),
+            "bu cümle daha",
+            "bitmemiş cümle tamponda kalmalı"
+        );
+
+        v.push_stream(" bitmedi. ama bu bitti");
+        assert_eq!(
+            v.pending.lock().unwrap().as_str(),
+            " ama bu bitti",
+            "yalnızca tamamlanan kısım alınmalı"
+        );
+    }
+
+    /// A barge-in cancels the rest of the answer — including the sentence
+    /// still sitting in the buffer, which would otherwise be spoken after it.
+    #[test]
+    fn stopping_drops_the_buffered_tail() {
+        let v = speaking_state();
+        v.begin_stream();
+        v.push_stream("yarım kalan");
+        v.stop_speaking();
+        assert!(v.pending.lock().unwrap().is_empty());
+    }
+
+    /// A new turn must not inherit the last one's unfinished sentence.
+    #[test]
+    fn a_new_turn_starts_with_an_empty_buffer() {
+        let v = speaking_state();
+        v.begin_stream();
+        v.push_stream("terk edilmiş");
+        v.begin_stream();
+        assert!(v.pending.lock().unwrap().is_empty());
     }
 
     #[test]

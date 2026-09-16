@@ -180,6 +180,17 @@ const DOMAIN_KEYWORDS: &[DomainKeywords] = &[
             "kopyala",
             "yapistir",
             "yapıştır",
+            // Cihazın kendisi. "kapat" / "başlat" zayıf fiil olduğu için
+            // tek başına alan tetiklemiyor; onlara eşlik edecek güçlü bir
+            // kelime gerekiyor ve kullanıcının söylediği kelime bu.
+            "bilgisayar",
+            "makine",
+            "computer",
+            "pc",
+            // Tarayıcı ve sık açılan uygulamalar: "aç" da zayıf fiil.
+            "tarayıcı",
+            "tarayici",
+            "browser",
             "notepad",
             "chrome",
             "spotify",
@@ -288,7 +299,17 @@ const DOMAIN_KEYWORDS: &[DomainKeywords] = &[
             "biliyor",
             "söylemiştim",
             "soylemistim",
-            "bilgi",
+            // "bilgi" **bilerek yok**: eşleşme ek toleranslı olduğu için
+            // "bilgisayar" kelimesini de yakalıyordu. Sonucu sessizdi —
+            // "bilgisayarı kapat" hafıza alanına düşüyor, kontrol araçları
+            // modele hiç ulaşmıyordu. Bir asistanda "bilgisayar" en sık
+            // geçen kelimelerden biri, yani bu tek satır çok sayıda isteği
+            // yanlış yere gönderiyordu.
+            //
+            // Hafıza isteğini belli eden kelimeler zaten yukarıda:
+            // "hatırla", "unut", "hafıza", "söylemiştim".
+            "hatırladığın",
+            "hatirladigin",
         ],
     },
     DomainKeywords {
@@ -477,6 +498,29 @@ fn tokenize(text: &str) -> Vec<String> {
         .collect()
 }
 
+/// Bir kelime, anahtar kelimenin **ekli hâli** mi.
+///
+/// Türkçe sondan eklemeli: "dosya" araması "dosyayı", "dosyada",
+/// "dosyalarım" kelimelerini de yakalamalı. Bunun için kelimenin anahtar
+/// kelimeyle **başlaması** yetiyor.
+///
+/// # Neden `contains` değil
+///
+/// Önceden `w.contains(kw)` yazıyordu, yani anahtar kelime **kelimenin
+/// herhangi bir yerinde** eşleşiyordu. Sonucu sessiz ve yaygındı:
+///
+/// - `"bilgisayar"` içinde `"bilgi"` var → **"bilgisayarı kapat"** cümlesi
+///   hafıza alanına düşüyor, kontrol araçları modele hiç ulaşmıyordu.
+/// - Aynı sebeple "bilgisayar" geçen her cümle yanlış alana gidiyordu, ve
+///   bir asistanda bu kelime en sık geçenlerden biri.
+///
+/// Sonek eşleşmesi Türkçe için doğru olanı yapıyor: ek **sonda** gelir.
+/// Bir ön ek yüzünden eşleşme gerekiyorsa (nadir), anahtar kelimenin
+/// kendisi tabloya eklenmeli — sessiz bir alt dizge kuralı değil.
+fn matches_with_suffix(word: &str, keyword: &str) -> bool {
+    word == keyword || word.starts_with(keyword)
+}
+
 /// Mesaj sadece nezaket/onay ifadesi mi?
 fn is_chatter(words: &[String]) -> bool {
     if words.is_empty() || words.len() > 3 {
@@ -524,9 +568,9 @@ pub fn match_domains(message: &str) -> Vec<Domain> {
 
             for kw in dk.words {
                 let kw = normalize(kw);
-                // Kelime tam eşleşir ya da bir kelime onu içerir
+                // Kelime tam eşleşir ya da anahtar kelimeyle **başlar**
                 // ("dosyayı" ⊃ "dosya") — Türkçe ekler için.
-                if words.iter().any(|w| w == &kw || w.contains(&kw)) {
+                if words.iter().any(|w| matches_with_suffix(w, &kw)) {
                     if weak.contains(&kw) {
                         weak_hits += 1;
                     } else {
