@@ -155,6 +155,15 @@ impl BrainClient {
                 .await;
         }
 
+        // Gemini de öyle. Google'ın bir OpenAI-uyumlu kapısı var ve bir süre
+        // onu kullandık, ama o kapı bir alt küme: düşünme ayarları, güvenlik
+        // eşikleri, çok parçalı içerik oradan geçmiyor.
+        if cfg.provider == Provider::Gemini {
+            return self
+                .gemini_stream(cfg, messages, tools, caps, on_event)
+                .await;
+        }
+
         // Bazı modeller araçlarını sunucu tarafında kendileri çalıştırıyor ve
         // bizimkilerden **tek bir tanesini** bile kabul etmiyor: istek 400
         // ile tamamen düşüyor. Süzgeç burada, gövdenin kurulduğu tek yerde —
@@ -389,6 +398,107 @@ impl BrainClient {
         })
     }
 
+    /// Gemini'nin yerel `streamGenerateContent` akışı.
+    ///
+    /// OpenAI-uyumlu uç noktadan ayrıldık: o kapı bir alt küme sunuyor
+    /// (düşünme ayarları, güvenlik eşikleri, çok parçalı içerik oradan
+    /// geçmiyor). Dönüşüm `crate::gemini` modülünde; burası sadece HTTP.
+    ///
+    /// Anthropic yolundan farkı: Gemini'de bitişi bildiren bir olay **yok**.
+    /// Akış kapanınca biter, o yüzden döngünün sonrası tek çıkış noktası.
+    async fn gemini_stream<F>(
+        &self,
+        cfg: &ChatConfig,
+        messages: Vec<Message>,
+        tools: &[serde_json::Value],
+        caps: ModelCaps,
+        mut on_event: F,
+    ) -> Result<ChatResponse>
+    where
+        F: FnMut(StreamEvent),
+    {
+        use crate::gemini::{self, Chunk, StreamState};
+
+        let fitted = fit_request(messages, tools.to_vec(), caps);
+
+        let body = gemini::build_body(
+            &fitted.messages,
+            &fitted.tools,
+            caps.max_output,
+            cfg.temperature,
+        );
+
+        // The model travels in the path, so a URL override has to replace the
+        // whole thing rather than have a model appended to it.
+        let url = cfg
+            .url_override
+            .clone()
+            .unwrap_or_else(|| gemini::chat_url(&cfg.model));
+
+        let resp = self
+            .http
+            .post(url)
+            // In the header, never the query string: a key in the URL reaches
+            // request logs, proxies, and the error body we show the user.
+            .header(gemini::KEY_HEADER, &cfg.api_key)
+            .header("content-type", "application/json")
+            .json(&body)
+            .send()
+            .await?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(BrainError::Api {
+                status: status.as_u16(),
+                body: body.chars().take(500).collect(),
+            });
+        }
+
+        let mut full = String::new();
+        let mut buf = String::new();
+        let mut calls: Vec<ToolCall> = Vec::new();
+        let mut state = StreamState::new();
+        let mut stream = resp.bytes_stream();
+
+        while let Some(chunk) = stream.next().await {
+            buf.push_str(&String::from_utf8_lossy(&chunk?));
+
+            while let Some(nl) = buf.find('\n') {
+                let line = buf[..nl].trim().to_string();
+                buf.drain(..=nl);
+
+                let Some(data) = line.strip_prefix("data:") else {
+                    continue;
+                };
+                let data = data.trim();
+                if data.is_empty() {
+                    continue;
+                }
+
+                for piece in state.feed(data) {
+                    match piece {
+                        Chunk::Text(text) => {
+                            full.push_str(&text);
+                            on_event(StreamEvent::Delta(text));
+                        }
+                        Chunk::Call(call) => calls.push(call),
+                        Chunk::Nothing => {}
+                    }
+                }
+            }
+        }
+
+        if !calls.is_empty() {
+            on_event(StreamEvent::ToolCalls(calls.clone()));
+        }
+        on_event(StreamEvent::Done);
+        Ok(ChatResponse {
+            text: full,
+            tool_calls: calls,
+        })
+    }
+
     /// Canlı model listesi. Sağlayıcı gürültüsü süzülür.
     pub async fn list_models(&self, provider: Provider, api_key: &str) -> Result<Vec<String>> {
         if provider.needs_key() && api_key.trim().is_empty() {
@@ -396,9 +506,13 @@ impl BrainClient {
         }
 
         let mut req = self.http.get(provider.models_url());
-        if provider.needs_key() {
-            req = req.bearer_auth(api_key);
-        }
+        req = match provider {
+            // Gemini's own endpoint takes the key in a header and answers
+            // with `models[].name`, not `data[].id`.
+            Provider::Gemini => req.header(crate::gemini::KEY_HEADER, api_key),
+            _ if provider.needs_key() => req.bearer_auth(api_key),
+            _ => req,
+        };
 
         let resp = req.send().await?;
         let status = resp.status();
@@ -410,12 +524,37 @@ impl BrainClient {
             });
         }
 
-        let list: ModelList = resp
-            .json()
-            .await
-            .map_err(|e| BrainError::Parse(e.to_string()))?;
-
-        let all: Vec<String> = list.data.into_iter().map(|m| m.id).collect();
+        let all: Vec<String> = if provider == Provider::Gemini {
+            let list: GeminiModelList = resp
+                .json()
+                .await
+                .map_err(|e| BrainError::Parse(e.to_string()))?;
+            list.models
+                .into_iter()
+                // Google lists embedding and image models here too. Each
+                // model declares what it can do, so ask rather than guess
+                // from the name -- `generateContent` is the one we need, and
+                // a model without it cannot answer a chat request at all.
+                //
+                // An empty list means the field was absent, not that the
+                // model does nothing: keep it and let the name filter judge.
+                .filter(|m| {
+                    m.supported_generation_methods.is_empty()
+                        || m.supported_generation_methods
+                            .iter()
+                            .any(|s| s == "generateContent")
+                })
+                // Names come back as `models/gemini-2.5-flash`; the settings
+                // screen and the chat config both use the bare name.
+                .map(|m| m.name.trim_start_matches("models/").to_string())
+                .collect()
+        } else {
+            let list: ModelList = resp
+                .json()
+                .await
+                .map_err(|e| BrainError::Parse(e.to_string()))?;
+            list.data.into_iter().map(|m| m.id).collect()
+        };
         let useful: Vec<String> = all
             .iter()
             .filter(|id| crate::provider::is_useful_model(provider, id))
@@ -603,6 +742,23 @@ struct ModelList {
 #[derive(Deserialize)]
 struct ModelEntry {
     id: String,
+}
+
+/// Gemini's own model list — a different shape from the OpenAI one.
+#[derive(Deserialize)]
+struct GeminiModelList {
+    #[serde(default)]
+    models: Vec<GeminiModelEntry>,
+}
+
+#[derive(Deserialize)]
+struct GeminiModelEntry {
+    /// Comes back qualified, e.g. `models/gemini-2.5-flash`.
+    name: String,
+    /// What this model can actually be asked to do. Absent on some entries,
+    /// so a missing field is not read as "can do nothing".
+    #[serde(default, rename = "supportedGenerationMethods")]
+    supported_generation_methods: Vec<String>,
 }
 
 #[cfg(test)]

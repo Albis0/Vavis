@@ -18,7 +18,7 @@ hepsi canlı API'ye sorularak ortaya çıktı.
 |---|---|---|
 | **Groq** | ✅ tam tarandı | 6 hata bulundu, hepsi düzeltildi — aşağıda |
 | OpenAI | ⬜ | |
-| Gemini | ⬜ | OpenAI-uyumlu uçtan gidiyoruz, tam uyumlu olmayabilir |
+| **Gemini** | 🟡 kod hazır, anahtar bekliyor | Yerel API'ye taşındı — OpenAI-uyumlu kapı bırakıldı |
 | Mistral | ⬜ | |
 | DeepSeek | ⬜ | |
 | XAI (Grok) | ⬜ | |
@@ -218,6 +218,76 @@ Bu ikisi karıştırılıyor ve karıştırılınca bütçe modülü yalan söyl
   kez çekip tabloyu doğrulamak bu sınıf hatanın tamamını kapatır.
 - Compound seçildiğinde Vavis'in araçları çalışmıyor; arayüzde bunu söyleyen
   bir not yok.
+
+---
+
+## Gemini — yerel API'ye geçiş (2026-09-16)
+
+**Neden OpenAI-uyumlu kapı bırakıldı:** o kapı bir **alt küme**. Düşünme
+(thinking) ayarları, güvenlik eşikleri, `systemInstruction`, çok parçalı
+içerik, `usageMetadata` — hiçbiri oradan geçmiyor. Google'ın kendi
+belgelediği yol `generateContent`.
+
+### Şekil farkları — OpenAI'a benzeyen hiçbir yanı yok
+
+| | OpenAI | Gemini |
+|---|---|---|
+| Mesaj dizisi | `messages` | `contents` |
+| Rol adları | `assistant` | `model` (`system` rolü **yok**) |
+| Sistem istemi | dizide bir mesaj | ayrı `systemInstruction` alanı |
+| Metin | `content` düz metin | `parts[].text` |
+| Araç şeması | `tools[].function` | `tools[].functionDeclarations[]` |
+| Araç çağrısı | `tool_calls[]` | `parts[].functionCall` |
+| Araç sonucu | `role: "tool"` | `role: "user"` + `functionResponse` |
+| Cevap sınırı | `max_tokens` | `generationConfig.maxOutputTokens` |
+| **Model adı** | gövdede | **URL'de** |
+| Model listesi | `data[].id` | `models[].name` (`models/` önekli) |
+
+### Dikkat edilenler
+
+- **Anahtar başlıkta gidiyor** (`x-goog-api-key`), sorgu parametresinde değil.
+  İki sebep: (1) URL'e giren anahtar istek kaydına, vekil sunucuya ve
+  kullanıcıya gösterdiğimiz hata gövdesine sızar; (2) Google'ın yeni biçimli
+  anahtarları sorgu parametresini zaten kabul etmiyor — o yolla **404**.
+- **`alt=sse` şart.** Olmadan Google akışı bir JSON **dizisi** olarak
+  gönderiyor, SSE olarak değil; satır satır çözümleyen kodumuz okuyamaz.
+- **Model adı yolda.** `models/` öneki iki kez eklenirse 404. Kullanıcı çıplak
+  ad yazıyor, Google önekli yayınlıyor; ikisi de kabul ediliyor.
+- **Şema temizliği.** Google OpenAPI'nin bir alt kümesini kabul ediyor;
+  tanımadığı bir anahtar görünce aracı yok saymak yerine **isteğin tamamını**
+  reddediyor. `additionalProperties` ve `$schema` bizim şemalarımızda var —
+  iç içe olanlar dahil ayıklanıyor.
+- **Araç sonucu ada göre bağlanıyor**, kimliğe göre değil: Gemini'de
+  `tool_call_id` diye bir şey yok.
+- **Argümanlar nesne**, metin değil. Bozuk JSON gelirse boş nesneye
+  düşürülüyor — olduğu gibi göndermek isteğin tamamını düşürür.
+- **Bitiş olayı yok.** Anthropic'teki `message_stop` gibi bir şey gelmiyor;
+  akış kapanınca bitiyor. Araç çağrısının o kapanışta kaybolmadığı teste
+  bağlandı.
+- **Model listesi süzgeci `supportedGenerationMethods` okuyor** — adına bakıp
+  tahmin etmek yerine modelin kendi beyanı. Alan yoksa model eleniyor değil,
+  ad süzgecine bırakılıyor.
+
+### Test durumu
+
+18 birim testi + 7 tel testi (`tests/gemini_wire.rs`). Tel testleri gerçek bir
+soket açıp gövdeyi ve **başlıkları** okuyor; anahtarın URL'e sızmadığı da
+orada ölçülüyor.
+
+> **Anahtar yok, canlı doğrulama yapılamadı.** Groq'ta yaptığımız gibi API'ye
+> sorulmadı — kod belgeye göre yazıldı. Anahtar girildiğinde şu 9 başlık
+> sırayla sorulmalı; özellikle **4 (hata biçimleri)** ve **6 (dakikalık
+> sınır)** Groq'ta sürpriz çıkmıştı.
+
+### Anahtar girilince ilk yapılacaklar
+
+1. Model listesi geliyor mu, `models/` öneki temizlenmiş mi?
+2. Basit bir tur — metin akıyor mu?
+3. Araçlı bir tur — `functionCall` geliyor mu, sonuç geri bağlanıyor mu?
+4. Şema reddi var mı? (`clean_schema` yeterli mi, başka yasak anahtar var mı)
+5. Hata biçimleri: geçersiz anahtar, olmayan model, bağlam taşması, hız sınırı
+6. Güvenlik eşikleri bir şeyi engelliyor mu? (`safetySettings` şu an
+   gönderilmiyor — Google varsayılanları uygulanıyor)
 
 ---
 
