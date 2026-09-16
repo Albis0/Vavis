@@ -34,7 +34,20 @@ pub const API_BASE: &str = "https://generativelanguage.googleapis.com/v1beta";
 /// Model listesi uç noktası.
 pub const MODELS_URL: &str = "https://generativelanguage.googleapis.com/v1beta/models";
 
-pub const DEFAULT_MODEL: &str = "gemini-2.5-flash";
+/// Varsayılan model.
+///
+/// `gemini-2.5-flash` **değil**: Google onu emekli etti ve kullanmaya
+/// çalışınca 404 dönüyor —
+///
+/// ```text
+/// This model models/gemini-2.5-flash is no longer available to new users.
+/// Please update your code to use models/gemini-3.6-flash
+/// ```
+///
+/// Model hâlâ `/models` listesinde görünüyor, yani "listede var" ile
+/// "çalışıyor" aynı şey değil. Ölçüldü (2026-09-16, canlı API): `2.5-flash`,
+/// `2.5-pro` ve `2.5-flash-lite` listede duruyor ama üçü de 404 veriyor.
+pub const DEFAULT_MODEL: &str = "gemini-3.6-flash";
 
 /// Anahtarın gideceği başlık.
 ///

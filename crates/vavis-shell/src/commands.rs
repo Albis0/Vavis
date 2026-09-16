@@ -981,6 +981,23 @@ fn is_too_long(status: u16, body: &str) -> bool {
         || body.contains("reduce the length")
 }
 
+/// The model a retirement notice tells you to move to.
+///
+/// Google phrases it as "Please use ... use models/gemini-3.6-flash for the
+/// latest features", so the name is taken from after the last `models/` and
+/// stops at the first character a model id cannot contain. `None` when the
+/// sentence does not name one, rather than a guess.
+fn replacement_model(body: &str) -> Option<String> {
+    let after = body.rsplit_once("models/")?.1;
+    let name: String = after
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '.')
+        .collect();
+    // A trailing dot is sentence punctuation, not part of the name.
+    let name = name.trim_end_matches('.').to_string();
+    (!name.is_empty()).then_some(name)
+}
+
 /// How long to wait before trying this request again, if waiting would help.
 ///
 /// `None` means do not retry — either the refusal is not about pace, or the
@@ -1012,6 +1029,19 @@ fn friendly_error(err: &vavis_brain::BrainError) -> String {
     match err {
         E::MissingKey { provider } => format!("No API key for {provider}."),
         E::Api { status: 401, .. } => "API key rejected — update it in settings.".into(),
+        // A retired model names its own replacement, and that sentence is
+        // the most useful thing we can show. Google keeps such models in
+        // `/models` after retiring them, so this is reachable by picking a
+        // model straight out of the list:
+        //
+        //   This model models/gemini-2.5-flash is no longer available to new
+        //   users. Please update your code to use models/gemini-3.6-flash
+        E::Api { status: 404, body } if body.contains("no longer available") => {
+            match replacement_model(body) {
+                Some(m) => format!("This model has been retired — use {m} instead."),
+                None => "This model has been retired — pick another one.".into(),
+            }
+        }
         E::Api { status: 404, .. } => "Model not found — pick another one.".into(),
 
         // Before the size check, and matched on the body rather than the
@@ -1175,9 +1205,18 @@ pub struct VoiceSettings {
     pub kokoro_voice: String,
     pub eleven_voice: String,
     pub openai_voice: String,
+    pub gemini_voice: String,
     /// True when an ElevenLabs key is stored. The key never crosses this bridge.
     pub has_eleven_key: bool,
     pub has_openai_key: bool,
+    pub has_gemini_key: bool,
+    /// Whether to speak with the chat provider's own voice when it has one.
+    pub match_provider: bool,
+    /// The engine actually speaking right now. Differs from `engine` when
+    /// `match_provider` swapped it, and the interface says so rather than
+    /// leaving the user wondering why the picker disagrees with what they
+    /// hear.
+    pub effective_engine: String,
     /// Voices offered per engine, so the interface can show a real list
     /// rather than making the user guess an identifier.
     pub sapi_voices: Vec<String>,
@@ -1185,6 +1224,7 @@ pub struct VoiceSettings {
     pub kokoro_voices: Vec<[String; 2]>,
     pub eleven_voices: Vec<[String; 2]>,
     pub openai_voices: Vec<[String; 2]>,
+    pub gemini_voices: Vec<[String; 2]>,
     /// The address Kokoro listens on out of the box, shown as the placeholder.
     pub kokoro_default_url: String,
     /// Which Edge voice an empty choice resolves to, for the current
@@ -1231,13 +1271,22 @@ pub fn get_voice_settings(state: State<AppState>) -> VoiceSettings {
         kokoro_voice: v.kokoro_voice.clone(),
         eleven_voice: v.eleven_voice.clone(),
         openai_voice: v.openai_voice.clone(),
+        gemini_voice: v.gemini_voice.clone(),
         has_eleven_key: keys.get("elevenlabs").is_some_and(|k| !k.trim().is_empty()),
         has_openai_key: keys.get("openai").is_some_and(|k| !k.trim().is_empty()),
+        has_gemini_key: keys.get("gemini").is_some_and(|k| !k.trim().is_empty()),
+        match_provider: v.match_provider,
+        // Asked of the same function the voice layer uses, so the interface
+        // cannot drift from what actually speaks.
+        effective_engine: crate::state::effective_engine(&core.config, &keys)
+            .id()
+            .to_string(),
         sapi_voices: vavis_audio::TtsEngine::available_voices(),
         edge_voices: pairs(vavis_audio::edge_tts::voices()),
         kokoro_voices: pairs(vavis_audio::kokoro::voices()),
         eleven_voices: pairs(vavis_audio::elevenlabs::voices()),
         openai_voices: pairs(vavis_audio::openai_tts::voices()),
+        gemini_voices: pairs(vavis_audio::gemini_tts::voices()),
         kokoro_default_url: vavis_audio::kokoro::DEFAULT_URL.to_string(),
         default_edge_voice: vavis_audio::edge_tts::default_voice(&core.config.general.language)
             .to_string(),
@@ -1387,6 +1436,11 @@ pub fn set_setting(state: State<AppState>, field: String, value: String) -> Resu
         "elevenModel" => core.config.voice.eleven_model = value.trim().to_string(),
         "openaiVoice" => core.config.voice.openai_voice = value.trim().to_string(),
         "openaiModel" => core.config.voice.openai_model = value.trim().to_string(),
+        "geminiVoice" => core.config.voice.gemini_voice = value.trim().to_string(),
+        "geminiModel" => core.config.voice.gemini_model = value.trim().to_string(),
+        // Anything other than "true" reads as off, so a malformed value
+        // pins the engine the user picked rather than silently moving them.
+        "matchProvider" => core.config.voice.match_provider = value.trim() == "true",
 
         other => return Err(format!("unknown setting: {other}")),
     }
@@ -1394,7 +1448,7 @@ pub fn set_setting(state: State<AppState>, field: String, value: String) -> Resu
     // Listed rather than pattern-matched: "routerModel" ends in "Model" and
     // has nothing to do with speech, so a suffix rule would quietly rebuild
     // the speech engine every time the router changed.
-    const VOICE_FIELDS: [&str; 11] = [
+    const VOICE_FIELDS: [&str; 14] = [
         "voiceEngine",
         "voiceRate",
         "voiceVolume",
@@ -1406,6 +1460,10 @@ pub fn set_setting(state: State<AppState>, field: String, value: String) -> Resu
         "elevenModel",
         "openaiVoice",
         "openaiModel",
+        "geminiVoice",
+        "geminiModel",
+        // Changes which engine speaks, so the voice layer has to be rebuilt.
+        "matchProvider",
     ];
     let is_voice = VOICE_FIELDS.contains(&field.as_str()) || language_changed;
 
@@ -3516,6 +3574,52 @@ mod tests {
             retry_after_seconds("please reduce your message size and try again."),
             None
         );
+    }
+
+    /// A retired model names its successor, and that is what the user needs.
+    ///
+    /// Measured 2026-09-16: `gemini-2.5-flash` is still in Google's model
+    /// list and still returns this when used.
+    #[test]
+    fn a_retired_model_tells_the_user_what_to_switch_to() {
+        let body = "{\"error\":{\"code\":404,\"message\":\"This model \
+                    models/gemini-2.5-flash is no longer available to new users. \
+                    Please update your code to use models/gemini-3.6-flash for \
+                    the latest features and improvements.\"}}";
+
+        assert_eq!(replacement_model(body).as_deref(), Some("gemini-3.6-flash"));
+
+        let err = vavis_brain::BrainError::Api {
+            status: 404,
+            body: body.to_string(),
+        };
+        let text = friendly_error(&err);
+        assert!(text.contains("gemini-3.6-flash"), "said: {text}");
+        assert!(text.contains("retired"), "said: {text}");
+    }
+
+    /// An ordinary 404 keeps its old wording.
+    #[test]
+    fn a_plain_missing_model_is_not_called_retired() {
+        let err = vavis_brain::BrainError::Api {
+            status: 404,
+            body: "{\"error\":{\"message\":\"model not found\"}}".into(),
+        };
+        let text = friendly_error(&err);
+        assert!(text.contains("not found"), "said: {text}");
+        assert!(!text.contains("retired"), "said: {text}");
+    }
+
+    /// A notice with no replacement named must not invent one.
+    #[test]
+    fn a_retirement_without_a_named_successor_says_so_plainly() {
+        let err = vavis_brain::BrainError::Api {
+            status: 404,
+            body: "this model is no longer available".into(),
+        };
+        let text = friendly_error(&err);
+        assert!(text.contains("retired"), "said: {text}");
+        assert!(text.contains("pick another"), "said: {text}");
     }
 
     /// Groq announces a context overflow without any of the words the size

@@ -539,10 +539,19 @@ impl BrainClient {
                 // An empty list means the field was absent, not that the
                 // model does nothing: keep it and let the name filter judge.
                 .filter(|m| {
-                    m.supported_generation_methods.is_empty()
-                        || m.supported_generation_methods
-                            .iter()
-                            .any(|s| s == "generateContent")
+                    if m.supported_generation_methods.is_empty() {
+                        // Not silently: if Google ever renames the field,
+                        // every model passes this filter and the only clue
+                        // is a WebSocket-only model appearing in the picker.
+                        tracing::warn!(
+                            model = %m.name,
+                            "model declared no generation methods; capability filter skipped"
+                        );
+                        return true;
+                    }
+                    m.supported_generation_methods
+                        .iter()
+                        .any(|s| s == "generateContent")
                 })
                 // Names come back as `models/gemini-2.5-flash`; the settings
                 // screen and the chat config both use the bare name.

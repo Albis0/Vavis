@@ -136,7 +136,7 @@ impl fmt::Display for Provider {
 /// Eski `models.ts`'ten taşındı — kullanıcı "çok fazla gereksiz Gemini modeli
 /// var" diye şikayet etmişti; gürültü burada kesiliyor.
 pub fn is_chat_model(id: &str) -> bool {
-    const NOISE: [&str; 16] = [
+    const NOISE: [&str; 18] = [
         "whisper",
         "tts",
         "embed",
@@ -159,6 +159,18 @@ pub fn is_chat_model(id: &str) -> bool {
         // substring also hides `gpt-oss-safeguard`, a full chat model.
         "prompt-guard",
         "llama-guard",
+        // Models that only speak over a WebSocket (`bidiGenerateContent`).
+        // The capability filter in `client::list_models` already drops these,
+        // but that filter trusts a field the provider might rename; this is
+        // the name-level backstop. Sending one a chat request earns:
+        //
+        //   only supports real-time bidirectional streaming via WebSocket
+        //   (bidiGenerateContent). Please use the Gemini Live API
+        //
+        // `-live` and not `live`, so `learnlm-live` style names are caught
+        // without also hiding a model that merely has "live" inside a word.
+        "native-audio",
+        "-live",
     ];
     let lower = id.to_ascii_lowercase();
     !NOISE.iter().any(|n| lower.contains(n))
@@ -175,8 +187,20 @@ pub fn is_useful_model(provider: Provider, id: &str) -> bool {
     }
     match provider {
         Provider::Gemini => {
-            // Emekli nesiller ve deneysel varyantlar elenir.
-            if lower.contains("gemini-1.0") || lower.contains("gemini-1.5") {
+            // Emekli nesiller elenir.
+            //
+            // `gemini-2` artık burada: Google 2.5 ailesini emekli etti ama
+            // `/models` listesinden **çıkarmadı**. Listede duran üç model
+            // (`2.5-flash`, `2.5-pro`, `2.5-flash-lite`) kullanılınca 404
+            // veriyor ve mesajında yerine geçecek modeli söylüyor.
+            // Ölçüldü, 2026-09-16, canlı API.
+            //
+            // Ders: "listede var" ile "çalışıyor" aynı şey değil.
+            if lower.contains("gemini-1.0")
+                || lower.contains("gemini-1.5")
+                || lower.contains("gemini-2.0")
+                || lower.contains("gemini-2.5")
+            {
                 return false;
             }
             lower.contains("gemini-2") || lower.contains("gemini-3")
@@ -275,8 +299,80 @@ mod tests {
     #[test]
     fn gemini_filter_drops_retired_generations() {
         assert!(!is_useful_model(Provider::Gemini, "gemini-1.5-pro"));
-        assert!(is_useful_model(Provider::Gemini, "gemini-2.5-flash"));
         assert!(is_useful_model(Provider::Gemini, "gemini-3.5-flash"));
+        assert!(is_useful_model(Provider::Gemini, "gemini-3.6-flash"));
+    }
+
+    /// Google retired the 2.5 family but left it in `/models`.
+    ///
+    /// Measured 2026-09-16 against the live API: each of these is listed and
+    /// each returns 404 when used —
+    ///
+    /// ```text
+    /// This model models/gemini-2.5-flash is no longer available to new
+    /// users. Please update your code to use models/gemini-3.6-flash
+    /// ```
+    ///
+    /// Being in the list is not the same as working, so the list alone
+    /// cannot be trusted to say what a user may pick.
+    #[test]
+    fn gemini_models_that_are_listed_but_retired_are_not_offered() {
+        for dead in [
+            "gemini-2.5-flash",
+            "gemini-2.5-pro",
+            "gemini-2.5-flash-lite",
+            "gemini-2.0-flash",
+        ] {
+            assert!(
+                !is_useful_model(Provider::Gemini, dead),
+                "{dead} emekli ama listede bırakılmış"
+            );
+        }
+    }
+
+    /// The default must be a model that actually answers.
+    #[test]
+    fn the_gemini_default_is_a_model_we_would_offer() {
+        let default = Provider::Gemini.default_model();
+        assert!(
+            is_useful_model(Provider::Gemini, default),
+            "varsayılan kendi süzgecimizden geçmiyor: {default}"
+        );
+    }
+
+    /// WebSocket-only models answer a chat request with an error telling you
+    /// to use the Live API. The capability filter drops them first; this is
+    /// the name-level backstop for when that field is missing or renamed.
+    #[test]
+    fn websocket_only_models_are_not_chat_models() {
+        for live in [
+            "gemini-2.5-flash-native-audio-latest",
+            "gemini-2.5-flash-native-audio-preview-12-2025",
+            "gemini-3.8-live",
+            "gemini-3.8-live-extended-thinking",
+            "gemini-3.5-transcribe-live",
+            "gemini-3.1-flash-live-preview",
+        ] {
+            assert!(!is_chat_model(live), "{live} sohbet modeli sayıldı");
+            assert!(!is_useful_model(Provider::Gemini, live), "{live}");
+        }
+    }
+
+    /// And the backstop must not be so wide that it hides working models.
+    /// These all answered a real request on 2026-09-16.
+    #[test]
+    fn the_live_backstop_does_not_hide_working_models() {
+        for ok in [
+            "gemini-3.6-flash",
+            "gemini-3.5-flash",
+            "gemini-3.5-flash-lite",
+            "gemini-3.1-flash-lite",
+            "gemini-3-flash-preview",
+            // Not a live model despite the name -- it answers generateContent.
+            "gemini-3.5-transcribe",
+        ] {
+            assert!(is_useful_model(Provider::Gemini, ok), "{ok} elendi");
+        }
     }
 
     #[test]
