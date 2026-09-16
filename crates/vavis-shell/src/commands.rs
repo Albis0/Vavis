@@ -614,6 +614,16 @@ async fn run_turn(
     // Mutable because the model can ask for more mid-turn -- see the
     // `request_tools` handling further down. The starting set is what the router
     // (or the keyword table) chose from the message alone.
+    // Some models bring their own web search, run on the provider's servers.
+    // Offering ours alongside it opens two doors onto the same job, and the
+    // model cannot tell which one the user can actually see the results of.
+    // Theirs needs no key of ours, so it wins; ours is dropped for this turn.
+    let picked: Vec<String> = if vavis_brain::builtin::covers_web_search(cfg.provider, &cfg.model) {
+        picked.into_iter().filter(|n| n != "web_search").collect()
+    } else {
+        picked
+    };
+
     let mut offered: Vec<String> = picked.clone();
     let mut tools = {
         let names: Vec<&str> = picked.iter().map(String::as_str).collect();
@@ -771,9 +781,15 @@ async fn run_turn(
             let added = {
                 let guard = AppState::lock(agent);
                 let names = vavis_tools::selection::select_named(&guard.registry, &need, budget);
+                // The same exclusion as at the top of the turn: a tool the
+                // provider already runs server-side must not slip back in
+                // through a mid-turn request either.
+                let suppressed =
+                    vavis_brain::builtin::covers_web_search(cfg.provider, &cfg.model);
                 let fresh: Vec<&str> = names
                     .into_iter()
                     .filter(|n| !offered.iter().any(|had| had == n))
+                    .filter(|n| !(suppressed && *n == "web_search"))
                     .collect();
                 let schemas = guard.schemas_for(&fresh);
                 let fresh: Vec<String> = fresh.into_iter().map(String::from).collect();
