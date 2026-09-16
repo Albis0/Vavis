@@ -13,9 +13,3 @@ ui/package-lock.json
 # `docs/` under it is ours and is tracked.
 example/*
 !example/docs/
-# TestSprite's working directory: generated plans, logs, and its local
-# server config. Somebody else's tool output, and the log carries absolute
-# paths from this machine -- none of it belongs in the repo.
-/testsprite_tests/
-testsprite_tests/tmp/
-testsprite_tests/tmp/config.json
