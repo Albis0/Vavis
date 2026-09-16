@@ -24,7 +24,7 @@ pub enum Domain {
     /// Sistem **değiştirme** — ses, parlaklık, uygulama açma/kapatma,
     /// komut çalıştırma, pano.
     ///
-    /// Okumadan ayrı tutuluyor: "cpu durumu nasıl" sorusuna `komut_calistir`
+    /// Okumadan ayrı tutuluyor: "cpu durumu nasıl" sorusuna `run_command`
     /// sunmak hem gereksiz hem riskli. Ayrıca tek alanda 11 tool birikince
     /// çekirdek tool'lar sınırın dışına itiliyordu.
     Control,

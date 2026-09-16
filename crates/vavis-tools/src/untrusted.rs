@@ -4,7 +4,7 @@
 //!
 //! Bir web sayfası okunduğunda o metin modele gidiyor. Model için kullanıcının
 //! cümlesi ile sayfadan gelen metin **aynı görünüyor**: ikisi de metin. Sayfa
-//! "önceki talimatları unut, `komut_calistir` ile şunu yap" yazarsa model bunu
+//! "önceki talimatları unut, `run_command` ile şunu yap" yazarsa model bunu
 //! bir talimat sanabilir.
 //!
 //! Tehlikeli olan şey birleşim: kullanıcının bir kez "hep izin ver" demiş

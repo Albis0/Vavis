@@ -1,7 +1,7 @@
 //! Sistem kontrol tool'ları — parlaklık, uygulama, pano, komut.
 //!
 //! **Güvenlik notu:** Bu modüldeki bazı tool'lar gerçekten tehlikeli
-//! (`komut_calistir` her şeyi yapabilir). Risk seviyeleri buna göre ayarlı;
+//! (`run_command` her şeyi yapabilir). Risk seviyeleri buna göre ayarlı;
 //! izin kapısı onay istemeden çalışmazlar.
 
 use crate::tool::{arg_num, arg_str, Domain, Param, Risk, Tool, ToolOutcome};
@@ -520,7 +520,7 @@ mod tests {
         // Tehlikeli tool kendini son çare olarak tanıtmalı.
         assert!(
             RunCommand.description().contains("özel araçlar"),
-            "komut_calistir, diğer araçları tercih ettirmeli"
+            "run_command, diğer araçları tercih ettirmeli"
         );
     }
 }
