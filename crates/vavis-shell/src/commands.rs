@@ -283,6 +283,7 @@ pub fn send_message(
             &app,
             &client,
             &agent,
+            &voice,
             &approval_rx,
             &cfg,
             &router_model,
@@ -299,7 +300,9 @@ pub fn send_message(
                     if let Err(e) = AppState::lock(&store).add_message("assistant", &reply) {
                         tracing::warn!(%e, "could not persist reply");
                     }
-                    AppState::lock(&voice).speak(&reply);
+                    // Most of the answer has already been spoken as it
+                    // streamed; this is the last, unfinished sentence.
+                    AppState::lock(&voice).finish_stream();
                 }
                 let _ = app.emit("chat:done", DonePayload { text: reply });
             }
@@ -588,6 +591,9 @@ async fn run_turn(
     app: &tauri::AppHandle,
     client: &vavis_brain::BrainClient,
     agent: &std::sync::Arc<std::sync::Mutex<vavis_tools::Agent>>,
+    // Speech starts on the first finished sentence rather than on the whole
+    // answer, so the voice keeps up with the text instead of trailing it.
+    voice: &std::sync::Arc<std::sync::Mutex<crate::voice::VoiceState>>,
     approval_rx: &std::sync::Arc<std::sync::Mutex<std::sync::mpsc::Receiver<Approval>>>,
     cfg: &ChatConfig,
     router_model: &str,
@@ -637,14 +643,21 @@ async fn run_turn(
     // `shrunk` because the two failures are unrelated and a turn can hit both.
     let mut rate_limit_waits = 0u8;
 
+    // A fresh turn: drop any half-sentence left buffered by an abandoned one.
+    AppState::lock(voice).begin_stream();
+
     for step in 0..MAX_STEPS {
         let emit = app.clone();
 
         let response = match client
             .chat_stream_with_tools(cfg, messages.clone(), &tools, {
                 let emit = emit.clone();
+                let voice = voice.clone();
                 move |event| {
                     if let StreamEvent::Delta(text) = event {
+                        // Speak first, then paint: synthesis has to start as
+                        // early as possible, and emitting is the cheap half.
+                        AppState::lock(&voice).push_stream(&text);
                         let _ = emit.emit("chat:delta", DeltaPayload { text });
                     }
                 }
