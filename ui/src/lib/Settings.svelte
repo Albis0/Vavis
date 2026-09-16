@@ -286,6 +286,8 @@
                 return voice.elevenVoices;
             case "openai":
                 return voice.openaiVoices;
+            case "gemini":
+                return voice.geminiVoices;
             // SAPI reports whatever Windows has installed, as plain names.
             default:
                 return voice.sapiVoices.map((v) => [v, v] as [string, string]);
@@ -300,6 +302,7 @@
                 kokoro: "kokoroVoice",
                 elevenlabs: "elevenVoice",
                 openai: "openaiVoice",
+                gemini: "geminiVoice",
             } as Record<string, string>
         )[voice?.engine ?? "sapi"] ?? "sapiVoice",
     );
@@ -311,6 +314,7 @@
                 kokoro: voice?.kokoroVoice,
                 elevenlabs: voice?.elevenVoice,
                 openai: voice?.openaiVoice,
+                gemini: voice?.geminiVoice,
             } as Record<string, string | undefined>
         )[voice?.engine ?? "sapi"] ??
             voice?.sapiVoice ??
@@ -338,7 +342,18 @@
             ? !voice.hasElevenKey
             : voice?.engine === "openai"
               ? !voice.hasOpenaiKey
-              : false,
+              : voice?.engine === "gemini"
+                ? !voice.hasGeminiKey
+                : false,
+    );
+
+    /**
+     * True when the chat provider's own voice is speaking instead of the one
+     * in the picker. Worth saying out loud: otherwise the picker says one
+     * thing and the speaker does another, with nothing to explain the gap.
+     */
+    const voiceSwapped = $derived(
+        !!voice && voice.matchProvider && voice.effectiveEngine !== voice.engine,
     );
 
     async function saveKey(provider: string) {
@@ -778,6 +793,30 @@
                         <p class="hint warn-text">
                             This engine needs a key before it can speak. Until then
                             Vavis falls back to a free voice.
+                        </p>
+                    {/if}
+
+                    <label class="switch">
+                        <input
+                            type="checkbox"
+                            checked={voice.matchProvider}
+                            onchange={(e) =>
+                                updateVoice(
+                                    "matchProvider",
+                                    String(e.currentTarget.checked),
+                                )}
+                        />
+                        <span>Use the chat provider's own voice when it has one</span>
+                    </label>
+                    <p class="hint">
+                        Talking to Gemini sounds like Gemini. Only swaps between engines
+                        that already need a key — a free offline voice is left alone, so
+                        this cannot quietly move you onto a metered one.
+                    </p>
+                    {#if voiceSwapped}
+                        <p class="hint">
+                            Speaking with <strong>{voice.effectiveEngine}</strong> right
+                            now, because that is who you are chatting with.
                         </p>
                     {/if}
 

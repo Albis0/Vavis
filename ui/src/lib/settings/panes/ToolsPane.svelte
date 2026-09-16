@@ -108,25 +108,6 @@
 </Section>
 
 <style>
-    /* A row, not a block: the checkbox takes its own width and the label sits
-       beside it. The old blanket width rule stretched this to the full pane
-       and left the label floating away from its box. */
-    .switch {
-        display: flex;
-        align-items: center;
-        gap: var(--sp-2);
-        font-size: var(--text-sm);
-        color: var(--text);
-        cursor: pointer;
-        padding: var(--sp-2) 0;
-    }
-    .switch input {
-        flex: 0 0 auto;
-        width: auto;
-        margin: 0;
-        cursor: pointer;
-    }
-
     .controls {
         display: flex;
         gap: var(--sp-2);
