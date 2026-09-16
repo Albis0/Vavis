@@ -46,9 +46,11 @@ impl Provider {
         match self {
             Self::Groq => "https://api.groq.com/openai/v1/chat/completions",
             Self::OpenAI => "https://api.openai.com/v1/chat/completions",
-            Self::Gemini => {
-                "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
-            }
+            // Kendi API'sine gidiyoruz, OpenAI-uyumlu kapıya değil. Model
+            // adı yolda geçtiği için gerçek URL burada kurulamıyor —
+            // `crate::gemini::chat_url(model)` kuruyor. Burası sadece
+            // "iki sağlayıcı aynı URL'yi paylaşamaz" kuralı için bir taban.
+            Self::Gemini => crate::gemini::API_BASE,
             Self::Mistral => "https://api.mistral.ai/v1/chat/completions",
             Self::DeepSeek => "https://api.deepseek.com/v1/chat/completions",
             Self::XAI => "https://api.x.ai/v1/chat/completions",
@@ -63,7 +65,7 @@ impl Provider {
         match self {
             Self::Groq => "https://api.groq.com/openai/v1/models",
             Self::OpenAI => "https://api.openai.com/v1/models",
-            Self::Gemini => "https://generativelanguage.googleapis.com/v1beta/openai/models",
+            Self::Gemini => crate::gemini::MODELS_URL,
             Self::Mistral => "https://api.mistral.ai/v1/models",
             Self::DeepSeek => "https://api.deepseek.com/v1/models",
             Self::XAI => "https://api.x.ai/v1/models",
@@ -97,7 +99,7 @@ impl Provider {
         match self {
             Self::Groq => "llama-3.3-70b-versatile",
             Self::OpenAI => "gpt-4o-mini",
-            Self::Gemini => "gemini-2.5-flash",
+            Self::Gemini => crate::gemini::DEFAULT_MODEL,
             Self::Mistral => "mistral-small-latest",
             Self::DeepSeek => "deepseek-chat",
             Self::XAI => "grok-3",
@@ -202,6 +204,30 @@ mod tests {
         let before = urls.len();
         urls.dedup();
         assert_eq!(before, urls.len(), "iki sağlayıcı aynı URL'yi paylaşamaz");
+    }
+
+    /// Gemini's `chat_url()` is a base, not a usable endpoint: the model name
+    /// belongs in the path, so the real URL is built per request by
+    /// `crate::gemini::chat_url`. Posting to the base returns 404, and the
+    /// failure would look like a bad key rather than a wrong URL -- so say it
+    /// here, where someone reaching for `chat_url()` will see it.
+    #[test]
+    fn gemini_needs_its_url_built_per_model() {
+        let base = Provider::Gemini.chat_url();
+        assert!(
+            !base.contains("generateContent"),
+            "taban URL bir uç nokta gibi görünüyor: {base}"
+        );
+        let real = crate::gemini::chat_url(Provider::Gemini.default_model());
+        assert!(real.starts_with(base), "{real} / {base}");
+        assert!(real.contains(":streamGenerateContent"), "{real}");
+    }
+
+    /// The OpenAI-compatible door is deliberately no longer used.
+    #[test]
+    fn gemini_does_not_go_through_the_openai_compatible_door() {
+        assert!(!Provider::Gemini.chat_url().contains("/openai/"));
+        assert!(!Provider::Gemini.models_url().contains("/openai/"));
     }
 
     #[test]

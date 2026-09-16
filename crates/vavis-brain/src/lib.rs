@@ -10,6 +10,7 @@ pub mod anthropic;
 pub mod budget;
 pub mod builtin;
 pub mod client;
+pub mod gemini;
 pub mod keys;
 pub mod message;
 pub mod provider;
