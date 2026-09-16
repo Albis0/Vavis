@@ -60,6 +60,48 @@ pub struct ProviderInfo {
     pub default_model: String,
 }
 
+/// The model to send, given what is saved.
+///
+/// Filtering the picker is not enough on its own: the saved value outlives
+/// the list it was chosen from. A model that was offered yesterday, picked,
+/// and retired or reclassified today is still sitting in `vavis.toml`, and
+/// every request keeps going to it.
+///
+/// That is exactly what happened. `gemini-2.5-flash-native-audio-latest` was
+/// selected while the picker still offered it, and afterwards every single
+/// message came back:
+///
+/// ```text
+/// 400  only supports real-time bidirectional streaming via WebSocket
+///      (bidiGenerateContent). Please use the Gemini Live API
+/// ```
+///
+/// Cleaning the list did nothing for it, because nothing re-reads the list.
+/// So the check belongs here, where the value is used: a saved model the
+/// provider filter rejects is treated as no choice at all, and the provider's
+/// default answers instead. A working assistant on the wrong model beats a
+/// broken one on the right name.
+fn model_for(config: &vavis_core::Config, provider: Provider) -> String {
+    let saved = config.llm.model.trim();
+    // Names come back from Google qualified; the filter works on bare ones.
+    let bare = saved.trim_start_matches("models/");
+
+    if bare.is_empty() {
+        return provider.default_model().to_string();
+    }
+    if !vavis_brain::provider::is_useful_model(provider, bare) {
+        tracing::warn!(
+            model = saved,
+            default = provider.default_model(),
+            "saved model is one we would not offer; using the default"
+        );
+        return provider.default_model().to_string();
+    }
+    // Stored qualified, sent bare: the path builder adds the prefix back, and
+    // adding it twice is a 404.
+    bare.to_string()
+}
+
 /// Everything the panels need, in one round trip.
 ///
 /// One call rather than a dozen: the interface polls this on a timer, and
@@ -70,11 +112,7 @@ pub fn get_status(state: State<AppState>) -> Status {
     let keys = AppState::lock(&state.keys);
 
     let provider = Provider::parse(&core.config.llm.provider).unwrap_or(Provider::Groq);
-    let model = if core.config.llm.model.trim().is_empty() {
-        provider.default_model().to_string()
-    } else {
-        core.config.llm.model.clone()
-    };
+    let model = model_for(&core.config, provider);
 
     let (facts, automations, messages) = {
         let store = AppState::lock(&state.store);
@@ -220,11 +258,7 @@ pub fn send_message(
             return Err(format!("no API key for {provider}"));
         }
 
-        let model = if core.config.llm.model.trim().is_empty() {
-            provider.default_model().to_string()
-        } else {
-            core.config.llm.model.clone()
-        };
+        let model = model_for(&core.config, provider);
 
         // The system prompt is rebuilt each turn so a settings change
         // takes effect on the very next message.
@@ -3586,6 +3620,70 @@ mod tests {
             retry_after_seconds("please reduce your message size and try again."),
             None
         );
+    }
+
+    /// A saved model outlives the list it was chosen from.
+    ///
+    /// This is the bug the user actually hit. The picker was cleaned, but
+    /// `gemini-2.5-flash-native-audio-latest` was already in vavis.toml from
+    /// before, so every message still went to it and came back 400. Nothing
+    /// re-reads the list, so filtering the list could never have fixed it.
+    #[test]
+    fn a_saved_model_we_would_not_offer_falls_back_to_the_default() {
+        for dead in [
+            "models/gemini-2.5-flash-native-audio-latest",
+            "gemini-2.5-flash-native-audio-latest",
+            "gemini-3.8-live",
+            // Retired but still listed by Google.
+            "gemini-2.5-flash",
+        ] {
+            let mut c = vavis_core::Config::default();
+            c.llm.provider = "gemini".into();
+            c.llm.model = dead.into();
+            assert_eq!(
+                model_for(&c, Provider::Gemini),
+                Provider::Gemini.default_model(),
+                "{dead} hâlâ gönderiliyor"
+            );
+        }
+    }
+
+    /// A model that is fine must be left exactly as it is.
+    #[test]
+    fn a_working_saved_model_is_used_untouched() {
+        let mut c = vavis_core::Config::default();
+        c.llm.provider = "gemini".into();
+        c.llm.model = "gemini-3.5-flash".into();
+        assert_eq!(model_for(&c, Provider::Gemini), "gemini-3.5-flash");
+    }
+
+    /// Google publishes names with a `models/` prefix and the settings screen
+    /// can store one that way. The path builder adds the prefix itself, so
+    /// sending it again is a 404.
+    #[test]
+    fn a_qualified_name_is_sent_bare() {
+        let mut c = vavis_core::Config::default();
+        c.llm.provider = "gemini".into();
+        c.llm.model = "models/gemini-3.6-flash".into();
+        assert_eq!(model_for(&c, Provider::Gemini), "gemini-3.6-flash");
+    }
+
+    #[test]
+    fn no_saved_model_means_the_providers_default() {
+        let mut c = vavis_core::Config::default();
+        c.llm.provider = "groq".into();
+        c.llm.model = "   ".into();
+        assert_eq!(model_for(&c, Provider::Groq), Provider::Groq.default_model());
+    }
+
+    /// The guard must not reach past the provider whose rules it knows: a
+    /// local Ollama model has no list to be judged against.
+    #[test]
+    fn a_local_model_is_never_second_guessed() {
+        let mut c = vavis_core::Config::default();
+        c.llm.provider = "local".into();
+        c.llm.model = "my-own-finetune".into();
+        assert_eq!(model_for(&c, Provider::Local), "my-own-finetune");
     }
 
     /// A retired model names its successor, and that is what the user needs.

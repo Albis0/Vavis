@@ -16,6 +16,21 @@ fn with_system<T>(f: impl FnOnce(&mut System) -> T) -> T {
     f(sys)
 }
 
+/// Refreshes only what the CPU reading needs.
+///
+/// [`with_system`] calls `refresh_all`, which walks every process, disk and
+/// network interface on the machine. Measured at ~14 ms. That is fine for
+/// the tool a user invokes now and then, and much too slow for the status
+/// poll, which runs **once a second** and holds the locks the settings
+/// screen wants -- which is what made moving between settings categories
+/// stutter.
+fn with_cpu<T>(f: impl FnOnce(&mut System) -> T) -> T {
+    let mut guard = SYSTEM.lock().unwrap_or_else(|e| e.into_inner());
+    let sys = guard.get_or_insert_with(System::new_all);
+    sys.refresh_cpu_usage();
+    f(sys)
+}
+
 /// Sistem telemetrisi — CPU, RAM, disk.
 pub struct SystemInfo;
 
@@ -386,7 +401,9 @@ pub fn battery_percent() -> Option<u32> {
 
 /// Anlık CPU kullanım yüzdesi.
 pub fn cpu_percent() -> Option<u32> {
-    let usage = with_system(|sys| sys.global_cpu_usage());
+    // `with_cpu`, not `with_system`: this is on the once-a-second status
+    // poll, and a full refresh there costs ~14 ms of lock-held work.
+    let usage = with_cpu(|sys| sys.global_cpu_usage());
     if usage.is_nan() {
         return None;
     }
