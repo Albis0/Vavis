@@ -906,6 +906,14 @@ fn is_quota_refusal(status: u16, body: &str) -> bool {
 /// the decimal: it is a hint about when to retry, not a measurement.
 fn retry_after_seconds(body: &str) -> Option<u64> {
     let body = body.to_ascii_lowercase();
+    // Groq words its input-token overage without naming a delay at all:
+    //
+    //   "... on input tokens per minute (ITPM): Limit 7000, Requested 60012,
+    //    please reduce your message size and try again."
+    //
+    // Note "try again" with no "in": splitting on "try again in" finds the
+    // phrase inside it and then parses an empty string. Requiring a digit
+    // right after keeps that from reading as a zero-second wait.
     let rest = body.split("try again in").nth(1)?;
     let digits: String = rest
         .trim_start()
@@ -914,6 +922,42 @@ fn retry_after_seconds(body: &str) -> Option<u64> {
         .collect();
     let secs: f64 = digits.parse().ok()?;
     Some(secs.ceil().max(1.0) as u64)
+}
+
+/// A per-minute limit the request can never satisfy, however long we wait.
+///
+/// Measured against Groq on 2026-09-16. A request bigger than the whole
+/// per-minute token allowance comes back as a quota refusal:
+///
+/// ```text
+/// 413  on input tokens per minute (ITPM): Limit 7000, Requested 60012,
+///      please reduce your message size and try again.
+/// ```
+///
+/// Waiting does not help — the next minute grants 7000 again, and the
+/// request still needs 60012. The honest advice is to shorten the message,
+/// which is the opposite of what a rate-limit message tells the user to do.
+fn quota_too_small_for_request(body: &str) -> bool {
+    let body = body.to_ascii_lowercase();
+    let Some(limit) = number_after(&body, "limit ") else {
+        return false;
+    };
+    let Some(requested) = number_after(&body, "requested ") else {
+        return false;
+    };
+    requested > limit
+}
+
+/// The first run of digits after `label`, ignoring separators inside it.
+fn number_after(body: &str, label: &str) -> Option<u64> {
+    let rest = body.split(label).nth(1)?;
+    let digits: String = rest
+        .trim_start()
+        .chars()
+        .take_while(|c| c.is_ascii_digit() || *c == ',')
+        .filter(|c| c.is_ascii_digit())
+        .collect();
+    digits.parse().ok()
 }
 
 fn is_too_long(status: u16, body: &str) -> bool {
@@ -929,6 +973,12 @@ fn is_too_long(status: u16, body: &str) -> bool {
         || body.contains("too large")
         || body.contains("context_length_exceeded")
         || body.contains("maximum context length")
+        // Groq says it without any of the words above, and as a 400:
+        //   "Please reduce the length of the messages or completion."
+        // Measured against the live API. Matching none of these patterns
+        // meant the turn failed outright with a raw "Provider error 400"
+        // instead of trimming the history and trying again.
+        || body.contains("reduce the length")
 }
 
 /// How long to wait before trying this request again, if waiting would help.
@@ -969,6 +1019,17 @@ fn friendly_error(err: &vavis_brain::BrainError) -> String {
         // wording ("Request too large ... per minute") reads like a size
         // problem. Getting this order wrong told the user to shorten a
         // two-word conversation.
+        // A single request larger than the whole per-minute allowance. It is
+        // shaped like a rate limit but waiting cannot fix it, so saying
+        // "try again in a moment" sends the user round a loop that never
+        // ends. Checked ahead of the general quota case for that reason.
+        E::Api { status, body }
+            if is_quota_refusal(*status, body) && quota_too_small_for_request(body) =>
+        {
+            "This message is larger than your per-minute allowance — shorten it, \
+             or start a new chat."
+                .into()
+        }
         E::Api { status, body } if is_quota_refusal(*status, body) => {
             match retry_after_seconds(body) {
                 Some(secs) => format!("Sending too fast — try again in about {secs}s."),
@@ -3400,6 +3461,95 @@ mod tests {
         assert!(
             !text.contains("grown past"),
             "must not blame the conversation: {text}"
+        );
+    }
+
+    /// A request bigger than the whole per-minute allowance cannot be fixed
+    /// by waiting, so it must not be described as sending too fast.
+    ///
+    /// Measured on 2026-09-16: 60012 tokens against an ITPM limit of 7000.
+    /// The next minute grants 7000 again and the request still needs 60012 --
+    /// the advice has to be "shorten it", the opposite of "wait".
+    #[test]
+    fn a_request_larger_than_the_whole_quota_is_not_a_pace_problem() {
+        let groq = "Request too large for model `qwen/qwen3.8-27b` in organization \
+                    `org_x` service tier `on_demand` on input tokens per minute \
+                    (ITPM): Limit 7000, Requested 60012, please reduce your message \
+                    size and try again.";
+
+        assert!(quota_too_small_for_request(groq));
+        let err = vavis_brain::BrainError::Api {
+            status: 413,
+            body: groq.to_string(),
+        };
+        let text = friendly_error(&err);
+        assert!(text.contains("shorten"), "said: {text}");
+        assert!(
+            !text.contains("too fast"),
+            "waiting cannot fix this: {text}"
+        );
+
+        // And nothing should sit waiting on it.
+        assert_eq!(wait_before_retry(&err), None);
+    }
+
+    /// The ordinary pace refusal must keep its old advice.
+    #[test]
+    fn a_plain_rate_limit_still_says_wait() {
+        let groq = "Rate limit reached for model in organization `org_x` on tokens \
+                    per minute (TPM): Limit 6000, Used 5980, Requested 90. \
+                    Please try again in 1.2s.";
+        // Used + requested exceeds the limit, but the single request does not.
+        assert!(!quota_too_small_for_request(groq));
+        let err = vavis_brain::BrainError::Api {
+            status: 429,
+            body: groq.to_string(),
+        };
+        assert!(friendly_error(&err).contains("too fast"));
+        assert_eq!(wait_before_retry(&err), Some(2));
+    }
+
+    /// "try again" with no delay after it must not read as a zero-second wait.
+    #[test]
+    fn a_refusal_that_names_no_delay_yields_none() {
+        assert_eq!(
+            retry_after_seconds("please reduce your message size and try again."),
+            None
+        );
+    }
+
+    /// Groq announces a context overflow without any of the words the size
+    /// check looked for, and as a 400 rather than a 413.
+    ///
+    /// Measured against the live API on 2026-09-16 by sending 200k words:
+    ///
+    /// ```text
+    /// 400 {"message": "Please reduce the length of the messages or completion.",
+    ///      "param": "messages"}
+    /// ```
+    ///
+    /// Matching nothing meant the turn died with a raw "Provider error 400"
+    /// rather than trimming the history and retrying — the recovery path
+    /// existed and simply never ran.
+    #[test]
+    fn groq_says_the_conversation_is_too_long_in_its_own_words() {
+        let groq = "Please reduce the length of the messages or completion.";
+
+        assert!(is_too_long(400, groq), "boyut reddi tanınmadı");
+        assert!(
+            !is_quota_refusal(400, groq),
+            "bu bir hız sınırı değil, gerçekten uzun"
+        );
+
+        let err = vavis_brain::BrainError::Api {
+            status: 400,
+            body: groq.to_string(),
+        };
+        let text = friendly_error(&err);
+        assert!(text.contains("grown past"), "said: {text}");
+        assert!(
+            !text.contains("Provider error"),
+            "ham hata gösterildi: {text}"
         );
     }
 

@@ -134,11 +134,10 @@ impl fmt::Display for Provider {
 /// Eski `models.ts`'ten taşındı — kullanıcı "çok fazla gereksiz Gemini modeli
 /// var" diye şikayet etmişti; gürültü burada kesiliyor.
 pub fn is_chat_model(id: &str) -> bool {
-    const NOISE: [&str; 12] = [
+    const NOISE: [&str; 16] = [
         "whisper",
         "tts",
         "embed",
-        "guard",
         "moderation",
         "rerank",
         "dall-e",
@@ -147,6 +146,17 @@ pub fn is_chat_model(id: &str) -> bool {
         "aqa",
         "imagen",
         "learnlm",
+        // Speech synthesis models Groq lists next to its chat models. They
+        // answer a chat request with nonsense rather than an error, so the
+        // name is the only thing that separates them.
+        "orpheus",
+        "playai",
+        "canopylabs",
+        // Guard and classifier models: a 512-token window and a one-word
+        // answer. Named rather than matched on "guard", because that
+        // substring also hides `gpt-oss-safeguard`, a full chat model.
+        "prompt-guard",
+        "llama-guard",
     ];
     let lower = id.to_ascii_lowercase();
     !NOISE.iter().any(|n| lower.contains(n))
@@ -213,6 +223,27 @@ mod tests {
         assert!(!is_chat_model("whisper-large-v3"));
         assert!(!is_chat_model("text-embedding-3-small"));
         assert!(is_chat_model("llama-3.3-70b-versatile"));
+    }
+
+    /// Everything below was measured against Groq's live `/models` list on
+    /// 2026-09-16 — these exact ids were being offered as chat models.
+    #[test]
+    fn groqs_speech_and_guard_models_are_not_offered_as_chat() {
+        // Speech synthesis. Answers a chat request with nonsense rather than
+        // an error, so nothing downstream catches the mistake.
+        assert!(!is_chat_model("canopylabs/orpheus-v1-english"));
+        assert!(!is_chat_model("canopylabs/orpheus-arabic-saudi"));
+        // Classifiers with a 512-token window.
+        assert!(!is_chat_model("meta-llama/llama-prompt-guard-2-22m"));
+        assert!(!is_chat_model("meta-llama/llama-prompt-guard-2-86m"));
+    }
+
+    /// The old filter matched on "guard" and hid this one, which is a full
+    /// chat model: 131k window, tools, structured outputs.
+    #[test]
+    fn a_safeguard_chat_model_is_not_mistaken_for_a_classifier() {
+        assert!(is_chat_model("openai/gpt-oss-safeguard-20b"));
+        assert!(is_useful_model(Provider::Groq, "openai/gpt-oss-safeguard-20b"));
     }
 
     #[test]
