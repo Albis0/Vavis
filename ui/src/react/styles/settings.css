@@ -177,21 +177,48 @@
     justify-content: space-between;
     gap: var(--sp-4);
 }
+/* Right-aligned, and wide enough that the column has one left edge rather
+   than one per control. Sized by content alone these came out 102px, 116px
+   and 106px in the same pane -- stacked down the page that reads as three
+   controls that missed each other rather than a column. `min-width`, not
+   `width`: a long option ("windowed fullscreen") still grows past it. */
 .setting.inline .control {
     flex: 0 0 auto;
+    min-width: 160px;
+}
+/* The select inside it fills that width instead of sitting narrow in a box
+   that is now wider than it is. */
+.setting.inline .control > select:only-child {
+    flex: 1 1 auto;
+}
+/* A number ("0", "100") in a box sized for a dropdown label leaves the value
+   stranded against the left edge with a stretch of empty box after it.
+   Centred, the box reads as a stepper rather than a half-empty text field. */
+.setting.inline .control > input[type="number"] {
+    text-align: center;
+    font-variant-numeric: tabular-nums;
 }
 
+/* The label and its explanation stack, rather than sitting on one baseline.
+   Side by side they read as one run-on line -- "Assistant name spoken aloud,
+   so pick something sayable" -- and the eye has to find the break itself.
+   Stacked, with the label carrying the weight, the name is scannable and the
+   explanation stays available underneath it.
+
+   The inline variant keeps the old single-line behaviour: there the control
+   is to the right, so the head is already a column of its own. */
 .setting .head {
     display: flex;
-    align-items: baseline;
-    gap: var(--sp-2);
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: 2px;
     min-width: 0;
 }
 
 .setting .label {
     font-size: var(--text-sm);
+    font-weight: 550;
     color: var(--text);
+    line-height: 1.35;
 }
 
 .setting .req {
@@ -203,6 +230,7 @@
 .setting .fallback {
     font-size: var(--text-xs);
     color: var(--text-faint);
+    line-height: 1.4;
 }
 
 .setting .fallback {
@@ -222,16 +250,34 @@
    that must sit outside the box. */
 .setting .control {
     display: flex;
+    align-items: center;
     gap: var(--sp-2);
     min-width: 0;
     background: var(--surface-sunken);
     border: 1px solid var(--line);
     border-radius: var(--r-md);
     padding: var(--sp-2) var(--sp-3);
-    transition: border-color var(--fast) var(--ease);
+    transition:
+        border-color var(--fast) var(--ease),
+        box-shadow var(--fast) var(--ease),
+        background-color var(--fast) var(--ease);
 }
+/* A box you can tell is a box before you click it. The border alone is a
+   hairline on a near-black ground -- at a glance the field read as a flat
+   slab of background with text sitting on it. */
+.setting .control:hover:not(:focus-within) {
+    border-color: var(--line-strong);
+}
+/* Focus gets a ring as well as a colour: the border change on its own is a
+   one-pixel difference and is easy to miss while tabbing. */
 .setting .control:focus-within {
-    border-color: var(--accent-line);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-muted);
+}
+/* The control already draws the focus ring for the whole row, so the inner
+   element drawing a second one puts a box inside a box. */
+.setting .control > :is(input, select, textarea):focus-visible {
+    outline: none;
 }
 .setting .control > input,
 .setting .control > select,
@@ -263,11 +309,15 @@
     color: var(--text-faint);
 }
 
+/* `62ch` is a reading measure and stays, but at `--text-xs` it resolved to
+   about 380px inside a 760px column -- the text read as squeezed into the
+   left half rather than set to a measure. One step up keeps the same line
+   length in characters while filling the column properly. */
 .section .blurb {
     margin: 0;
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
     color: var(--text-muted);
-    line-height: 1.5;
+    line-height: 1.55;
     max-width: 62ch;
 }
 
@@ -522,6 +572,21 @@ input[type="number"] {
     align-items: center;
     gap: var(--sp-3);
     flex-wrap: wrap;
+}
+
+/* A row of actions is the one place a button stands on its own, with no
+   icon and no surrounding control to borrow context from. The app-wide
+   default -- transparent, muted text -- left "cycle mode" and "hear this
+   voice" looking like stray labels until the pointer found them. Give them
+   the outline treatment here rather than at each call site. */
+.actions > button:not(.primary):not(.danger):not(.outline) {
+    border: 1px solid var(--line-strong);
+    background: var(--surface-raised);
+    color: var(--text);
+}
+.actions > button:not(.primary):not(.danger):not(.outline):hover:not(:disabled) {
+    background: var(--surface-hover);
+    border-color: var(--accent-line);
 }
 
 .storage {
@@ -874,6 +939,14 @@ input[type="number"] {
     gap: var(--sp-4);
     padding: var(--sp-2) 0;
     border-bottom: 1px solid var(--line);
+}
+
+/* The rule separates one row from the next, so a row with no next has no
+   rule to draw: alone in a section (Voice's "Mode") it was a full-width
+   line under a single value, matching nothing else on the screen. */
+.stat-row:only-child,
+.stat-row:last-child {
+    border-bottom: none;
 }
 
 .stat-row .label {
