@@ -98,7 +98,7 @@ export default function ToolsPane({ tools, fullAuthority, ontoggle }: Props) {
                     </div>
                 </div>
 
-                <div className="list">
+                <div className="list tool-list">
                     {shown.map((tool) => (
                         <div className="entry" key={tool.name}>
                             <div className="main">
