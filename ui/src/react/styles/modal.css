@@ -1,0 +1,138 @@
+.scrim {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(2px);
+    animation: fade-in var(--fast) var(--ease);
+}
+
+/* A layer that cannot be dismissed by clicking away should not look as
+   though it can. Darker, with no hint that the page behind is still live. */
+.scrim.soft {
+    background: rgba(0, 0, 0, 0.58);
+}
+
+.panel {
+    position: fixed;
+    left: 50%;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface-raised);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+    animation: panel-in var(--normal) var(--ease);
+}
+
+.panel.center {
+    top: 50%;
+    transform: translate(-50%, -50%);
+    max-height: min(78vh, 900px);
+}
+
+/* The upper third, so the panel opens where the eye already is and leaves
+   the stage behind it visible. */
+.panel.top {
+    top: 16vh;
+    transform: translateX(-50%);
+    max-height: 68vh;
+}
+
+/* Scale alone, so the keyframes do not have to know which `transform` the
+   alignment above already put on the element. */
+@keyframes panel-in {
+    from {
+        opacity: 0;
+        scale: 0.985;
+    }
+    to {
+        opacity: 1;
+        scale: 1;
+    }
+}
+
+.panel.sm {
+    width: min(420px, calc(100vw - 48px));
+}
+.panel.md {
+    width: min(560px, calc(100vw - 48px));
+}
+.panel.lg {
+    width: min(680px, calc(100vw - 48px));
+}
+.panel.xl {
+    width: min(920px, calc(100vw - 48px));
+}
+.panel.full {
+    width: calc(100vw - 64px);
+    height: calc(100vh - 64px);
+    max-height: none;
+}
+
+header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    padding: var(--sp-3) var(--sp-3) var(--sp-3) var(--sp-5);
+    flex: 0 0 auto;
+}
+
+/* The rule under the header appears only when there is a title above it.
+   On a headerless layer it would be a line floating over nothing. */
+header.titled {
+    border-bottom: 1px solid var(--line);
+}
+
+.heading {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+h2 {
+    font-size: var(--text-md);
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.4;
+}
+
+.heading p {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-1);
+    flex: 0 0 auto;
+}
+
+.close {
+    padding: var(--sp-2);
+    color: var(--text-faint);
+}
+
+.content {
+    overflow-y: auto;
+    min-height: 0;
+    flex: 1;
+}
+.content.padded {
+    padding: var(--sp-4) var(--sp-5) var(--sp-5);
+}
+
+.footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--sp-2);
+    padding: var(--sp-3) var(--sp-5);
+    border-top: 1px solid var(--line);
+    background: var(--surface);
+    flex: 0 0 auto;
+}

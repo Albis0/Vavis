@@ -1,0 +1,841 @@
+/*
+ * Styles for the settings screen: the shell (Settings.tsx), the shared
+ * controls (Field, Section, KeyInput, ProviderChain, CustomEndpoint) and
+ * every pane.
+ *
+ * Each Svelte component's `<style>` block was scoped to its own markup;
+ * this file gathers all of them, selectors kept identical, since a single
+ * import from Settings.tsx now reaches every pane that used to carry its
+ * own `<style>`. Classes already promoted to `src/styles.css` (`.row`,
+ * `.entry`, `.entry-main`, `.entry-actions`, `.tool-name`, `.tool-desc`,
+ * `.tiny`, `.risk`, `.result`, `.disclosure`, `.snippet`, `.list`,
+ * `.scroll`, `.field`, `.switch`, `.selectable`, `.pane h2`) are not
+ * repeated here.
+ */
+
+/* ── Settings.tsx (was Settings.svelte) ─────────────────────────────── */
+
+.settings {
+    display: flex;
+    height: 100%;
+    min-height: 0;
+}
+
+/* The rail is sunken rather than tinted with a literal colour: a dark-theme
+   value here would turn the rail into a grey slab on the light theme. */
+.categories {
+    width: 208px;
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: var(--sp-3);
+    border-right: 1px solid var(--line);
+    background: var(--surface-sunken);
+    overflow-y: auto;
+}
+
+.nav-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--sp-3);
+    padding-left: var(--sp-2);
+}
+
+.nav-title {
+    font-size: var(--text-md);
+    font-weight: 600;
+    color: var(--text);
+}
+
+.nav-close {
+    padding: var(--sp-2);
+    color: var(--text-faint);
+}
+
+.search {
+    font-size: var(--text-sm);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    padding: var(--sp-2) var(--sp-3);
+    margin-bottom: var(--sp-3);
+    transition: border-color var(--fast) var(--ease);
+}
+.search:focus {
+    border-color: var(--accent-line);
+}
+
+.nav-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--sp-1);
+    padding: var(--sp-3) var(--sp-2);
+}
+.nav-empty p {
+    font-size: var(--text-sm);
+    color: var(--text-faint);
+    line-height: 1.5;
+}
+.nav-empty button {
+    padding: 0;
+    color: var(--accent-text);
+}
+
+/* Four signposts over fourteen entries: enough to turn "where would that
+   be?" into one guess, quiet enough not to compete with the entries. */
+.group-title {
+    padding: var(--sp-4) var(--sp-3) var(--sp-1);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    display: block;
+}
+.group-title:first-of-type {
+    padding-top: var(--sp-2);
+}
+
+/* Selection is a filled row, not an outlined one. A border on the active
+   item and nothing on the rest made the rail read as a form. */
+.category {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    width: 100%;
+    text-align: left;
+    padding: var(--sp-2) var(--sp-3);
+    font-size: var(--text-base);
+    color: var(--text-muted);
+    border-radius: var(--r-md);
+    transition:
+        color var(--fast) var(--ease),
+        background var(--fast) var(--ease);
+}
+.category:hover {
+    color: var(--text);
+    background: var(--surface-hover);
+}
+.category.active {
+    color: var(--text);
+    background: var(--surface-active);
+    font-weight: 500;
+}
+.category.active .cat-icon {
+    color: var(--accent);
+}
+
+.cat-icon {
+    width: 14px;
+    text-align: center;
+    color: var(--text-faint);
+    flex: 0 0 auto;
+}
+
+.pane {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    padding: var(--sp-5) var(--sp-6) var(--sp-7);
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--sp-3);
+}
+
+/* A reading column, not the width of the window.
+   Every row here is a label on the left and its control on the right; at
+   full width on a wide monitor that put the two nine hundred pixels apart,
+   and a form you have to track across the screen to read is not a form. */
+/* `max-width` only. `width: 100%` would apply to every direct child
+   including flex rows: a <select> beside an input would eat the whole row
+   and leave the input a few pixels wide, which is why the search key box
+   looked like it did not exist, and why the "full authority" checkbox
+   pushed its own label off to the side in the version that had it. Block
+   children already fill the column; the ones that lay out their own
+   contents get to keep doing that. */
+.pane > * {
+    max-width: 760px;
+}
+
+/* ── Field.tsx (was Field.svelte) ────────────────────────────────────── */
+
+.setting {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+}
+
+/* Label and control side by side, for a switch or a short select where a
+   full-width row would put the two far apart on a wide window. */
+.setting.inline {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-4);
+}
+.setting.inline .control {
+    flex: 0 0 auto;
+}
+
+.setting .head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-2);
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.setting .label {
+    font-size: var(--text-sm);
+    color: var(--text);
+}
+
+.setting .req {
+    color: var(--accent, #7aa2f7);
+    margin-left: 2px;
+}
+
+.setting .hint,
+.setting .fallback {
+    font-size: var(--text-xs);
+    color: var(--text-faint);
+}
+
+.setting .fallback {
+    font-family: var(--font-mono);
+}
+
+.setting .error {
+    font-size: var(--text-xs);
+    color: var(--danger, #f7768e);
+}
+
+/* The control fills its own row, which is what a blanket rule on the pane
+   would otherwise be reaching for -- but scoped here, so a row holding two
+   controls can still divide the space between them. */
+/* The bordered box lives on the control, not the row: the global `.field`
+   class does this app-wide, but this row also holds a label and a hint
+   that must sit outside the box. */
+.setting .control {
+    display: flex;
+    gap: var(--sp-2);
+    min-width: 0;
+    background: var(--surface-sunken);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    padding: var(--sp-2) var(--sp-3);
+    transition: border-color var(--fast) var(--ease);
+}
+.setting .control:focus-within {
+    border-color: var(--accent-line);
+}
+.setting .control > input,
+.setting .control > select,
+.setting .control > textarea {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+/* A select next to something else keeps its own width rather than
+   crowding out its neighbour. */
+.setting .control > select:not(:only-child) {
+    flex: 0 0 auto;
+    max-width: 40%;
+}
+
+/* ── Section.tsx (was Section.svelte) ────────────────────────────────── */
+
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+}
+
+.section h3 {
+    margin: 0;
+    font-size: var(--text-xs);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+.section .blurb {
+    margin: 0;
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    line-height: 1.5;
+    max-width: 62ch;
+}
+
+.section .body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+}
+
+/* ── KeyInput.tsx (was KeyInput.svelte) ──────────────────────────────── */
+
+.keys {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-1);
+}
+
+.key-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    padding: var(--sp-2) var(--sp-3);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    background: var(--surface-sunken);
+    min-width: 0;
+}
+
+.key-row .who {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-2);
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.key-row .name {
+    font-size: var(--text-sm);
+    color: var(--text);
+    font-family: var(--font-mono);
+}
+
+.key-row .state {
+    font-size: var(--text-xs);
+}
+.key-row .state.ok {
+    color: var(--ok, #9ece6a);
+}
+.key-row .state.missing {
+    color: var(--text-faint);
+}
+.key-row .state.keyless {
+    color: var(--text-muted);
+}
+
+.key-row .note {
+    font-size: var(--text-xs);
+    color: var(--text-faint);
+}
+/* The input gets the room, the buttons take what they need. Sized here
+   rather than inherited, which is what used to collapse it to nothing.
+
+   Named `key-entry`, not `entry`: the global `.entry` is a bordered list
+   row, a different thing that happened to share the name. */
+.key-entry {
+    display: flex;
+    gap: var(--sp-1);
+    flex: 1 1 320px;
+    min-width: 0;
+}
+.key-entry input {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.key-entry button {
+    flex: 0 0 auto;
+}
+
+.key-row .ghost {
+    background: transparent;
+}
+
+/* ── ProviderChain.tsx (was ProviderChain.svelte) ────────────────────── */
+
+.chain {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-1);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.chain .link {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: var(--sp-2) var(--sp-3);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    background: var(--surface-sunken);
+    min-width: 0;
+}
+
+/* Dimmed, not hidden: the order still matters once a key is added, and a
+   row that vanishes when unconfigured makes the list jump around. */
+.chain .link.skipped .name,
+.chain .link.skipped .rank {
+    color: var(--text-faint);
+}
+
+.chain .rank {
+    flex: 0 0 auto;
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.chain .main {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.chain .name {
+    font-size: var(--text-sm);
+    color: var(--text);
+    font-family: var(--font-mono);
+}
+
+.chain .note {
+    font-size: var(--text-xs);
+    color: var(--text-faint);
+}
+
+.chain .actions {
+    display: flex;
+    gap: var(--sp-1);
+    flex: 0 0 auto;
+}
+
+.chain .actions button:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+/* ── CustomEndpoint.tsx (was CustomEndpoint.svelte) ──────────────────── */
+
+.custom {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+}
+
+.custom .blurb {
+    margin: 0;
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+/* This disclosure carries three children -- arrow, label, count -- so it
+   needs the row layout the global `.disclosure` does not provide; the
+   global handles the colour and the hover. */
+.custom .disclosure {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    font-size: var(--text-sm);
+    text-align: left;
+}
+
+.custom .arrow {
+    display: inline-block;
+    transition: transform var(--fast) var(--ease);
+}
+.custom .arrow.open {
+    transform: rotate(90deg);
+}
+
+.custom .count {
+    margin-left: auto;
+    font-size: var(--text-xs);
+    color: var(--text-faint);
+}
+
+.custom .advanced {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    padding-left: var(--sp-4);
+    border-left: 1px solid var(--line);
+}
+
+/* ── GeneralPane.tsx ──────────────────────────────────────────────────── */
+
+.row .label {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+}
+
+.row .value {
+    font-size: var(--text-sm);
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+}
+
+/* A number box has no reason to span the pane; left at full width it
+   read as a text field. */
+input[type="number"] {
+    width: 5rem;
+}
+
+/* ── MemoryPane.tsx ───────────────────────────────────────────────────── */
+
+.pane input {
+    background: var(--surface-sunken);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    padding: var(--sp-2) var(--sp-3);
+    font-size: var(--text-sm);
+}
+
+.entry .text {
+    font-size: var(--text-sm);
+    color: var(--text);
+    line-height: 1.45;
+    min-width: 0;
+}
+
+.entry button {
+    flex: 0 0 auto;
+}
+
+.empty {
+    margin: 0;
+    padding: var(--sp-4) 0;
+    font-size: var(--text-xs);
+    color: var(--text-faint);
+}
+
+/* ── SearchPane.tsx / ObsidianPane.tsx / SpotifyPane.tsx / SteamPane.tsx /
+   McpPane.tsx / DataPane.tsx / UpdatesPane.tsx: shared row-of-buttons and
+   blurb rules ─────────────────────────────────────────────────────────── */
+
+.actions,
+.storage {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    flex-wrap: wrap;
+}
+
+.storage {
+    justify-content: space-between;
+}
+
+.storage .buttons {
+    display: flex;
+    gap: var(--sp-1);
+}
+
+.storage .hint,
+.path-row .hint {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    margin: 0;
+}
+
+.blurb {
+    margin: 0;
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    line-height: 1.5;
+    max-width: 62ch;
+}
+
+/* ── SpotifyPane.tsx ──────────────────────────────────────────────────── */
+
+.path {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    word-break: break-all;
+    min-width: 0;
+}
+
+/* ── ShortcutsPane.tsx ────────────────────────────────────────────────── */
+
+/* A fixed column so the descriptions line up rather than stepping in
+   and out with the width of each key combination. */
+kbd {
+    flex: 0 0 120px;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--text);
+    background: var(--surface-sunken);
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    padding: 2px var(--sp-2);
+    text-align: center;
+}
+
+/* ── DataPane.tsx ─────────────────────────────────────────────────────── */
+
+.path-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    min-width: 0;
+}
+
+/* The path is the one thing here someone copies, so it wraps rather
+   than being cut off at the edge of the column. */
+.path-row .path {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    word-break: break-all;
+}
+
+.rows {
+    display: flex;
+    flex-direction: column;
+}
+
+.rows .label {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+}
+
+.rows .value {
+    font-size: var(--text-sm);
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── UpdatesPane.tsx ──────────────────────────────────────────────────── */
+
+.update-box {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    padding: var(--sp-3);
+    border: 1px solid var(--accent-line, var(--line));
+    border-radius: var(--r-md);
+    background: var(--surface-sunken);
+}
+
+.update-head {
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--text);
+}
+
+/* ── ProviderPane.tsx ─────────────────────────────────────────────────── */
+/* One provider, everything about it: its key, its model, its proof that
+   it works. The alternative — a chip row here and a key list on another
+   screen — meant picking a provider marked "no key" told you what was
+   wrong and then made you go somewhere else to fix it. */
+
+.cards {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+}
+.card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    padding: var(--sp-3);
+    background: var(--surface-raised);
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    transition:
+        border-color var(--fast) var(--ease),
+        background var(--fast) var(--ease);
+}
+.card:hover {
+    border-color: var(--line-strong);
+}
+/* Dimmed, never hidden. A provider you have no key for is still a provider
+   you can choose to set up, and greying it out of existence hides the very
+   card carrying the button that fixes it. */
+.card.blocked:not(.selected) .card-name,
+.card.blocked:not(.selected) .card-model {
+    color: var(--text-muted);
+}
+/* The one that answers is bordered, not filled: a filled card at this size
+   reads as pressed rather than as chosen, and there are several of them. */
+.card.selected {
+    border-color: var(--accent-line);
+    background: var(--accent-muted);
+}
+.card-head {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+}
+/* The model id gets whatever room is left over but never pushes; the spacer
+   after it is what actually holds the tags and the select button against
+   the right edge, so those line up down the column no matter how long each
+   provider's model id happens to be. */
+.card-model {
+    flex: 0 1 auto;
+}
+.card-spacer {
+    flex: 1 1 var(--sp-2);
+}
+.card-name {
+    font-size: var(--text-md);
+    font-weight: 600;
+    color: var(--text);
+}
+.card-model {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--text-faint);
+    /* Truncates rather than wraps: a long model id pushing the tags and the
+       select button onto a second line would rearrange the header row of one
+       card and not the others. */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+/* Same width whether it says "use this" or "answering", so the right edge of
+   the column is a straight line rather than a ragged one that shifts as the
+   selection moves from card to card. */
+.pick {
+    flex: 0 0 74px;
+    text-align: center;
+}
+/* Wide enough for the longest of the three ("no key needed"), so the key
+   state sits in a column of its own rather than sliding left and right as
+   the wording changes between providers. */
+.key-tag {
+    flex: 0 0 96px;
+    text-align: center;
+}
+.card-actions {
+    display: flex;
+    gap: var(--sp-2);
+    flex-wrap: wrap;
+}
+.key-input {
+    width: 100%;
+    font-family: var(--font-mono);
+}
+.hint.small {
+    font-size: var(--text-xs);
+}
+/* Status words, one shape for all of them. The global `.risk` elsewhere is a
+   9px pill that was never meant to carry a phrase like "no key needed". */
+.tag {
+    font-size: var(--text-xs);
+    padding: 1px 8px;
+    border-radius: var(--r-full);
+    border: 1px solid var(--line);
+    color: var(--text-faint);
+    white-space: nowrap;
+    flex: 0 0 auto;
+}
+.tag[data-tone="good"] {
+    color: var(--success);
+    border-color: rgba(74, 222, 128, 0.35);
+}
+.tag[data-tone="warn"] {
+    color: var(--warning);
+    border-color: rgba(245, 158, 11, 0.4);
+}
+.tag[data-tone="accent"] {
+    color: var(--accent-text);
+    border-color: var(--accent-line);
+    background: var(--accent-muted);
+}
+
+/* ── ToolsPane.tsx ────────────────────────────────────────────────────── */
+
+.controls {
+    display: flex;
+    gap: var(--sp-2);
+    flex-wrap: wrap;
+    align-items: center;
+}
+.controls input {
+    flex: 1 1 200px;
+    min-width: 0;
+    background: var(--surface-sunken);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    padding: var(--sp-2) var(--sp-3);
+    font-size: var(--text-sm);
+}
+
+.risks {
+    display: flex;
+    gap: var(--sp-1);
+    flex-wrap: wrap;
+}
+
+.chip {
+    font-size: var(--text-xs);
+    padding: var(--sp-1) var(--sp-2);
+    border-radius: var(--r-full);
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-variant-numeric: tabular-nums;
+}
+.chip.on {
+    border-color: var(--accent-line, var(--line));
+    color: var(--text);
+    background: var(--surface-sunken);
+}
+
+/* The registry is the one list here long enough to need a cap of its own:
+   58 tools would otherwise push the filter box off the top of the pane as
+   you scroll. The global `.list` deliberately has no height — most lists
+   using it are short. */
+.pane .list {
+    max-height: 380px;
+    overflow-y: auto;
+}
+
+/* The global `.risk` is a 9px marker for a dense list. These labels are
+   read one at a time beside a tool name, so they carry the normal small
+   size — and `moderate`, which only this pane has, gets its own tone. */
+.entry .risk {
+    font-size: var(--text-xs);
+    padding: 0 var(--sp-1);
+    border-radius: var(--r-sm);
+}
+.entry .risk[data-risk="moderate"] {
+    color: var(--warn, #e0af68);
+}
+
+.entry .main {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.entry .name {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--text);
+}
+
+.entry .desc {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    line-height: 1.45;
+}
+
+.entry .domain {
+    flex: 0 0 auto;
+    font-size: var(--text-xs);
+    color: var(--text-faint);
+    font-family: var(--font-mono);
+}

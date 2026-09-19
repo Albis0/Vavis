@@ -1,0 +1,265 @@
+.council {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+}
+
+/* -- Task bar ------------------------------------------------------ */
+
+.task-bar {
+    display: flex;
+    gap: var(--sp-3);
+    padding: var(--sp-4);
+    border-bottom: 1px solid var(--line);
+    flex: 0 0 auto;
+}
+
+.task {
+    flex: 1;
+    min-width: 0;
+    resize: vertical;
+    background: var(--surface-sunken);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    padding: var(--sp-3);
+    font-family: inherit;
+    font-size: var(--text-base);
+    line-height: 1.5;
+    color: var(--text);
+    transition: border-color var(--fast) var(--ease);
+}
+.task:focus {
+    border-color: var(--accent-line);
+}
+
+.go-column {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    flex: 0 0 210px;
+}
+
+.go {
+    justify-content: center;
+    padding: var(--sp-3);
+    font-size: var(--text-base);
+}
+
+.spinner {
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(255, 255, 255, 0.35);
+    border-top-color: #fff;
+    border-radius: var(--r-full);
+    animation: spin 700ms linear infinite;
+}
+
+.forecast,
+.summary {
+    font-size: var(--text-xs);
+    line-height: 1.5;
+    color: var(--text-faint);
+}
+.summary {
+    color: var(--text-muted);
+}
+
+/* -- Seats --------------------------------------------------------- */
+
+.seats {
+    flex: 1;
+    display: flex;
+    gap: var(--sp-3);
+    padding: var(--sp-4);
+    overflow-x: auto;
+    min-height: 0;
+}
+
+.panel {
+    flex: 1 0 320px;
+    max-width: 520px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    padding: var(--sp-3) var(--sp-4) var(--sp-4);
+    min-height: 0;
+    transition: border-color var(--normal) var(--ease);
+}
+.panel[data-phase="streaming"] {
+    border-color: var(--accent-line);
+}
+.panel[data-phase="failed"] {
+    border-color: rgba(248, 113, 113, 0.4);
+}
+
+.panel-head {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    flex: 0 0 auto;
+}
+
+.seat-name {
+    flex: 1;
+    min-width: 0;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Status as a word, not a border colour alone. A tinted edge says
+   something changed; it does not say what. */
+.phase {
+    flex: 0 0 auto;
+    font-size: var(--text-xs);
+    color: var(--text-faint);
+}
+.phase[data-phase="streaming"] {
+    color: var(--accent-text);
+}
+.phase[data-phase="failed"] {
+    color: var(--danger);
+}
+.phase[data-phase="done"] {
+    color: var(--success);
+}
+
+.seat-close {
+    padding: var(--sp-1);
+    color: var(--text-faint);
+    flex: 0 0 auto;
+}
+
+.setup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    flex: 0 0 auto;
+}
+.setup-row {
+    display: flex;
+    gap: var(--sp-2);
+}
+.setup select,
+.setup input:not([type="checkbox"]) {
+    background: var(--surface-sunken);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    padding: var(--sp-2) var(--sp-3);
+    font-size: var(--text-sm);
+    color: var(--text);
+    min-width: 0;
+    transition: border-color var(--fast) var(--ease);
+}
+.setup select:focus,
+.setup input:focus {
+    border-color: var(--accent-line);
+}
+/* An explicit basis, not `auto`. Fields are `width: 100%` globally, so an
+   auto basis made the provider select claim the whole row and shove the
+   model field out past the edge of the panel. */
+.setup select {
+    flex: 0 0 132px;
+}
+.setup-row input {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.sees {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    cursor: pointer;
+}
+.sees input {
+    width: auto;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+.answer {
+    flex: 1;
+    overflow-y: auto;
+    font-size: var(--text-sm);
+    line-height: 1.65;
+    color: var(--text);
+    min-height: 0;
+}
+.answer pre {
+    overflow-x: auto;
+    background: var(--surface-sunken);
+    border-radius: var(--r-md);
+    padding: var(--sp-3);
+    font-size: var(--text-xs);
+}
+.answer p {
+    margin-bottom: var(--sp-3);
+}
+.answer p:last-child {
+    margin-bottom: 0;
+}
+
+.dim {
+    color: var(--text-faint);
+}
+.failed {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--sp-2);
+    color: var(--danger);
+    overflow-wrap: anywhere;
+}
+
+.skeletons {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+}
+.skeleton {
+    height: 12px;
+    border-radius: var(--r-sm);
+    background: var(--surface-hover);
+    animation: pulse 1.4s var(--ease-soft) infinite;
+}
+
+.panel-foot {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--sp-2);
+    padding-top: var(--sp-3);
+    border-top: 1px solid var(--line);
+    flex: 0 0 auto;
+}
+
+.stats {
+    font-size: var(--text-xs);
+    color: var(--text-faint);
+}
+
+.panel-actions {
+    display: flex;
+    gap: var(--sp-1);
+}
+.panel-actions button {
+    font-size: var(--text-xs);
+    padding: var(--sp-1) var(--sp-3);
+}
+
+.add {
+    flex: 0 0 auto;
+    align-self: flex-start;
+    border: 1px dashed var(--line-strong);
+    padding: var(--sp-3) var(--sp-4);
+}
