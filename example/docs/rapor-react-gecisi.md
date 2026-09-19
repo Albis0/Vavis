@@ -152,6 +152,76 @@ yapıldı ve düzgün yapıldı — ama kayda geçsin diye yazıyorum.
 
 ---
 
+## Geçişten sonra çıkan dört hata
+
+Uygulama açılıp kullanılınca üç görsel hata daha çıktı. **Hepsi 149 test
+geçerken ve tip denetimi tertemizken duruyordu** — ve hepsi aynı kökten:
+Svelte'in kapsamlamasının sessizce çözdüğü şeyler.
+
+### 1. Ayarlar penceresi çerçevesini doldurmuyordu
+
+`.content` → `.modal-content` yeniden adlandırması CSS'i değiştirdi ama
+işaretlemeyi kaçırdı (koşullu ifadenin içindeydi). Panel gövdesi `flex: 1`
+kuralını kaybetti: **1039 px'lik panelde 730 px içerik**, altta 300 px'lik
+delikten reaktör görünüyordu.
+
+Aynı hata `.chip` → `.settings-chip`'te de vardı (araç risk süzgeçleri).
+
+### 2. Ayarların üstünde dönen daire
+
+`reactor.css`'te `.fallback` **220 px'lik dönen bir halka** (reaktör
+çizilemezse gösterilen yedek). `settings.css`'te `.setting .fallback` ise
+küçük bir "varsayılan: …" yazısı. Aynı ad, tamamen farklı iş.
+
+Sonuç: sağlayıcı kartlarının üstünde dönen bir çember ve kenarına kıvrılmış
+"default: off — keyword matching" yazısı.
+
+> **Çakışma denetimim bunu kaçırdı.** Sadece tek sınıflı kuralları
+> karşılaştırıyordu; `.setting .fallback` iki parçalı olduğu için listeye
+> girmemişti. Denetim **iki kez yanlış çıktı**, o yüzden artık doğru soruyu
+> soruyor: *bir kuralın seçicisi tek bir bileşene bağlı mı?* Bağlı değilse
+> (`.fallback {}`) her yere ulaşır ve benzersiz olmak zorundadır; bağlıysa
+> (`.setting .fallback`, `.code-entry.active`) kendi bileşeninden çıkamaz.
+>
+> Bu kurala göre 9 sınıf daha kapsandı — aralarında `.md` de vardı: Modal'ın
+> `size="md"` değeri Message'ın markdown gövdesiyle çarpışıyordu.
+
+### 3. 58 araçlık liste sayfadan taşıyordu
+
+ToolsPane'in listesinde Svelte'te `max-height: 380px` vardı, taşınırken
+düştü. Süzgeç kutusu ekrandan kayıyordu. Geri kondu (`.tool-list`), ölçüldü:
+380 px kutu, 3252 px içerik, kaydırılabilir.
+
+### 4. `cargo build` eski arayüzü paketliyordu
+
+**Bu en önemlisi, çünkü beni bir tur yanılttı.** CSS düzeltmesini tarayıcıda
+doğruladım, exe'yi yeniden derledim — hata ekranda duruyordu. Kaynak
+doğruydu, paket bir saat eskiydi.
+
+Sebep: `tauri_build` `ui/dist` klasörünü **gömüyor ama derlemiyor**, ve
+`cargo build` `beforeBuildCommand`'ı çalıştırmıyor (o `tauri build`'e ait,
+üstelik boştu).
+
+İki düzeltme: `build.rs` artık `ui/dist`'i girdi olarak tanıyor, ve iki
+`before*Command` dolduruldu.
+
+> **Ders:** "düzelttim ama çalışmıyor" dediğinde önce **neyin çalıştığını**
+> kontrol et. Derlenen şey ile çalışan şey aynı olmayabilir.
+
+### Kalıcı koruma
+
+İki test eklendi:
+
+- `styles/scoping.test.ts` — bir kural başka bileşene ulaşabiliyorsa kırılır
+- `styles/orphans.test.ts` — hiçbir bileşenin kullanmadığı CSS sınıfı varsa
+  kırılır (ilk iki hatanın bıraktığı iz tam olarak buydu)
+
+**Doğrulama:** 14 panelin hepsi ölçüldü (senin ekran boyutun ve yazı
+tipinle) — hepsi panelini dolduruyor, yatay taşma yok, çerçeveden taşan öğe
+yok, konsol temiz. 129 test, 17 Rust paketi, tip denetimi temiz.
+
+---
+
 ## Yedek
 
 Silinen Svelte ağacı (35 dosya) depo dışında:
