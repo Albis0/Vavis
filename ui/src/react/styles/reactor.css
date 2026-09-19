@@ -1,0 +1,49 @@
+.stage {
+    position: absolute;
+    inset: 0;
+    /* Not a centring grid: the canvas is full-bleed and centres the reactor
+   itself, on its own transform. A grid would size the host to its
+   content and leave the canvas as a box in the middle of the stage. */
+    display: block;
+    /* The stage itself stays transparent to the pointer; only the canvas
+   inside it takes events. The reactor can be dragged, but the empty
+   space around it must not swallow a click meant for the page. */
+    pointer-events: none;
+}
+
+/* The canvas fills the whole stage rather than being a square in the
+ middle of it: the core's halo and its bloom reach most of the way to
+ the rim, and a tighter box would clip them into a visible edge. The
+ canvas itself is transparent, so the page shows through around the
+ reactor. How large the reactor appears is `FRACTION` in `reactor.ts`,
+ not this element. */
+.host {
+    width: 100%;
+    height: 100%;
+    /* Re-enabled over the canvas: the reactor is draggable, and the
+   stage above sets `none` for everything else. The canvas is
+   full-bleed, so this does cover the whole stage -- but it sits
+   behind the chat panel and the status bar in the stacking order,
+   and those take their own events first. */
+    pointer-events: auto;
+}
+
+.fallback {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    margin: -110px 0 0 -110px;
+    width: 220px;
+    height: 220px;
+    border-radius: 50%;
+    border: 2px solid var(--accent-line);
+    border-top-color: var(--accent);
+    animation: spin 8s linear infinite;
+}
+.fallback[data-state="thinking"] {
+    animation-duration: 2.4s;
+    animation-direction: reverse;
+}
+.fallback[data-state="working"] {
+    animation-duration: 1.6s;
+}

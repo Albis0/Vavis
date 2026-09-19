@@ -1,0 +1,76 @@
+.bar {
+    flex: 0 0 auto;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    padding: 0 var(--sp-3);
+    font-size: var(--text-xs);
+    color: var(--text-faint);
+    border-top: 1px solid var(--line);
+    background: var(--bg);
+    /* Above the reactor's canvas, which fills the stage behind it. */
+    position: relative;
+    z-index: 10;
+}
+
+.left,
+.right {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-1);
+    min-width: 0;
+}
+
+.item {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-1);
+    font-size: var(--text-xs);
+    color: var(--text-faint);
+    padding: 2px var(--sp-2);
+    border-radius: var(--r-sm);
+    min-width: 0;
+    white-space: nowrap;
+}
+
+button.item:hover {
+    color: var(--text-muted);
+    background: var(--surface-hover);
+}
+
+.quiet,
+.version {
+    cursor: default;
+}
+
+.provider {
+    color: var(--text-muted);
+}
+
+.sep {
+    opacity: 0.4;
+}
+
+.model {
+    font-family: var(--font-mono);
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.warn {
+    color: var(--warning);
+}
+button.warn:hover {
+    color: var(--warning);
+    background: rgba(251, 191, 36, 0.1);
+}
+
+.playing-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--success);
+    flex: 0 0 auto;
+}

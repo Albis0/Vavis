@@ -1,0 +1,176 @@
+.search {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-4) var(--sp-3);
+}
+.search input {
+    font-size: var(--text-sm);
+    background: var(--surface-sunken);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    padding: var(--sp-2) var(--sp-3);
+    transition: border-color var(--fast) var(--ease);
+}
+.search input:focus {
+    border-color: var(--accent-line);
+}
+.clear {
+    padding: var(--sp-2);
+    color: var(--text-faint);
+    flex: 0 0 auto;
+}
+
+.content {
+    padding: var(--sp-2) var(--sp-3) var(--sp-3);
+}
+
+.hint {
+    font-size: var(--text-sm);
+    color: var(--text-faint);
+    padding: var(--sp-2) var(--sp-3) var(--sp-3);
+    line-height: 1.5;
+}
+
+/* -- Loading, empty and failed ------------------------------------- */
+
+.state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-7) var(--sp-5);
+    text-align: center;
+    color: var(--text-faint);
+}
+
+.state-title {
+    font-size: var(--text-base);
+    font-weight: 600;
+    color: var(--text);
+}
+
+.state-body {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    line-height: 1.6;
+    max-width: 44ch;
+    overflow-wrap: anywhere;
+}
+
+.state button {
+    margin-top: var(--sp-2);
+}
+
+.skeletons {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    padding: var(--sp-4) var(--sp-3);
+}
+
+.skeleton {
+    height: 14px;
+    border-radius: var(--r-sm);
+    background: var(--surface-hover);
+    animation: pulse 1.4s var(--ease-soft) infinite;
+}
+
+/* Announced to a screen reader, drawn for nobody. */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.entry {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    padding: var(--sp-3);
+    border-radius: var(--r-md);
+    transition: background var(--fast) var(--ease);
+}
+.entry:hover {
+    background: var(--surface-hover);
+}
+.entry.off {
+    opacity: 0.5;
+}
+
+.entry-main {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.entry-text {
+    font-size: var(--text-sm);
+    color: var(--text);
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.trigger {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--accent-text);
+}
+
+/* Row actions stay hidden until the row is hovered: a delete button on
+ every row of a long list is a list you are afraid to scroll. */
+.row-actions {
+    display: flex;
+    gap: var(--sp-1);
+    flex: 0 0 auto;
+}
+
+.row-action {
+    font-size: var(--text-xs);
+    padding: var(--sp-1) var(--sp-2);
+    opacity: 0;
+    transition: opacity var(--fast) var(--ease);
+}
+.entry:hover .row-action,
+.row-action:focus-visible {
+    opacity: 1;
+}
+
+.tool-entry:hover {
+    background: transparent;
+}
+
+.tool-name {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--text);
+}
+
+.tool-desc {
+    font-size: var(--text-sm);
+    color: var(--text-faint);
+    line-height: 1.5;
+}
+
+.risk {
+    font-family: var(--font);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 1px 6px;
+    border-radius: var(--r-full);
+    background: var(--surface-active);
+    color: var(--text-faint);
+}
+.risk[data-risk="destructive"] {
+    background: rgba(248, 113, 113, 0.14);
+    color: var(--danger);
+}

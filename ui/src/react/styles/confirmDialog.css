@@ -1,0 +1,17 @@
+.body {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    line-height: 1.6;
+}
+
+/* A destructive affirmative is filled with the danger colour rather than
+   the accent, so the dangerous answer never looks like the safe default. */
+.destructive {
+    background: var(--danger-solid);
+    color: #fff;
+}
+.destructive:hover:not(:disabled) {
+    background: var(--danger-solid);
+    color: #fff;
+    filter: brightness(1.1);
+}

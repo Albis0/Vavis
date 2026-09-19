@@ -1,0 +1,307 @@
+.code {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+}
+
+/* -- Tree ---------------------------------------------------------- */
+
+.tree {
+    width: 264px;
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    padding: var(--sp-3);
+    border-right: 1px solid var(--line);
+    background: var(--surface-sunken);
+    overflow: hidden;
+}
+
+.tree-head,
+.search {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    flex: 0 0 auto;
+}
+
+.tree-head input,
+.search input {
+    flex: 1;
+    min-width: 0;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    padding: var(--sp-2) var(--sp-3);
+    font-size: var(--text-sm);
+    color: var(--text);
+    transition: border-color var(--fast) var(--ease);
+}
+.tree-head input:focus,
+.search input:focus {
+    border-color: var(--accent-line);
+}
+
+.clear {
+    padding: var(--sp-2);
+    color: var(--text-faint);
+    flex: 0 0 auto;
+}
+
+.entries,
+.hits {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    /* Pulled out to the rail edges so a hovered row reads as a full-width
+       band, while the fields above keep their padding. */
+    margin: 0 calc(-1 * var(--sp-2));
+}
+
+.section {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: var(--text-xs);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--text-faint);
+    padding: var(--sp-2) var(--sp-2) var(--sp-1);
+}
+.section button {
+    font-size: var(--text-xs);
+    padding: 0 var(--sp-1);
+    color: var(--accent-text);
+}
+
+.entry {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-1);
+    width: 100%;
+    text-align: left;
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    padding: var(--sp-1) var(--sp-2);
+    border-radius: var(--r-sm);
+}
+.entry:hover {
+    color: var(--text);
+    background: var(--surface-hover);
+}
+.entry.active {
+    color: var(--text);
+    background: var(--surface-active);
+    font-weight: 500;
+}
+/* Folders read a shade stronger than the files inside them, which is what
+   gives a deep tree any structure at a glance. */
+.entry.folder {
+    color: var(--text);
+}
+
+.entry-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* A fixed-width slot whether or not there is a chevron in it, so file
+   names line up under the folder names above them. */
+.twist {
+    width: 14px;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-faint);
+    transition: transform var(--fast) var(--ease);
+}
+.twist.open {
+    transform: rotate(90deg);
+}
+
+.hit {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+    width: 100%;
+    text-align: left;
+    padding: var(--sp-2);
+    border-radius: var(--r-sm);
+    overflow: hidden;
+}
+.hit:hover {
+    background: var(--surface-hover);
+}
+
+.hit-path,
+.hit-text {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+.hit-path {
+    color: var(--accent-text);
+}
+.hit-text {
+    color: var(--text-muted);
+}
+
+/* -- Editor -------------------------------------------------------- */
+
+.editor {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+}
+
+.bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    padding: var(--sp-2) var(--sp-3);
+    border-bottom: 1px solid var(--line);
+    flex: 0 0 auto;
+}
+
+.filename {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.filename .muted {
+    font-weight: 400;
+    color: var(--text-faint);
+}
+
+/* Unsaved state is a dot beside the name, not a bullet character in it.
+   A glyph inside the label shifts the name every time it appears. */
+.dot {
+    width: 6px;
+    height: 6px;
+    border-radius: var(--r-full);
+    background: var(--accent);
+    flex: 0 0 auto;
+}
+
+.bar-actions {
+    display: flex;
+    gap: var(--sp-1);
+    flex: 0 0 auto;
+}
+
+.bar-actions kbd {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: rgba(255, 255, 255, 0.72);
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: var(--r-sm);
+    padding: 1px 5px;
+}
+
+/* The gutter and the textarea have to agree on both of these to the
+   pixel, so they are declared once here and inherited by each. */
+.pane {
+    --code-size: 13px;
+    --code-line: 1.55;
+    flex: 1;
+    display: flex;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.gutter {
+    flex: 0 0 auto;
+    padding: var(--sp-3) var(--sp-2);
+    text-align: right;
+    font-family: var(--font-mono);
+    font-size: var(--code-size);
+    line-height: var(--code-line);
+    color: var(--text-faint);
+    background: var(--surface-sunken);
+    border-right: 1px solid var(--line);
+    user-select: none;
+    overflow: hidden;
+}
+
+textarea {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    outline: none;
+    resize: none;
+    padding: var(--sp-3);
+    background: transparent;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: var(--code-size);
+    line-height: var(--code-line);
+    white-space: pre;
+    overflow: auto;
+    tab-size: 4;
+}
+
+/* -- States -------------------------------------------------------- */
+
+.state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-6) var(--sp-4);
+    text-align: center;
+    color: var(--text-faint);
+}
+.state.blank {
+    flex: 1;
+    justify-content: center;
+    padding: var(--sp-7);
+}
+
+.state-title {
+    font-size: var(--text-base);
+    font-weight: 600;
+    color: var(--text);
+}
+
+.state-body {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    line-height: 1.6;
+    max-width: 40ch;
+}
+
+.state button {
+    margin-top: var(--sp-2);
+}
+
+.skeletons {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    padding: var(--sp-3) var(--sp-2);
+}
+
+.skeleton {
+    height: 12px;
+    border-radius: var(--r-sm);
+    background: var(--surface-hover);
+    animation: pulse 1.4s var(--ease-soft) infinite;
+}
