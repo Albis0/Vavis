@@ -222,6 +222,69 @@ yok, konsol temiz. 129 test, 17 Rust paketi, tip denetimi temiz.
 
 ---
 
+## Ayarlar ekranının görünümü
+
+Dört hata kapandıktan sonra ekran çalışıyordu ama **bitmemiş görünüyordu.**
+Hepsi aynı cinsten: tarayıcının ya da işletim sisteminin varsayılanı, biz
+bir şey söylemediğimiz için olduğu gibi kalmış.
+
+### 1. Açılır listeyi işletim sistemi çiziyordu
+
+`<select>`'in **açılan kutusu** CSS'in ulaşamadığı tek yer — onu pencere
+yöneticisi çizer. Hiçbir yerde `color-scheme` tanımlı değildi, dolayısıyla
+liste **beyaz zemin, gri yazı** olarak açılıyordu: koyu arayüzün ortasında
+bembeyaz bir kutu.
+
+Kapalı hâli de öyleydi: sistemin kendi çerçevesi ve kendi oku. Artık
+`color-scheme` iki temada da tanımlı (açık temada `light`, yoksa aynı hata
+ters yönde olur), kapalı kutu da diğer alanlar gibi çiziliyor — ok bir
+arka plan görseli.
+
+### 2. Etiket ve açıklaması tek satırda
+
+`Assistant name` ile `spoken aloud, so pick something sayable` aynı
+taban çizgisindeydi ve tek bir cümle gibi okunuyordu. Alt alta kondu,
+etiket kalınlığı aldı.
+
+### 3. Aynı sütunda üç farklı sol kenar
+
+Sağa yaslı kontroller kendi içeriklerine göre boyutlanıyordu: aynı panelde
+**102 px, 116 px, 106 px.** Sağ kenarları hizalı olduğu için sol kenarları
+bozuk görünüyordu. Ortak bir `min-width: 160px` kondu — `width` değil, uzun
+bir seçenek hâlâ büyüyebilsin diye.
+
+### 4. Düğme gibi görünmeyen düğmeler
+
+`cycle mode` ve `hear this voice` uygulamanın varsayılan düğmesini
+kullanıyordu: şeffaf zemin, soluk yazı. Araç çubuğundaki bir simge için
+doğru, formda tek başına duran bir eylem için yanlış — fare üstüne gelene
+kadar başıboş bir yazı gibi duruyordu.
+
+### 5. Ayıracak bir şeyi olmayan ayraç
+
+`.stat-row` her satırın altına çizgi çekiyordu. Listede doğru; Ses
+panelindeki tek başına duran "Mode" satırının altında, hiçbir şeye
+benzemeyen bir çizgi.
+
+### 6. Sütunun yarısına sıkışmış metin
+
+Bölüm açıklamaları `62ch` ölçüsündeydi — doğru bir okuma genişliği — ama
+11.5 px yazıyla bu **380 px** ediyor, sütun ise 760 px. Ölçü korundu,
+punto bir kademe büyütüldü.
+
+### Doğrulama
+
+14 panelin hepsi senin ekran boyutunda (1831×1103) tarandı: yatay taşma
+yok, panel dışına taşan öğe yok, sistemin kendi çizdiği açılır liste
+kalmadı, konsol temiz. 129 test, tip denetimi 0 hata. Üç düzeltmenin de
+derlenen pakette olduğu doğrulandı.
+
+> Taramanın **Data** panelinde "çerçevesiz düğme" işaretlemesi yanlış
+> alarmdı: `Clear the conversation` kasıtlı olarak kırmızı yazı, dolu
+> düğme değil. Denetim fazla genişti, arayüz değil — dokunulmadı.
+
+---
+
 ## Yedek
 
 Silinen Svelte ağacı (35 dosya) depo dışında:
