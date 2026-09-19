@@ -285,6 +285,40 @@ derlenen pakette olduğu doğrulandı.
 
 ---
 
+## CI: geçişten beri her koşu kırmızıydı
+
+React geçişinden sonraki **her** push'ta `tests` iş akışı düştü. Sebep iki
+tane ve ikisi de yereldeki testlerin yakalayamayacağı cinsten.
+
+### 1. Kilit dosyası hâlâ Svelte'i çözüyordu
+
+Geçiş boyunca `npm` kullanıldı, ama iş akışları `bun` ile kuruyor. `bun.lock`
+hiç yenilenmedi: içinde **9 Svelte kaydı, 0 React kaydı** vardı.
+`bun install --frozen-lockfile` kilit dosyasıyla `package.json` uyuşmuyorsa
+kurulumu reddeder — koşu daha ilk adımda ölüyordu.
+
+`release.yml` de aynı şekilde kuruyor, yani **bir sonraki sürüm çıkarken de
+patlayacaktı.** Aynı düzeltme ikisini birden kapattı.
+
+> `package-lock.json` zaten `.gitignore`'da — tek doğru kaynak `bun.lock`.
+> Kural doğruydu, sadece geçiş sırasında güncellenmedi.
+
+### 2. Biçimlendirme kaymış
+
+`cargo fmt --all -- --check` **16 yerde** kırılıyordu: audio, brain ve shell
+crate'lerinde. Arayüzle ilgisi yok — Gemini ve Groq çalışmalarından kalmış.
+
+### Doğrulama
+
+İş akışının her adımı, CI'nin koştuğu gibi yerelde koşturuldu: sürüm
+uyumu, tsc, 129 arayüz testi, üretim derlemesi, fmt, `-D warnings` ile
+clippy, 872 Rust testi, araç seçim değerlendirmesi %100.
+
+Sonra push edildi ve **GitHub'dan doğrulandı:** `4f56499` → `tests`
+başarılı, `secrets` başarılı. Uzun bir kırmızı serinin ardından ilk yeşil.
+
+---
+
 ## Yedek
 
 Silinen Svelte ağacı (35 dosya) depo dışında:
