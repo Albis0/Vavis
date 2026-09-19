@@ -1,0 +1,91 @@
+    .shell {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        background: var(--bg);
+        overflow: hidden;
+    }
+
+    /* -- Title strip --------------------------------------------------- */
+
+    .titlebar {
+        height: 38px;
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 var(--sp-2) 0 var(--sp-4);
+        /* No border: a line under the title strip boxes the window in. The
+       strip is told apart from the stage by its content, not a rule. */
+        z-index: 10;
+    }
+
+    .brand {
+        font-size: var(--text-sm);
+        font-weight: 600;
+        letter-spacing: 0.01em;
+        color: var(--text-muted);
+    }
+
+    .titlebar-actions {
+        display: flex;
+        align-items: center;
+        gap: var(--sp-1);
+    }
+
+    /* The palette's own affordance. Without it Ctrl+K is a secret, and the
+     brief was explicit that nothing should have to be memorised. */
+    .chip {
+        font-size: var(--text-xs);
+        color: var(--text-faint);
+        padding: var(--sp-1) var(--sp-2);
+        border-radius: var(--r-full);
+        margin-right: var(--sp-2);
+    }
+    .chip kbd {
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+        color: var(--text-faint);
+        background: var(--surface-hover);
+        border-radius: var(--r-sm);
+        padding: 1px 5px;
+    }
+
+    .wb {
+        padding: var(--sp-2);
+        color: var(--text-faint);
+        border-radius: var(--r-sm);
+    }
+    .wb:hover {
+        color: var(--text);
+    }
+    .wb.close:hover {
+        background: var(--danger);
+        color: #fff;
+    }
+
+    /* -- Body ---------------------------------------------------------- */
+
+    .body {
+        flex: 1;
+        display: flex;
+        min-height: 0;
+        /* Both of these are load-bearing. A flex row's children default to
+       `min-width: auto`, so the rail and the chat panel could add up to more
+       than the window and push the panel past the right edge -- text in it
+       was being cut off. `min-width: 0` lets the row actually constrain
+       them; `overflow: hidden` keeps a wide message from doing the same
+       thing from the inside. */
+        min-width: 0;
+        overflow: hidden;
+    }
+
+    .stage {
+        flex: 1;
+        position: relative;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
