@@ -7,14 +7,12 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "check": "svelte-check --tsconfig ./tsconfig.json && tsc -p tsconfig.react.json",
+    "check": "tsc -p tsconfig.json",
     "check:lockfile": "bun install --frozen-lockfile",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "check:react": "tsc -p tsconfig.react.json"
+    "test:watch": "vitest"
   },
   "devDependencies": {
-    "@sveltejs/vite-plugin-svelte": "^5.0.3",
     "@tauri-apps/cli": "^2.1.0",
     "@tauri-apps/plugin-clipboard-manager": "^2.3.2",
     "@testing-library/jest-dom": "^7.0.1",
@@ -25,8 +23,6 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^5.2.0",
     "jsdom": "^30.0.1",
-    "svelte": "^5.19.0",
-    "svelte-check": "^4.1.4",
     "typescript": "^5.7.3",
     "vite": "^6.0.11",
     "vitest": "^5.0.0"

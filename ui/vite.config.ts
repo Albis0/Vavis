@@ -1,20 +1,10 @@
 import { defineConfig } from "vite";
-import { svelte } from "@sveltejs/vite-plugin-svelte";
 import react from "@vitejs/plugin-react";
 
 // Tauri expects a fixed port; a random one would leave the dev server
 // unreachable.
-//
-// Both plugins are loaded during the move to React. They do not conflict:
-// each claims files by extension, and the React plugin is scoped to the
-// directory holding the rewritten components so it never tries to transform
-// a `.ts` file that Svelte's store still owns. When the last `.svelte` file
-// is gone, the svelte plugin and its scope come out together.
 export default defineConfig({
-  plugins: [
-    svelte(),
-    react({ include: ["src/react/**/*.{ts,tsx}", "src/main.tsx"] }),
-  ],
+  plugins: [react()],
   clearScreen: false,
   server: {
     port: 5173,
