@@ -168,13 +168,14 @@ impl BrainClient {
         // bizimkilerden **tek bir tanesini** bile kabul etmiyor: istek 400
         // ile tamamen düşüyor. Süzgeç burada, gövdenin kurulduğu tek yerde —
         // çağıran tarafın atlaması mümkün değil.
-        let tools: &[serde_json::Value] =
-            if builtin::tool_support(cfg.provider, &cfg.model).accepts_functions() {
-                tools
-            } else {
-                tracing::debug!(model = %cfg.model, "model kendi araçlarını çalıştırıyor; şemalar gönderilmedi");
-                &[]
-            };
+        let tools: &[serde_json::Value] = if builtin::tool_support(cfg.provider, &cfg.model)
+            .accepts_functions()
+        {
+            tools
+        } else {
+            tracing::debug!(model = %cfg.model, "model kendi araçlarını çalıştırıyor; şemalar gönderilmedi");
+            &[]
+        };
 
         // Tool şemaları da bütçeye sayılır — 413'ün kök nedeni buydu.
         let fitted = fit_request(messages, tools.to_vec(), caps);

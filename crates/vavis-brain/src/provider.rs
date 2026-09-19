@@ -293,7 +293,10 @@ mod tests {
     #[test]
     fn a_safeguard_chat_model_is_not_mistaken_for_a_classifier() {
         assert!(is_chat_model("openai/gpt-oss-safeguard-20b"));
-        assert!(is_useful_model(Provider::Groq, "openai/gpt-oss-safeguard-20b"));
+        assert!(is_useful_model(
+            Provider::Groq,
+            "openai/gpt-oss-safeguard-20b"
+        ));
     }
 
     #[test]

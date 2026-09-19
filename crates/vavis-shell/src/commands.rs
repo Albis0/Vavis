@@ -818,8 +818,7 @@ async fn run_turn(
                 // The same exclusion as at the top of the turn: a tool the
                 // provider already runs server-side must not slip back in
                 // through a mid-turn request either.
-                let suppressed =
-                    vavis_brain::builtin::covers_web_search(cfg.provider, &cfg.model);
+                let suppressed = vavis_brain::builtin::covers_web_search(cfg.provider, &cfg.model);
                 let fresh: Vec<&str> = names
                     .into_iter()
                     .filter(|n| !offered.iter().any(|had| had == n))
@@ -3673,7 +3672,10 @@ mod tests {
         let mut c = vavis_core::Config::default();
         c.llm.provider = "groq".into();
         c.llm.model = "   ".into();
-        assert_eq!(model_for(&c, Provider::Groq), Provider::Groq.default_model());
+        assert_eq!(
+            model_for(&c, Provider::Groq),
+            Provider::Groq.default_model()
+        );
     }
 
     /// The guard must not reach past the provider whose rules it knows: a

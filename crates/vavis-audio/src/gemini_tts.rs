@@ -307,7 +307,10 @@ mod tests {
         assert_eq!(wav.len(), 44 + pcm.len());
 
         // Örnekleme hızı 24. baytta, little-endian.
-        assert_eq!(u32::from_le_bytes([wav[24], wav[25], wav[26], wav[27]]), 24_000);
+        assert_eq!(
+            u32::from_le_bytes([wav[24], wav[25], wav[26], wav[27]]),
+            24_000
+        );
         // Veri uzunluğu başlıkta doğru yazmalı.
         assert_eq!(
             u32::from_le_bytes([wav[40], wav[41], wav[42], wav[43]]) as usize,

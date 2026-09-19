@@ -82,7 +82,9 @@ async fn body_sent_for(model: &str) -> serde_json::Value {
             |_| {},
         )
         .await;
-    let raw = rx.recv_timeout(std::time::Duration::from_secs(10)).expect("istek gelmedi");
+    let raw = rx
+        .recv_timeout(std::time::Duration::from_secs(10))
+        .expect("istek gelmedi");
     serde_json::from_str(&raw).expect("gövde JSON değil")
 }
 
