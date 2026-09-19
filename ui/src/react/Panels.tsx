@@ -201,7 +201,7 @@ export default function Panels() {
                  one. Below that it is a control that can only ever narrow three rows
                  to two, which is friction rather than help. */}
             {!loading && !failure && !isEmpty && listLength >= SEARCHABLE ? (
-                <div className="search">
+                <div className="panels-search">
                     <input
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
@@ -210,50 +210,50 @@ export default function Panels() {
                         aria-label={`Filter ${title.toLowerCase()}`}
                     />
                     {query ? (
-                        <button className="clear" onClick={() => setQuery("")} aria-label="Clear filter">
+                        <button className="panels-clear" onClick={() => setQuery("")} aria-label="Clear filter">
                             <Icon name="close" size={13} />
                         </button>
                     ) : null}
                 </div>
             ) : null}
 
-            <div className="content">
+            <div className="panels-content">
                 {loading ? (
                     <>
                         {/* Skeleton rows rather than a spinner: they occupy the shape the
                              answer will, so the panel does not jump when it arrives. */}
-                        <div className="skeletons" aria-hidden="true">
+                        <div className="panels-skeletons" aria-hidden="true">
                             {Array.from({ length: 4 }, (_, row) => (
-                                <div key={row} className="skeleton" style={{ width: `${88 - row * 9}%` }}></div>
+                                <div key={row} className="panels-skeleton" style={{ width: `${88 - row * 9}%` }}></div>
                             ))}
                         </div>
                         <span className="sr-only">Loading…</span>
                     </>
                 ) : failure ? (
-                    <div className="state">
+                    <div className="panels-state">
                         <Icon name="warning" size={22} />
-                        <p className="state-title">That did not load.</p>
-                        <p className="state-body selectable">{failure}</p>
+                        <p className="panels-state-title">That did not load.</p>
+                        <p className="panels-state-body selectable">{failure}</p>
                         <button className="outline" onClick={load}>
                             Try again
                         </button>
                     </div>
                 ) : isEmpty ? (
-                    <div className="state">
+                    <div className="panels-state">
                         <Icon name={EMPTY[state.panel].icon} size={22} />
-                        <p className="state-title">{EMPTY[state.panel].title}</p>
-                        <p className="state-body">{EMPTY[state.panel].body}</p>
+                        <p className="panels-state-title">{EMPTY[state.panel].title}</p>
+                        <p className="panels-state-body">{EMPTY[state.panel].body}</p>
                     </div>
                 ) : noMatches ? (
-                    <div className="state">
-                        <p className="state-title">Nothing matches "{query}"</p>
+                    <div className="panels-state">
+                        <p className="panels-state-title">Nothing matches "{query}"</p>
                         <button className="outline" onClick={() => setQuery("")}>
                             Clear filter
                         </button>
                     </div>
                 ) : state.panel === "memory" ? (
                     shownFacts.map((fact) => (
-                        <div className="entry" key={fact.id}>
+                        <div className="panels-entry" key={fact.id}>
                             <span className="entry-text selectable">{fact.text}</span>
                             <div className="row-actions">
                                 <button className="danger row-action" onClick={() => forget(fact)}>
@@ -291,9 +291,9 @@ export default function Panels() {
                             chosen by what the request is about.
                         </p>
                         {shownTools.map((tool) => (
-                            <div className="entry tool-entry" key={tool.name}>
+                            <div className="panels-entry tool-entry" key={tool.name}>
                                 <div className="entry-main">
-                                    <span className="tool-name">
+                                    <span className="panels-tool-name">
                                         {tool.name}
                                         <span className="risk" data-risk={tool.risk}>
                                             {tool.risk}

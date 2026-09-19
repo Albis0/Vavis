@@ -37,17 +37,17 @@ export default function StatusBar({ onOpenSettings }: Props) {
     const status = state.status;
 
     return (
-        <footer className="bar">
+        <footer className="status-bar">
             <div className="left">
                 {!status?.keys.length ? (
                     // The one genuine error state: with no key nothing can work, so it
                     // gets colour and says what to do about it.
-                    <button className="item warn" onClick={onOpenSettings}>
+                    <button className="status-item status-warn" onClick={onOpenSettings}>
                         <Icon name="warning" size={13} />
                         <span>No API key — open settings</span>
                     </button>
                 ) : (
-                    <button className="item" onClick={onOpenSettings} title="Change model">
+                    <button className="status-item" onClick={onOpenSettings} title="Change model">
                         <span className="provider">{status.provider}</span>
                         <span className="sep">/</span>
                         <span className="model" title={status.model}>
@@ -65,7 +65,7 @@ export default function StatusBar({ onOpenSettings }: Props) {
                     // indistinguishable from a quiet session. Clicking goes to the switch
                     // that turns it off.
                     <button
-                        className="item warn"
+                        className="status-item status-warn"
                         onClick={onOpenSettings}
                         title="Every approval is off. Click to change."
                     >
@@ -77,26 +77,26 @@ export default function StatusBar({ onOpenSettings }: Props) {
                 {status?.steamGame ? (
                     // Context, not a control: you do not steer a game from a chat
                     // window. One line, and it disappears when the process does.
-                    <span className="item quiet" title="Running now">
+                    <span className="status-item quiet" title="Running now">
                         <span className="playing-dot"></span>
                         {status.steamGame}
                     </span>
                 ) : null}
 
                 {(status?.cpu ?? 0) >= BUSY_CPU ? (
-                    <span className="item quiet" title="System load">
+                    <span className="status-item quiet" title="System load">
                         {status?.cpu}% CPU
                     </span>
                 ) : null}
 
                 {status?.battery != null && status.battery < 20 ? (
-                    <span className="item warn" title="Battery low">
+                    <span className="status-item status-warn" title="Battery low">
                         {status.battery}%
                     </span>
                 ) : null}
 
                 <button
-                    className="item"
+                    className="status-item"
                     onClick={() => (chat.panel = "tools")}
                     title="Tools available to the model"
                 >
@@ -106,7 +106,7 @@ export default function StatusBar({ onOpenSettings }: Props) {
 
                 {(status?.factCount ?? 0) > 0 ? (
                     <button
-                        className="item"
+                        className="status-item"
                         onClick={() => (chat.panel = "memory")}
                         title="Facts remembered about you"
                     >
@@ -115,7 +115,7 @@ export default function StatusBar({ onOpenSettings }: Props) {
                     </button>
                 ) : null}
 
-                <span className="item version">v{status?.version ?? "—"}</span>
+                <span className="status-item version">v{status?.version ?? "—"}</span>
             </div>
         </footer>
     );

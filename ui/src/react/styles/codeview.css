@@ -20,7 +20,7 @@
 }
 
 .tree-head,
-.search {
+.code-search {
     display: flex;
     align-items: center;
     gap: var(--sp-2);
@@ -28,7 +28,7 @@
 }
 
 .tree-head input,
-.search input {
+.code-search input {
     flex: 1;
     min-width: 0;
     background: var(--surface);
@@ -40,11 +40,11 @@
     transition: border-color var(--fast) var(--ease);
 }
 .tree-head input:focus,
-.search input:focus {
+.code-search input:focus {
     border-color: var(--accent-line);
 }
 
-.clear {
+.code-clear {
     padding: var(--sp-2);
     color: var(--text-faint);
     flex: 0 0 auto;
@@ -61,7 +61,7 @@
     margin: 0 calc(-1 * var(--sp-2));
 }
 
-.section {
+.code-section {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -71,13 +71,13 @@
     color: var(--text-faint);
     padding: var(--sp-2) var(--sp-2) var(--sp-1);
 }
-.section button {
+.code-section button {
     font-size: var(--text-xs);
     padding: 0 var(--sp-1);
     color: var(--accent-text);
 }
 
-.entry {
+.code-entry {
     display: flex;
     align-items: center;
     gap: var(--sp-1);
@@ -88,18 +88,18 @@
     padding: var(--sp-1) var(--sp-2);
     border-radius: var(--r-sm);
 }
-.entry:hover {
+.code-entry:hover {
     color: var(--text);
     background: var(--surface-hover);
 }
-.entry.active {
+.code-entry.active {
     color: var(--text);
     background: var(--surface-active);
     font-weight: 500;
 }
 /* Folders read a shade stronger than the files inside them, which is what
    gives a deep tree any structure at a glance. */
-.entry.folder {
+.code-entry.folder {
     color: var(--text);
 }
 
@@ -165,7 +165,7 @@
     min-height: 0;
 }
 
-.bar {
+.code-bar {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -193,7 +193,7 @@
 
 /* Unsaved state is a dot beside the name, not a bullet character in it.
    A glyph inside the label shifts the name every time it appears. */
-.dot {
+.code-dot {
     width: 6px;
     height: 6px;
     border-radius: var(--r-full);
@@ -218,7 +218,7 @@
 
 /* The gutter and the textarea have to agree on both of these to the
    pixel, so they are declared once here and inherited by each. */
-.pane {
+.code-pane {
     --code-size: 13px;
     --code-line: 1.55;
     flex: 1;
@@ -260,7 +260,7 @@ textarea {
 
 /* -- States -------------------------------------------------------- */
 
-.state {
+.code-state {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -269,37 +269,37 @@ textarea {
     text-align: center;
     color: var(--text-faint);
 }
-.state.blank {
+.code-state.blank {
     flex: 1;
     justify-content: center;
     padding: var(--sp-7);
 }
 
-.state-title {
+.code-state-title {
     font-size: var(--text-base);
     font-weight: 600;
     color: var(--text);
 }
 
-.state-body {
+.code-state-body {
     font-size: var(--text-sm);
     color: var(--text-muted);
     line-height: 1.6;
     max-width: 40ch;
 }
 
-.state button {
+.code-state button {
     margin-top: var(--sp-2);
 }
 
-.skeletons {
+.code-skeletons {
     display: flex;
     flex-direction: column;
     gap: var(--sp-3);
     padding: var(--sp-3) var(--sp-2);
 }
 
-.skeleton {
+.code-skeleton {
     height: 12px;
     border-radius: var(--r-sm);
     background: var(--surface-hover);

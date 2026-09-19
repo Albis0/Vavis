@@ -56,13 +56,13 @@ header {
     white-space: nowrap;
 }
 
-.close {
+.np-close {
     padding: var(--sp-1);
     color: var(--text-faint);
     flex: 0 0 auto;
 }
 
-.row {
+.np-row {
     display: flex;
     align-items: center;
     gap: var(--sp-3);
@@ -140,20 +140,20 @@ header {
     margin-top: calc(-1 * var(--sp-1));
 }
 
-.controls {
+.np-controls {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: var(--sp-2);
 }
 
-.controls button {
+.np-controls button {
     padding: var(--sp-1) var(--sp-2);
     font-size: var(--text-base);
     color: var(--text-muted);
     line-height: 1;
 }
-.controls button:hover:not(:disabled) {
+.np-controls button:hover:not(:disabled) {
     color: var(--text);
 }
 

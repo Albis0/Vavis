@@ -72,14 +72,14 @@ describe("CodeView", () => {
         const editor = await screen.findByLabelText("a.txt");
 
         await user.type(editor, "!");
-        expect(document.querySelector(".dot")).toBeTruthy();
+        expect(document.querySelector(".code-dot")).toBeTruthy();
 
         const saveButton = screen.getByRole("button", { name: /Save/ });
         expect(saveButton).not.toBeDisabled();
         await user.click(saveButton);
 
         await waitFor(() => expect(api.writeWorkspaceFile).toHaveBeenCalled());
-        expect(document.querySelector(".dot")).toBeFalsy();
+        expect(document.querySelector(".code-dot")).toBeFalsy();
     });
 
     it("inserts four spaces on Tab instead of moving focus", async () => {

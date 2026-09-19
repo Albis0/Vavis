@@ -26,7 +26,7 @@ export default function UpdatesPane({ status, update, checking, oncheck }: Props
                 title="This build"
                 blurb="Vavis does not install updates by itself and does not check in the background. Nothing about you is sent with the check."
             >
-                <div className="row">
+                <div className="stat-row">
                     <span className="label">Version</span>
                     <span className="value">{status?.version ?? ""}</span>
                 </div>

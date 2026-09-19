@@ -1,4 +1,4 @@
-.row {
+.msg-row {
     display: flex;
     flex-direction: column;
     animation: fade-up var(--normal) var(--ease);
@@ -7,7 +7,7 @@
 
 /* -- User --------------------------------------------------------- */
 
-.row.user {
+.msg-row.user {
     align-items: flex-end;
 }
 
@@ -28,7 +28,7 @@
 
 /* -- Assistant ---------------------------------------------------- */
 
-.row.assistant {
+.msg-row.assistant {
     align-items: stretch;
 }
 
@@ -37,15 +37,15 @@
     min-width: 0;
 }
 
-.actions {
+.msg-actions {
     display: flex;
     gap: var(--sp-1);
     margin-top: var(--sp-1);
     opacity: 0;
     transition: opacity var(--fast) var(--ease);
 }
-.row.assistant:hover .actions,
-.actions:focus-within {
+.msg-row.assistant:hover .msg-actions,
+.msg-actions:focus-within {
     opacity: 1;
 }
 
@@ -148,7 +148,7 @@ button.note-line:hover {
     transform: rotate(90deg);
 }
 
-.detail {
+.msg-detail {
     margin: var(--sp-1) 0 var(--sp-2) var(--sp-5);
     padding: var(--sp-3);
     background: var(--surface-sunken);
@@ -165,7 +165,7 @@ button.note-line:hover {
     margin-top: var(--sp-3);
 }
 
-.detail pre {
+.msg-detail pre {
     font-family: var(--font-mono);
     font-size: var(--text-xs);
     color: var(--text-muted);
@@ -203,7 +203,7 @@ button.note-line:hover {
     color: var(--warning);
 }
 
-.tool-name {
+.msg-tool-name {
     font-family: var(--font-mono);
     font-size: var(--text-sm);
     color: var(--text);

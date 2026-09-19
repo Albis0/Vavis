@@ -20,7 +20,7 @@ export default function ShortcutsPane({ shortcuts }: Props) {
 
             <div className="list">
                 {shortcuts.map(([key, action]) => (
-                    <div className="row" key={key}>
+                    <div className="shortcut-row" key={key}>
                         <kbd>{key}</kbd>
                         <span>{action}</span>
                     </div>

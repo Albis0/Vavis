@@ -230,11 +230,11 @@ export default function Modal({
                             ) : null}
                         </div>
 
-                        <div className="header-actions">
+                        <div className="modal-header-actions">
                             {actions}
                             {showClose ? (
                                 <button
-                                    className="close"
+                                    className="modal-close"
                                     onClick={onClose}
                                     title={dismissable ? "Close (Esc)" : "Close"}
                                     aria-label="Close"

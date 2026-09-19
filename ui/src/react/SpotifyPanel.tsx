@@ -265,14 +265,14 @@ export default function SpotifyPanel({ onClose }: Props) {
             >
                 <span className="grip" aria-hidden="true"></span>
                 <span className="label">Now playing</span>
-                <button className="close" onClick={onClose} aria-label="Hide">
+                <button className="np-close" onClick={onClose} aria-label="Hide">
                     <Icon name="close" size={13} />
                 </button>
             </header>
 
             {now ? (
                 <>
-                    <div className="row">
+                    <div className="np-row">
                         {art ? (
                             <img className="art" src={art} alt="" />
                         ) : (
@@ -310,7 +310,7 @@ export default function SpotifyPanel({ onClose }: Props) {
                         <span>{clock(now.durationMs)}</span>
                     </div>
 
-                    <div className="controls">
+                    <div className="np-controls">
                         <button aria-label="Previous" onClick={() => control("previous")}>
                             ⏮
                         </button>

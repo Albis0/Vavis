@@ -1,7 +1,7 @@
 /* Sticky rather than a sibling of the scroll area: Modal gives its
    children one scrolling box, and a search field that scrolls out of
    sight is a search field you cannot correct. */
-.search {
+.palette-search {
     position: sticky;
     top: 0;
     z-index: 1;
@@ -14,7 +14,7 @@
     color: var(--text-faint);
 }
 
-.search input {
+.palette-search input {
     font-size: var(--text-md);
 }
 
@@ -29,7 +29,7 @@
     padding: var(--sp-2) var(--sp-2) var(--sp-1);
 }
 
-.item {
+.palette-item {
     display: flex;
     align-items: center;
     gap: var(--sp-3);
@@ -43,12 +43,12 @@
 
 /* Selection is driven by `data-selected`, not `:hover`, so the keyboard
  and the mouse cannot disagree about which row is active. */
-.item[data-selected="true"] {
+.palette-item[data-selected="true"] {
     background: var(--surface-active);
     color: var(--text);
 }
 
-.label {
+.palette-label {
     flex: 1;
     min-width: 0;
     overflow: hidden;

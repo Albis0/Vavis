@@ -560,9 +560,22 @@ input[type="number"] {
 
 /* ── ShortcutsPane.tsx ────────────────────────────────────────────────── */
 
+/* The key sits in its fixed column and the description follows it, rather
+   than the two being pushed to opposite edges -- which is what `.stat-row`
+   does, and why this is a row of its own. */
+.shortcut-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+    padding: var(--sp-2) 0;
+    border-bottom: 1px solid var(--line);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+}
+
 /* A fixed column so the descriptions line up rather than stepping in
    and out with the width of each key combination. */
-kbd {
+.shortcut-row kbd {
     flex: 0 0 120px;
     font-family: var(--font-mono);
     font-size: var(--text-xs);
@@ -774,7 +787,7 @@ kbd {
     flex-wrap: wrap;
 }
 
-.chip {
+.settings-chip {
     font-size: var(--text-xs);
     padding: var(--sp-1) var(--sp-2);
     border-radius: var(--r-full);
@@ -784,7 +797,7 @@ kbd {
     cursor: pointer;
     font-variant-numeric: tabular-nums;
 }
-.chip.on {
+.settings-chip.on {
     border-color: var(--accent-line, var(--line));
     color: var(--text);
     background: var(--surface-sunken);
@@ -839,3 +852,29 @@ kbd {
     color: var(--text-faint);
     font-family: var(--font-mono);
 }
+
+/* A label on the left, its value on the right.
+   Not `.row`: that is the global list-row -- a monospace, hoverable line in
+   a list of models or vaults -- and borrowing it here ran the label into
+   the value with no space between them ("Version0.7.4"). The panes wanted a
+   two-column row and there was never a rule for one. */
+.stat-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--sp-4);
+    padding: var(--sp-2) 0;
+    border-bottom: 1px solid var(--line);
+}
+
+.stat-row .label {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+}
+
+.stat-row .value {
+    font-size: var(--text-sm);
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+}
+

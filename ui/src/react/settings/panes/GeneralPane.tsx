@@ -86,7 +86,7 @@ export default function GeneralPane({ status, languages, windowModes, onchange }
             </Section>
 
             <Section title="Build">
-                <div className="row">
+                <div className="stat-row">
                     <span className="label">Version</span>
                     <span className="value">{status?.version ?? "—"}</span>
                 </div>

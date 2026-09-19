@@ -431,7 +431,7 @@ export default function App() {
                     </div>
                 </div>
 
-                <div className="body">
+                <div className="shell-body">
                     <main className="stage">
                         {state.view === "code" ? (
                             <CodeView />
