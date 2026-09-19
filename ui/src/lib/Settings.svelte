@@ -45,6 +45,17 @@
     import SearchPane from "./settings/panes/SearchPane.svelte";
     import CanvasPane from "./settings/panes/CanvasPane.svelte";
     import ToolsPane from "./settings/panes/ToolsPane.svelte";
+    import ShortcutsPane from "./settings/panes/ShortcutsPane.svelte";
+    import DataPane from "./settings/panes/DataPane.svelte";
+    import MemoryPane from "./settings/panes/MemoryPane.svelte";
+    import ObsidianPane from "./settings/panes/ObsidianPane.svelte";
+    import SpotifyPane from "./settings/panes/SpotifyPane.svelte";
+    import SteamPane from "./settings/panes/SteamPane.svelte";
+    import McpPane from "./settings/panes/McpPane.svelte";
+    import UpdatesPane from "./settings/panes/UpdatesPane.svelte";
+    import GeneralPane from "./settings/panes/GeneralPane.svelte";
+    import ProviderPane from "./settings/panes/ProviderPane.svelte";
+    import VoicePane from "./settings/panes/VoicePane.svelte";
     import { onMount } from "svelte";
     import { filterGroups } from "./settings/registry";
 
@@ -102,7 +113,6 @@
 
     let search = $state<SearchSettings | null>(null);
     let voice = $state<VoiceSettings | null>(null);
-    let voiceKeyDraft = $state("");
     let canvas = $state<CanvasSettings | null>(null);
     let vaults = $state<VaultInfo[]>([]);
     let spotify = $state<SpotifySettings | null>(null);
@@ -125,17 +135,6 @@
     let steamIdDraft = $state("");
     let steamKeyDraft = $state("");
     let spotifyIdDraft = $state("");
-    /**
-     * Whether the client id box is showing.
-     *
-     * Folded away by default because the built-in application means nobody
-     * has to touch it. It was the first thing on the screen, which made a one
-     * click integration read as a form to fill in.
-     */
-    let spotifyOwnApp = $state(false);
-
-    let mcpOpen = $state(false);
-    let mcpExpanded = $state<string | null>(null);
     let draft = $state({
         id: "",
         transport: "stdio",
@@ -265,96 +264,12 @@
         });
     }
 
-    async function saveVoiceKey() {
-        if (!voiceKeyDraft.trim()) return;
+    async function saveVoiceKey(key: string) {
         await run(async () => {
-            await api.setVoiceKey(voiceKeyDraft.trim());
-            voiceKeyDraft = "";
+            await api.setVoiceKey(key);
             voice = await api.voiceSettings();
         }, "ElevenLabs key saved, encrypted.");
     }
-
-    /** The voices that apply to whichever engine is selected. */
-    const voiceOptions = $derived.by((): [string, string][] => {
-        if (!voice) return [];
-        switch (voice.engine) {
-            case "edge":
-                return voice.edgeVoices;
-            case "kokoro":
-                return voice.kokoroVoices;
-            case "elevenlabs":
-                return voice.elevenVoices;
-            case "openai":
-                return voice.openaiVoices;
-            case "gemini":
-                return voice.geminiVoices;
-            // SAPI reports whatever Windows has installed, as plain names.
-            default:
-                return voice.sapiVoices.map((v) => [v, v] as [string, string]);
-        }
-    });
-
-    /** Which setting field the voice picker writes to. */
-    const voiceField = $derived(
-        (
-            {
-                edge: "edgeVoice",
-                kokoro: "kokoroVoice",
-                elevenlabs: "elevenVoice",
-                openai: "openaiVoice",
-                gemini: "geminiVoice",
-            } as Record<string, string>
-        )[voice?.engine ?? "sapi"] ?? "sapiVoice",
-    );
-
-    const selectedVoice = $derived(
-        (
-            {
-                edge: voice?.edgeVoice,
-                kokoro: voice?.kokoroVoice,
-                elevenlabs: voice?.elevenVoice,
-                openai: voice?.openaiVoice,
-                gemini: voice?.geminiVoice,
-            } as Record<string, string | undefined>
-        )[voice?.engine ?? "sapi"] ??
-            voice?.sapiVoice ??
-            "",
-    );
-
-    /**
-     * What picking "default" will actually get you.
-     *
-     * An empty value is stored as "follow the language", which is the right
-     * default but an opaque one to read in a list -- so the option says which
-     * voice that resolves to.
-     */
-    const defaultVoiceLabel = $derived.by(() => {
-        if (!voice || voice.engine !== "edge") return "system choice";
-        const match = voice.edgeVoices.find(
-            ([id]) => id === voice!.defaultEdgeVoice,
-        );
-        return match?.[1] ?? "follows your language";
-    });
-
-    /** Whether the chosen engine is missing the key it needs. */
-    const voiceKeyMissing = $derived(
-        voice?.engine === "elevenlabs"
-            ? !voice.hasElevenKey
-            : voice?.engine === "openai"
-              ? !voice.hasOpenaiKey
-              : voice?.engine === "gemini"
-                ? !voice.hasGeminiKey
-                : false,
-    );
-
-    /**
-     * True when the chat provider's own voice is speaking instead of the one
-     * in the picker. Worth saying out loud: otherwise the picker says one
-     * thing and the speaker does another, with nothing to explain the gap.
-     */
-    const voiceSwapped = $derived(
-        !!voice && voice.matchProvider && voice.effectiveEngine !== voice.engine,
-    );
 
     async function saveKey(provider: string) {
         // Nothing typed is not a failure — it is the ordinary case of opening
@@ -468,11 +383,6 @@
         });
     }
 
-    function bytes(n: number): string {
-        if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
-        if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
-        return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
-    }
 
     function close() {
         chat.panel = "none";
@@ -531,633 +441,102 @@
         <section class="pane">
 
             {#if active === "general"}
-                <h2>General</h2>
-
-                <label class="field">
-                    <span>Assistant name</span>
-                    <input
-                        value={status?.assistantName ?? ""}
-                        onchange={(e) => updateSetting("name", e.currentTarget.value)}
-                    />
-                </label>
-                <p class="hint">Spoken aloud by the voice, so pick something sayable.</p>
-
-                <label class="field">
-                    <span>Language</span>
-                    <!-- `selected` on the option rather than `value` on the
-                         select: the select renders before its options exist,
-                         so a value naming an option that is not there yet is
-                         dropped and the box shows the first entry instead. -->
-                    <select
-                        onchange={(e) => updateSetting("language", e.currentTarget.value)}
-                    >
-                        {#each LANGUAGES as [code, name] (code)}
-                            <option value={code} selected={code === (status?.language ?? "en")}>
-                                {name}
-                            </option>
-                        {/each}
-                    </select>
-                </label>
-
-                <label class="field">
-                    <span>Window</span>
-                    <select
-                        onchange={(e) => updateSetting("windowMode", e.currentTarget.value)}
-                    >
-                        {#each WINDOW_MODES as mode (mode)}
-                            <option
-                                value={mode}
-                                selected={mode === (status?.windowMode ?? "windowed")}
-                            >
-                                {mode}
-                            </option>
-                        {/each}
-                    </select>
-                </label>
-
-                <label class="field">
-                    <span>Font size</span>
-                    <input
-                        type="number"
-                        min="8"
-                        max="32"
-                        value={status?.fontSize ?? 14}
-                        onchange={(e) => updateSetting("fontSize", e.currentTarget.value)}
-                    />
-                </label>
-
-                <p class="hint">Version {status?.version ?? "—"}</p>
+                <GeneralPane
+                    {status}
+                    languages={LANGUAGES}
+                    windowModes={WINDOW_MODES}
+                    onchange={updateSetting}
+                />
             {:else if active === "provider"}
-                <h2>Model &amp; keys</h2>
-                <p class="hint">
-                    One card per provider: whether it holds a key, whether it answers,
-                    and which one is doing the answering. Keys are encrypted with
-                    Windows DPAPI, never written to the settings file, and never shown
-                    again once saved.
-                </p>
-
-                <div class="cards">
-                    {#each status?.providers ?? [] as p (p.id)}
-                        {@const selected = p.id === status?.provider}
-                        {@const blocked = p.needsKey && !p.hasKey}
-                        <!-- A div, not a button: the card holds a key field and its own
-                             buttons, and nesting those inside a button is invalid and
-                             swallows their clicks. Selection is the separate control at
-                             the end of the header row. -->
-                        <div class="card" class:selected class:blocked>
-                            <div class="card-head">
-                                <span class="card-name">{p.id}</span>
-                                <!-- Beside the name, not under it. On its own line it
-                                     was a row of its own for one short string, which
-                                     made every card taller than it had anything to
-                                     say. -->
-                                <span class="card-model">
-                                    {selected ? (status?.model ?? p.defaultModel) : p.defaultModel}
-                                </span>
-
-                                <span class="card-spacer"></span>
-
-                                {#if !p.needsKey}
-                                    <span class="tag key-tag" data-tone="neutral">no key needed</span>
-                                {:else if p.hasKey}
-                                    <span class="tag key-tag" data-tone="good">key stored</span>
-                                {:else}
-                                    <span class="tag key-tag" data-tone="warn">no key</span>
-                                {/if}
-
-                                {#if selected}
-                                    <span class="tag pick" data-tone="accent">answering</span>
-                                {:else}
-                                    <button
-                                        class="tiny pick"
-                                        onclick={() => pickProvider(p.id)}
-                                        title={blocked
-                                            ? "can be selected, but will not answer until a key is stored"
-                                            : `default model: ${p.defaultModel}`}
-                                    >
-                                        use this
-                                    </button>
-                                {/if}
-                            </div>
-
-                            {#if tests[p.id]}
-                                <p class="result" class:bad={!tests[p.id].ok}>
-                                    {tests[p.id].ok ? "✓" : "✕"}
-                                    {tests[p.id].detail}
-                                </p>
-                            {/if}
-
-                            {#if keyOpen === p.id}
-                                <!-- svelte-ignore a11y_autofocus -->
-                                <input
-                                    class="key-input"
-                                    type="password"
-                                    autofocus
-                                    bind:value={keyDraft}
-                                    placeholder={p.hasKey
-                                        ? "paste a new key to replace the stored one…"
-                                        : "paste key…"}
-                                    onkeydown={(e) => {
-                                        if (e.key === "Enter") saveKey(p.id);
-                                        if (e.key === "Escape") {
-                                            keyDraft = "";
-                                            keyOpen = null;
-                                        }
-                                    }}
-                                    onblur={() => saveKey(p.id)}
-                                />
-                                <p class="hint small">
-                                    Saved on Enter or when you leave the field. Esc discards it.
-                                </p>
-                            {/if}
-
-                            <div class="card-actions">
-                                {#if p.needsKey}
-                                    <button class="tiny" onclick={() => openKey(p.id)}>
-                                        {keyOpen === p.id
-                                            ? "cancel"
-                                            : p.hasKey
-                                              ? "replace key"
-                                              : "add key"}
-                                    </button>
-                                {/if}
-                                <button
-                                    class="tiny"
-                                    disabled={blocked || testing !== null}
-                                    onclick={() => test(p.id)}
-                                    title={blocked ? "store a key first" : "make a real request"}
-                                >
-                                    {testing === p.id ? "testing…" : "test"}
-                                </button>
-                                {#if selected}
-                                    <button class="tiny" onclick={fetchModels} disabled={loadingModels}>
-                                        {loadingModels ? "loading…" : "change model"}
-                                    </button>
-                                {/if}
-                            </div>
-
-                            <!-- Under the card whose provider they belong to, so there is
-                                 never a list of models with no visible owner. -->
-                            {#if selected && models.length}
-                                <div class="list scroll">
-                                    {#each models as m (m)}
-                                        <button
-                                            class="row"
-                                            class:active={m === status?.model}
-                                            onclick={() => pickModel(m)}
-                                        >
-                                            {m}
-                                        </button>
-                                    {/each}
-                                </div>
-                            {/if}
-                        </div>
-                    {/each}
-                </div>
-
-                <h3>Tool routing</h3>
-                <p class="hint">
-                    A small, cheap model reads your request and decides which tools the
-                    main model needs, so only those are sent. Leave this empty to match
-                    tools by keyword instead — no extra call, no extra cost.
-                </p>
-
-                <label class="field">
-                    <span>Router model</span>
-                    <input
-                        type="text"
-                        placeholder="off — e.g. llama-3.1-8b-instant"
-                        value={status?.routerModel ?? ""}
-                        onchange={(e) =>
-                            updateSetting("routerModel", e.currentTarget.value)}
-                    />
-                </label>
-                <p class="hint">
-                    Runs on the provider and key you already use. If it is slow or
-                    fails, keyword matching takes over — the assistant keeps working.
-                </p>
+                <ProviderPane
+                    {status}
+                    {tests}
+                    {testing}
+                    {models}
+                    {loadingModels}
+                    {keyOpen}
+                    bind:keyDraft
+                    onpickprovider={pickProvider}
+                    onpickmodel={pickModel}
+                    onopenkey={openKey}
+                    onsavekey={saveKey}
+                    oncancelkey={() => {
+                        keyDraft = "";
+                        keyOpen = null;
+                    }}
+                    onfetchmodels={fetchModels}
+                    ontest={test}
+                    onchange={updateSetting}
+                />
             {:else if active === "voice"}
-                <h2>Voice</h2>
-                <p class="hint">
-                    Off, wake word, or always listening. The rail on the left switches
-                    between them, and so does Ctrl+M.
-                </p>
-
-                <div class="field">
-                    <span>Mode</span>
-                    <span class="value">{status?.voiceMode ?? "off"}</span>
-                </div>
-
-                <div class="actions">
-                    <button onclick={() => chat.cycleVoice()}>cycle mode</button>
-                    {#if status?.speaking}
-                        <button onclick={() => chat.stopSpeaking()}>stop speaking</button>
-                    {/if}
-                </div>
-
-                <p class="hint">
-                    Speech recognition runs through Groq, so it needs the Groq key even
-                    when another provider is answering.
-                </p>
-
-                <h2>Speaking</h2>
-                <p class="hint">
-                    Which voice reads the replies. If the one you pick cannot be
-                    reached, Vavis says so out loud and falls back to one that works —
-                    it will not go silent on you.
-                </p>
-
-                {#if voice}
-                    <label class="field">
-                        <span>Engine</span>
-                        <select
-                            onchange={(e) =>
-                                updateVoice("voiceEngine", e.currentTarget.value)}
-                        >
-                            <!-- `selected` on the option, not `value` on the
-                                 select: the select is rendered before its
-                                 options exist, so a value naming an option
-                                 that is not there yet is discarded and the
-                                 box silently snaps back to the first entry.
-                                 That is why changing the voice looked like it
-                                 did nothing. -->
-                            {#each voice.engines as e (e.id)}
-                                <option value={e.id} selected={e.id === voice.engine}>
-                                    {e.label}
-                                </option>
-                            {/each}
-                        </select>
-                    </label>
-
-                    {#if voiceKeyMissing}
-                        <p class="hint warn-text">
-                            This engine needs a key before it can speak. Until then
-                            Vavis falls back to a free voice.
-                        </p>
-                    {/if}
-
-                    <label class="switch">
-                        <input
-                            type="checkbox"
-                            checked={voice.matchProvider}
-                            onchange={(e) =>
-                                updateVoice(
-                                    "matchProvider",
-                                    String(e.currentTarget.checked),
-                                )}
-                        />
-                        <span>Use the chat provider's own voice when it has one</span>
-                    </label>
-                    <p class="hint">
-                        Talking to Gemini sounds like Gemini. Only swaps between engines
-                        that already need a key — a free offline voice is left alone, so
-                        this cannot quietly move you onto a metered one.
-                    </p>
-                    {#if voiceSwapped}
-                        <p class="hint">
-                            Speaking with <strong>{voice.effectiveEngine}</strong> right
-                            now, because that is who you are chatting with.
-                        </p>
-                    {/if}
-
-                    <label class="field">
-                        <span>Voice</span>
-                        <select
-                            onchange={(e) =>
-                                updateVoice(voiceField, e.currentTarget.value)}
-                        >
-                            <option value="" selected={!selectedVoice}>
-                                default ({defaultVoiceLabel})
-                            </option>
-                            {#each voiceOptions as [id, label] (id)}
-                                <option value={id} selected={id === selectedVoice}>
-                                    {label}
-                                </option>
-                            {/each}
-                        </select>
-                    </label>
-
-                    <label class="field">
-                        <span>Speed</span>
-                        <input
-                            type="number"
-                            min="-10"
-                            max="10"
-                            value={voice.rate}
-                            onchange={(e) =>
-                                updateVoice("voiceRate", e.currentTarget.value)}
-                        />
-                    </label>
-
-                    <label class="field">
-                        <span>Volume</span>
-                        <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            value={voice.volume}
-                            onchange={(e) =>
-                                updateVoice("voiceVolume", e.currentTarget.value)}
-                        />
-                    </label>
-
-                    <div class="actions">
-                        <button onclick={() => api.previewVoice()}>
-                            hear this voice
-                        </button>
-                    </div>
-
-                    {#if voice.engine === "kokoro"}
-                        <!-- Kokoro is a model the user runs themselves, so the
-                             one thing they need from us is the command. -->
-                        <p class="hint">
-                            Kokoro runs on your own machine, so nothing is sent
-                            anywhere and it costs nothing. Vavis does not install or
-                            start it — run the server yourself and point this at it:
-                        </p>
-                        <pre class="snippet selectable">docker run -p 8880:8880 ghcr.io/remsky/kokoro-fastapi-cpu</pre>
-                        <label class="field">
-                            <span>Server</span>
-                            <input
-                                type="text"
-                                placeholder={voice.kokoroDefaultUrl}
-                                value={voice.kokoroUrl}
-                                onchange={(e) =>
-                                    updateVoice("kokoroUrl", e.currentTarget.value)}
-                            />
-                        </label>
-                        <p class="hint">
-                            Leave the address empty to use the default above.
-                        </p>
-                    {/if}
-
-                    {#if voice.engine === "elevenlabs"}
-                        <label class="field">
-                            <span>
-                                ElevenLabs key
-                                <span
-                                    class="risk"
-                                    data-risk={voice.hasElevenKey
-                                        ? "safe"
-                                        : "destructive"}
-                                >
-                                    {voice.hasElevenKey ? "stored" : "no key"}
-                                </span>
-                            </span>
-                            <input
-                                type="password"
-                                placeholder="paste and press Enter"
-                                bind:value={voiceKeyDraft}
-                                onkeydown={(e) => e.key === "Enter" && saveVoiceKey()}
-                                onblur={saveVoiceKey}
-                            />
-                        </label>
-                    {/if}
-
-                    {#if voice.engine === "openai"}
-                        <p class="hint">
-                            Uses the OpenAI key from the API keys section — the same
-                            one chat uses, so there is nothing extra to paste.
-                            {voice.hasOpenaiKey ? "" : " No key stored yet."}
-                        </p>
-                    {/if}
-                {/if}
+                <VoicePane
+                    {status}
+                    {voice}
+                    onupdate={updateVoice}
+                    onsavekey={saveVoiceKey}
+                />
             {:else if active === "memory"}
-                <h2>Memory</h2>
-                <p class="hint">
-                    Facts the assistant keeps between conversations. Clearing the
-                    conversation does not touch these.
-                </p>
-
-                {#if facts.length === 0}
-                    <p class="hint">Nothing remembered yet. Try "remember that I…".</p>
-                {:else}
-                    <div class="list scroll">
-                        {#each facts as fact (fact.id)}
-                            <div class="entry">
-                                <div class="entry-main">
-                                    <span class="tool-desc">{fact.text}</span>
-                                </div>
-                                <div class="entry-actions">
-                                    <button
-                                        class="danger tiny"
-                                        onclick={() =>
-                                            run(async () => {
-                                                await api.forgetFact(fact.id);
-                                                facts = await api.listFacts();
-                                                await chat.refresh();
-                                            })}
-                                    >
-                                        forget
-                                    </button>
-                                </div>
-                            </div>
-                        {/each}
-                    </div>
-                {/if}
+                <MemoryPane
+                    {facts}
+                    onforget={(id) =>
+                        run(async () => {
+                            await api.forgetFact(id);
+                            facts = await api.listFacts();
+                            await chat.refresh();
+                        })}
+                />
             {:else if active === "search"}
                 <SearchPane {search} reload={load} />
             {:else if active === "canvas"}
                 <CanvasPane {canvas} reload={load} />
             {:else if active === "obsidian"}
-                <h2>Obsidian</h2>
-                {#if vaults.length === 0}
-                    <p class="hint">
-                        No vault found. Obsidian does not have to be running — Vavis reads
-                        the Markdown files directly — but it needs to know where the vault is.
-                    </p>
-                {:else}
-                    <p class="hint">
-                        Notes are read and written on disk, so this works whether or not
-                        Obsidian is open.
-                    </p>
-                    <div class="list">
-                        {#each vaults as v (v.path)}
-                            <button
-                                class="row"
-                                class:active={v.active}
-                                title={v.path}
-                                onclick={() => pickVault(v.path)}
-                            >
-                                {v.active ? "● " : "○ "}{v.name}
-                            </button>
-                        {/each}
-                    </div>
-
-                    <div class="actions">
-                        <button onclick={() => test("obsidian")} disabled={testing !== null}>
-                            {testing === "obsidian" ? "reading…" : "test"}
-                        </button>
-                    </div>
-                    {#if tests.obsidian}
-                        <p class="result" class:bad={!tests.obsidian.ok}>
-                            {tests.obsidian.ok ? "✓" : "✕"} {tests.obsidian.detail}
-                        </p>
-                    {/if}
-                {/if}
-            {:else if active === "spotify"}
-                <h2>Spotify</h2>
-                {#if spotify?.connected}
-                    <p class="result">✓ Connected.</p>
-                    <div class="actions">
-                        <button onclick={() => test("spotify")} disabled={testing !== null}>
-                            test
-                        </button>
-                        <button class="danger" onclick={disconnectSpotify}>disconnect</button>
-                    </div>
-                    {#if tests.spotify}
-                        <p class="result" class:bad={!tests.spotify.ok}>
-                            {tests.spotify.ok ? "✓" : "✕"} {tests.spotify.detail}
-                        </p>
-                    {/if}
-                {:else}
-                    <p class="hint">
-                        Opens Spotify in your browser. Approve there and you are done —
-                        there is nothing to set up first.
-                    </p>
-                    <div class="actions">
-                        <button class="primary" onclick={connectSpotify}>connect</button>
-                    </div>
-                    <button class="disclosure" onclick={() => (spotifyOwnApp = !spotifyOwnApp)}>
-                        {spotifyOwnApp ? "▾" : "▸"} use my own Spotify app
-                    </button>
-                    {#if spotifyOwnApp}
-                        <p class="hint">
-                            Only worth doing if you want your own name on the consent screen.
-                            Register this exact redirect URI on the app, then paste its client
-                            id here. Leaving it empty goes back to the built-in one.
-                        </p>
-                        <p class="path selectable">{spotify?.redirectUri ?? ""}</p>
-                        <input bind:value={spotifyIdDraft} placeholder="client id (optional)" />
-                        <div class="actions">
-                            <button
-                                onclick={() =>
-                                    run(async () => {
-                                        await api.setSpotifyClientId(spotifyIdDraft.trim());
-                                        spotify = await api.spotifySettings();
-                                    }, "Client id saved.")}
-                            >
-                                save id
-                            </button>
-                        </div>
-                    {/if}
-                {/if}
-            {:else if active === "steam"}
-                <h2>Steam</h2>
-                <p class="hint">
-                    Needs a Web API key and your SteamID64. Game details must be public, or
-                    Steam returns an empty library without saying why.
-                </p>
-                <input bind:value={steamIdDraft} placeholder="SteamID64 (17 digits)" />
-                <input
-                    type="password"
-                    bind:value={steamKeyDraft}
-                    placeholder={steam?.hasKey ? "key stored — paste to replace" : "Web API key…"}
-                    onkeydown={(e) => e.key === "Enter" && saveSteam()}
+                <ObsidianPane
+                    {vaults}
+                    result={tests.obsidian}
+                    testing={testing === "obsidian"}
+                    onpick={pickVault}
+                    ontest={() => test("obsidian")}
                 />
-                <div class="actions">
-                    <button class="primary" onclick={saveSteam}>save and check</button>
-                    <button
-                        onclick={() => test("steam")}
-                        disabled={testing !== null || !steam?.hasKey}
-                    >
-                        {testing === "steam" ? "asking…" : "test"}
-                    </button>
-                </div>
-                {#if tests.steam}
-                    <p class="result" class:bad={!tests.steam.ok}>
-                        {tests.steam.ok ? "✓" : "✕"} {tests.steam.detail}
-                    </p>
-                {/if}
-                <p class="hint">
-                    Which game is running is detected locally, so that part works even on a
-                    private profile.
-                </p>
+            {:else if active === "spotify"}
+                <SpotifyPane
+                    {spotify}
+                    clientId={spotifyIdDraft}
+                    result={tests.spotify}
+                    testing={testing === "spotify"}
+                    onconnect={connectSpotify}
+                    ondisconnect={disconnectSpotify}
+                    ontest={() => test("spotify")}
+                    onsaveid={(id) =>
+                        run(async () => {
+                            spotifyIdDraft = id;
+                            await api.setSpotifyClientId(id);
+                            spotify = await api.spotifySettings();
+                        }, "Client id saved.")}
+                />
+            {:else if active === "steam"}
+                <SteamPane
+                    {steam}
+                    steamId={steamIdDraft}
+                    result={tests.steam}
+                    testing={testing === "steam"}
+                    onsave={(id, key) => {
+                        steamIdDraft = id;
+                        steamKeyDraft = key;
+                        void saveSteam();
+                    }}
+                    ontest={() => test("steam")}
+                />
             {:else if active === "mcp"}
-                <h2>MCP servers</h2>
-                <p class="hint">
-                    Connect any MCP server and its tools become available. A server runs as
-                    a process on this machine, so its tools always ask before running.
-                </p>
-
-                {#each mcp as server (server.id)}
-                    <div class="entry" class:off={!server.enabled}>
-                        <div class="entry-main">
-                            <span class="tool-name">
-                                {server.id}
-                                <span class="risk" data-risk={server.connected ? "safe" : "destructive"}>
-                                    {server.connected ? "connected" : "offline"}
-                                </span>
-                            </span>
-                            <!-- Exactly what runs, so it can be judged before it does. -->
-                            <span class="tool-desc selectable">{server.commandLine}</span>
-                            {#if server.connected}
-                                <button
-                                    class="disclosure"
-                                    onclick={() =>
-                                        (mcpExpanded = mcpExpanded === server.id ? null : server.id)}
-                                >
-                                    {mcpExpanded === server.id ? "▾" : "▸"}
-                                    {server.tools.length + server.disabled.length} tools
-                                </button>
-                            {/if}
-                        </div>
-                        <div class="entry-actions">
-                            <button
-                                class="tiny"
-                                onclick={() =>
-                                    mcpAction(() => api.toggleMcpServer(server.id, !server.enabled))}
-                            >
-                                {server.enabled ? "disable" : "enable"}
-                            </button>
-                            <button
-                                class="danger tiny"
-                                onclick={() => mcpAction(() => api.removeMcpServer(server.id))}
-                            >
-                                remove
-                            </button>
-                        </div>
-                    </div>
-
-                    {#if mcpExpanded === server.id}
-                        <div class="list">
-                            {#each [...server.tools, ...server.disabled].sort() as tool (tool)}
-                                {@const on = !server.disabled.includes(tool)}
-                                <button
-                                    class="row"
-                                    class:active={on}
-                                    onclick={() => mcpAction(() => api.toggleMcpTool(server.id, tool, !on))}
-                                >
-                                    {on ? "● " : "○ "}{tool}
-                                </button>
-                            {/each}
-                        </div>
-                    {/if}
-                {/each}
-
-                <button class="disclosure" onclick={() => (mcpOpen = !mcpOpen)}>
-                    {mcpOpen ? "▾" : "▸"} add a server
-                </button>
-                {#if mcpOpen}
-                    <input bind:value={draft.id} placeholder="id, e.g. github" />
-                    <label class="field">
-                        <span>Transport</span>
-                        <select bind:value={draft.transport}>
-                            <option value="stdio">stdio</option>
-                            <option value="http">http</option>
-                        </select>
-                    </label>
-                    {#if draft.transport === "stdio"}
-                        <input bind:value={draft.command} placeholder="command, e.g. npx" />
-                        <input bind:value={draft.args} placeholder="arguments, e.g. -y @modelcontextprotocol/server-github" />
-                    {:else}
-                        <input bind:value={draft.url} placeholder="https://…/mcp" />
-                        <input bind:value={draft.headerName} placeholder="auth header (optional)" />
-                        <input bind:value={draft.headerValue} placeholder="header value, e.g. Bearer {'{key}'}" />
-                    {/if}
-                    <input type="password" bind:value={draft.secret} placeholder="secret (optional)" />
-                    <button class="primary" onclick={saveMcp}>add and connect</button>
-                {/if}
+                <McpPane
+                    servers={mcp}
+                    bind:draft
+                    ontoggleserver={(id, enabled) =>
+                        mcpAction(() => api.toggleMcpServer(id, enabled))}
+                    onremove={(id) => mcpAction(() => api.removeMcpServer(id))}
+                    ontoggletool={(id, tool, enabled) =>
+                        mcpAction(() => api.toggleMcpTool(id, tool, enabled))}
+                    onsave={saveMcp}
+                />
             {:else if active === "tools"}
                 <ToolsPane
                     {tools}
@@ -1165,95 +544,20 @@
                     ontoggle={toggleFullAuthority}
                 />
             {:else if active === "shortcuts"}
-                <h2>Shortcuts</h2>
-                <div class="list">
-                    {#each SHORTCUTS as [key, action] (key)}
-                        <div class="shortcut-row">
-                            <kbd>{key}</kbd>
-                            <span>{action}</span>
-                        </div>
-                    {/each}
-                </div>
+                <ShortcutsPane shortcuts={SHORTCUTS} />
             {:else if active === "data"}
-                <h2>Data</h2>
-                <p class="hint">Everything Vavis stores lives here:</p>
-                <p class="path selectable">{status?.dataDir ?? ""}</p>
-
-                <div class="field">
-                    <span>Conversation</span>
-                    <span class="value">{status?.messageCount ?? 0} messages</span>
-                </div>
-                <div class="field">
-                    <span>Remembered</span>
-                    <span class="value">{status?.factCount ?? 0} facts</span>
-                </div>
-                {#if canvas}
-                    <div class="field">
-                        <span>Generated</span>
-                        <span class="value">{canvas.items} files · {bytes(canvas.bytes)}</span>
-                    </div>
-                {/if}
-
-                <div class="actions">
-                    <button class="danger" onclick={() => chat.clearWithConfirm()}>
-                        Clear the conversation
-                    </button>
-                </div>
-                <p class="hint">Remembered facts survive that — forget them in Memory.</p>
-
+                <DataPane
+                    {status}
+                    {canvas}
+                    onclear={() => chat.clearWithConfirm()}
+                />
             {:else if active === "updates"}
-                <h2>Updates</h2>
-
-                <div class="field">
-                    <span>This build</span>
-                    <span class="value">{status?.version ?? ""}</span>
-                </div>
-
-                <p class="hint">
-                    Vavis does not install updates by itself, and does not update in
-                    the background. It checks the project's release page and tells
-                    you what it found; downloading is yours to start. Nothing about
-                    you is sent with the check.
-                </p>
-
-                <div class="actions">
-                    <button onclick={checkUpdate} disabled={checkingUpdate}>
-                        {checkingUpdate ? "checking…" : "check for updates"}
-                    </button>
-                </div>
-
-                {#if update?.status === "available"}
-                    <div class="update-box">
-                        <p class="update-head">
-                            Version {update.latest} is out — you have {update.current}.
-                        </p>
-                        {#if update.notes}
-                            <pre class="snippet selectable">{update.notes}</pre>
-                        {/if}
-                        <div class="actions">
-                            <button class="primary" onclick={() => api.openReleasePage()}>
-                                open the download page
-                            </button>
-                        </div>
-                        <p class="hint">
-                            The page has the installer and a checksum. Close Vavis
-                            before running it.
-                        </p>
-                    </div>
-                {:else if update?.status === "upToDate"}
-                    <p class="hint">You are on the newest release ({update.current}).</p>
-                {:else if update?.status === "failed"}
-                    <!-- Deliberately not phrased as "up to date": a check that
-                         could not run has not established anything. -->
-                    <p class="hint warn-text">
-                        Could not check: {update.error}. Your build is {update.current}.
-                    </p>
-                    <div class="actions">
-                        <button onclick={() => api.openReleasePage()}>
-                            open the release page anyway
-                        </button>
-                    </div>
-                {/if}
+                <UpdatesPane
+                    {status}
+                    {update}
+                    checking={checkingUpdate}
+                    oncheck={checkUpdate}
+                />
             {/if}
         </section>
     </div>
@@ -1404,419 +708,5 @@
        contents now get to. */
     .pane > :global(*) {
         max-width: 760px;
-    }
-
-    h2 {
-        margin: 0 0 var(--sp-2);
-        font-size: var(--text-lg);
-        font-weight: 600;
-        color: var(--text);
-    }
-
-    /* The one raised block in this pane: a waiting update is the only thing
-       here that asks the reader to do something. */
-    .update-box {
-        margin-top: 0.75rem;
-        padding: 0.85rem 1rem;
-        border: 1px solid var(--line, #333);
-        border-radius: 8px;
-        background: var(--raised, rgba(255, 255, 255, 0.03));
-    }
-
-    .update-head {
-        margin: 0 0 0.5rem;
-        font-weight: 600;
-    }
-
-    /* Plain case and muted, matching `.section-label` in the design system.
-       These were mono all-caps in the accent colour, which made every
-       sub-heading louder than the setting under it. */
-    h3 {
-        margin: var(--sp-4) 0 0;
-        font-size: var(--text-xs);
-        font-weight: 600;
-        letter-spacing: 0.02em;
-        color: var(--text-faint);
-    }
-
-    .field {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--sp-3);
-        font-size: var(--text-base);
-        color: var(--text-muted);
-        min-height: 34px;
-    }
-    .field > span:first-child {
-        flex: 0 0 auto;
-    }
-    .field input,
-    .field select {
-        flex: 0 1 260px;
-    }
-    .field .value {
-        font-family: var(--font-mono);
-        font-size: var(--text-xs);
-        color: var(--text);
-    }
-
-    /* A command the user is meant to copy and run. Monospace because the
-       spacing is load-bearing, selectable because copying is the point. */
-    .snippet {
-        font-family: var(--font-mono);
-        font-size: var(--text-xs);
-        color: var(--text);
-        background: var(--surface-sunken);
-        border: 1px solid var(--line);
-        border-radius: var(--r-sm);
-        padding: var(--sp-2) var(--sp-3);
-        margin: var(--sp-2) 0;
-        /* A long command scrolls inside its box rather than widening the
-           panel and pushing everything else off the edge. */
-        overflow-x: auto;
-        white-space: pre;
-    }
-
-    .warn-text {
-        color: var(--warning);
-    }
-
-    /* A checkbox and its label as one clickable row. The label leads and the
-       box follows, matching `.field`, so the two read as the same kind of
-       control rather than two different ideas of a setting. */
-
-
-    .actions {
-        display: flex;
-        gap: var(--sp-1);
-        flex-wrap: wrap;
-    }
-
-
-    .result {
-        margin: 0;
-        font-size: var(--text-sm);
-        color: var(--success);
-    }
-    .result.bad {
-        color: var(--warning);
-    }
-
-    .hint {
-        margin: 0;
-        font-size: var(--text-sm);
-        color: var(--text-faint);
-        line-height: 1.55;
-        max-width: 72ch;
-    }
-
-    .path {
-        margin: 0;
-        font-family: var(--font-mono);
-        font-size: var(--text-xs);
-        color: var(--text-muted);
-        word-break: break-all;
-    }
-
-    /* A section header that happens to be clickable, not a control competing
-       with the action above it. */
-    .disclosure {
-        align-self: flex-start;
-        padding: 0;
-        border: none;
-        background: none;
-        font-size: var(--text-xs);
-        color: var(--text-faint);
-    }
-    .disclosure:hover {
-        color: var(--text-muted);
-    }
-
-    .list {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-    }
-    .scroll {
-        max-height: 320px;
-        overflow-y: auto;
-    }
-
-    .row {
-        border: none;
-        background: none;
-        text-align: left;
-        font-family: var(--font-mono);
-        font-size: var(--text-xs);
-        color: var(--text-muted);
-        padding: var(--sp-1) var(--sp-2);
-        border-radius: var(--r-sm);
-    }
-    .row:hover {
-        background: var(--surface-hover);
-        color: var(--text);
-    }
-    .row.active {
-        color: var(--accent-hover);
-    }
-
-
-
-
-
-
-
-    .entry-actions {
-        display: flex;
-        gap: var(--sp-1);
-        flex: 0 0 auto;
-        align-items: center;
-    }
-
-    .entry {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: var(--sp-2);
-        padding: var(--sp-2) 0;
-        border-bottom: 1px solid var(--line);
-    }
-    .entry.off {
-        opacity: 0.5;
-    }
-
-    .entry-main {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-        min-width: 0;
-    }
-
-    .tool-name {
-        display: flex;
-        align-items: center;
-        gap: var(--sp-1);
-        font-family: var(--font-mono);
-        font-size: var(--text-xs);
-        color: var(--text);
-    }
-
-    .tool-desc {
-        font-size: 10px;
-        color: var(--text-faint);
-        word-break: break-word;
-    }
-
-    .risk {
-        font-size: 9px;
-        padding: 0 5px;
-        border-radius: 8px;
-        border: 1px solid var(--line);
-        color: var(--text-faint);
-    }
-    .risk[data-risk="safe"] {
-        color: var(--accent);
-        border-color: var(--accent-line);
-    }
-    .risk[data-risk="destructive"] {
-        color: var(--warning);
-        border-color: rgba(245, 158, 11, 0.4);
-    }
-
-
-    .disclosure {
-        align-self: flex-start;
-        border: none;
-        background: none;
-        padding: 2px 0;
-        font-size: var(--text-xs);
-        color: var(--accent);
-    }
-
-    .shortcut-row {
-        display: flex;
-        align-items: center;
-        gap: var(--sp-2);
-        font-size: var(--text-xs);
-        color: var(--text-muted);
-        padding: 2px 0;
-    }
-    .shortcut-row kbd {
-        flex: 0 0 130px;
-    }
-
-    .tiny {
-        font-size: var(--text-xs);
-        padding: 3px 10px;
-        border-radius: var(--r-sm);
-    }
-
-    /* Controls sized to be hit, not to be small. These were 11.5px text in
-       3px of padding — a target under twenty pixels tall, which is below what
-       a pointer lands on reliably and well below what reads as an input at a
-       normal viewing distance. */
-    input,
-    select {
-        background: var(--surface-sunken);
-        border: 1px solid var(--line);
-        border-radius: var(--r-md);
-        padding: var(--sp-2) var(--sp-3);
-        font-size: var(--text-sm);
-        color: var(--text);
-        font-family: inherit;
-        min-width: 0;
-        transition:
-            border-color var(--fast) var(--ease),
-            background var(--fast) var(--ease);
-    }
-    input:focus,
-    select:focus {
-        border-color: var(--accent-line);
-        background: var(--surface);
-    }
-    input::placeholder {
-        color: var(--text-faint);
-    }
-
-    /* ── Provider cards ───────────────────────────────────────────────
-       One provider, everything about it: its key, its model, its proof that
-       it works. The alternative — a chip row here and a key list on another
-       screen — meant picking a provider marked "no key" told you what was
-       wrong and then made you go somewhere else to fix it. */
-
-    .cards {
-        display: flex;
-        flex-direction: column;
-        gap: var(--sp-3);
-    }
-
-    .card {
-        display: flex;
-        flex-direction: column;
-        gap: var(--sp-2);
-        padding: var(--sp-3);
-        background: var(--surface-raised);
-        border: 1px solid var(--line);
-        border-radius: var(--r-lg);
-        transition:
-            border-color var(--fast) var(--ease),
-            background var(--fast) var(--ease);
-    }
-    .card:hover {
-        border-color: var(--line-strong);
-    }
-
-    /* The one that answers is bordered, not filled: a filled card at this size
-       reads as pressed rather than as chosen, and there are several of them. */
-    .card.selected {
-        border-color: var(--accent-line);
-        background: var(--accent-muted);
-    }
-
-    /* Dimmed, never hidden. A provider you have no key for is still a provider
-       you can choose to set up, and greying it out of existence hides the very
-       card carrying the button that fixes it. */
-    .card.blocked:not(.selected) .card-name,
-    .card.blocked:not(.selected) .card-model {
-        color: var(--text-muted);
-    }
-
-    .card-head {
-        display: flex;
-        align-items: center;
-        gap: var(--sp-2);
-    }
-
-    /* The model id gets whatever room is left over but never pushes; the spacer
-       after it is what actually holds the tags and the select button against
-       the right edge, so those line up down the column no matter how long each
-       provider's model id happens to be. */
-    .card-model {
-        flex: 0 1 auto;
-    }
-
-    .card-spacer {
-        flex: 1 1 var(--sp-2);
-    }
-
-    .card-name {
-        font-size: var(--text-md);
-        font-weight: 600;
-        color: var(--text);
-    }
-
-    .card-model {
-        font-family: var(--font-mono);
-        font-size: var(--text-xs);
-        color: var(--text-faint);
-        /* Truncates rather than wraps: a long model id pushing the tags and the
-           select button onto a second line would rearrange the header row of one
-           card and not the others. */
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        min-width: 0;
-    }
-
-    /* Same width whether it says "use this" or "answering", so the right edge of
-       the column is a straight line rather than a ragged one that shifts as the
-       selection moves from card to card. */
-    .pick {
-        flex: 0 0 74px;
-        text-align: center;
-    }
-
-    /* Wide enough for the longest of the three ("no key needed"), so the key
-       state sits in a column of its own rather than sliding left and right as
-       the wording changes between providers. */
-    .key-tag {
-        flex: 0 0 96px;
-        text-align: center;
-    }
-
-    .card-actions {
-        display: flex;
-        gap: var(--sp-2);
-        flex-wrap: wrap;
-    }
-
-    .key-input {
-        width: 100%;
-        font-family: var(--font-mono);
-    }
-
-    .hint.small {
-        font-size: var(--text-xs);
-    }
-
-    /* Status words, one shape for all of them. `.risk` elsewhere is a 9px pill
-       that was never meant to carry a phrase like "no key needed". */
-    .tag {
-        font-size: var(--text-xs);
-        padding: 1px 8px;
-        border-radius: var(--r-full);
-        border: 1px solid var(--line);
-        color: var(--text-faint);
-        white-space: nowrap;
-        flex: 0 0 auto;
-    }
-    .tag[data-tone="good"] {
-        color: var(--success);
-        border-color: rgba(74, 222, 128, 0.35);
-    }
-    .tag[data-tone="warn"] {
-        color: var(--warning);
-        border-color: rgba(245, 158, 11, 0.4);
-    }
-    .tag[data-tone="accent"] {
-        color: var(--accent-text);
-        border-color: var(--accent-line);
-        background: var(--accent-muted);
-    }
-
-    .danger {
-        color: var(--warning);
-        border-color: rgba(245, 158, 11, 0.4);
     }
 </style>
