@@ -243,7 +243,12 @@ pub fn convert_tools(tools: &[Value]) -> Vec<Value> {
 /// reddediyor. `additionalProperties` ve `$schema` bizim şemalarımızda
 /// bulunuyor ve ikisi de o listede değil.
 fn clean_schema(mut schema: Value) -> Value {
-    const UNSUPPORTED: [&str; 4] = ["additionalProperties", "$schema", "exclusiveMinimum", "exclusiveMaximum"];
+    const UNSUPPORTED: [&str; 4] = [
+        "additionalProperties",
+        "$schema",
+        "exclusiveMinimum",
+        "exclusiveMaximum",
+    ];
 
     if let Some(map) = schema.as_object_mut() {
         for key in UNSUPPORTED {
@@ -386,7 +391,10 @@ mod tests {
     #[test]
     fn the_model_name_travels_in_the_url() {
         let url = chat_url("gemini-2.5-flash");
-        assert!(url.contains("models/gemini-2.5-flash:streamGenerateContent"), "{url}");
+        assert!(
+            url.contains("models/gemini-2.5-flash:streamGenerateContent"),
+            "{url}"
+        );
         // Akış SSE olarak istenmezse Google bir JSON dizisi gönderiyor.
         assert!(url.contains("alt=sse"), "{url}");
     }
@@ -554,7 +562,8 @@ mod tests {
     #[test]
     fn text_chunks_are_read_from_the_candidate_parts() {
         let mut s = StreamState::new();
-        let out = s.feed(r#"{"candidates":[{"content":{"role":"model","parts":[{"text":"mer"}]}}]}"#);
+        let out =
+            s.feed(r#"{"candidates":[{"content":{"role":"model","parts":[{"text":"mer"}]}}]}"#);
         assert_eq!(out, vec![Chunk::Text("mer".into())]);
     }
 
@@ -568,7 +577,11 @@ mod tests {
         match &out[0] {
             Chunk::Call(c) => {
                 assert_eq!(c.function.name, "saat");
-                assert!(c.function.arguments.contains("\"bolge\""), "{}", c.function.arguments);
+                assert!(
+                    c.function.arguments.contains("\"bolge\""),
+                    "{}",
+                    c.function.arguments
+                );
                 assert!(!c.id.is_empty(), "üst katman bir kimlik bekliyor");
             }
             other => panic!("çağrı beklenmişti: {other:?}"),
@@ -579,7 +592,8 @@ mod tests {
     #[test]
     fn two_calls_to_one_tool_get_distinct_ids() {
         let mut s = StreamState::new();
-        let line = r#"{"candidates":[{"content":{"parts":[{"functionCall":{"name":"oku","args":{}}}]}}]}"#;
+        let line =
+            r#"{"candidates":[{"content":{"parts":[{"functionCall":{"name":"oku","args":{}}}]}}]}"#;
         let a = s.feed(line);
         let b = s.feed(line);
         let (Chunk::Call(a), Chunk::Call(b)) = (&a[0], &b[0]) else {

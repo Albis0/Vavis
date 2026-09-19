@@ -482,7 +482,10 @@ mod tests {
     #[test]
     fn a_gemini_chat_speaks_with_geminis_voice() {
         let c = setup("gemini", "openai", true);
-        assert_eq!(effective_engine(&c, &keys_with(&["gemini", "openai"])), E::Gemini);
+        assert_eq!(
+            effective_engine(&c, &keys_with(&["gemini", "openai"])),
+            E::Gemini
+        );
     }
 
     #[test]

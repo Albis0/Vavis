@@ -80,10 +80,7 @@ fn recording_server(sse: &'static str) -> (String, mpsc::Receiver<Seen>) {
 const ONE_WORD: &str = "data: {\"candidates\":[{\"content\":{\"role\":\"model\",\
                         \"parts\":[{\"text\":\"merhaba\"}]}}]}\n\n";
 
-async fn run(
-    sse: &'static str,
-    tools: &[serde_json::Value],
-) -> (Seen, vavis_brain::ChatResponse) {
+async fn run(sse: &'static str, tools: &[serde_json::Value]) -> (Seen, vavis_brain::ChatResponse) {
     let (url, rx) = recording_server(sse);
     let cfg = ChatConfig::new(Provider::Gemini, "gemini-2.5-flash", "GIZLI-ANAHTAR").with_url(url);
     let out = BrainClient::new()
@@ -147,7 +144,12 @@ async fn the_key_travels_in_a_header_and_never_in_the_url() {
         .iter()
         .find(|(k, _)| k == "x-goog-api-key")
         .map(|(_, v)| v.as_str());
-    assert_eq!(header, Some("GIZLI-ANAHTAR"), "başlıklar: {:?}", seen.headers);
+    assert_eq!(
+        header,
+        Some("GIZLI-ANAHTAR"),
+        "başlıklar: {:?}",
+        seen.headers
+    );
 
     assert!(
         !seen.target.contains("GIZLI-ANAHTAR") && !seen.target.contains("key="),
@@ -214,7 +216,6 @@ async fn a_function_call_survives_a_stream_that_just_ends() {
     assert_eq!(out.tool_calls[0].function.name, "saat");
     assert!(out.tool_calls[0].function.arguments.contains("bolge"));
 }
-
 
 /// Gemini hands a "thought signature" back with each function call and
 /// **requires** it on the next turn. Measured against the live API: without

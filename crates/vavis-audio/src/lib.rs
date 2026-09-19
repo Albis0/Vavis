@@ -18,8 +18,8 @@
 pub mod capture;
 pub mod edge_tts;
 pub mod elevenlabs;
-pub mod kokoro;
 pub mod gemini_tts;
+pub mod kokoro;
 pub mod openai_tts;
 pub mod playback;
 pub mod queue;
