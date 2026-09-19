@@ -15,3 +15,4 @@ ui/package-lock.json
 # `docs/` under it is ours and is tracked.
 example/*
 !example/docs/
+.claude
