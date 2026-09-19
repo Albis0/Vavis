@@ -765,6 +765,15 @@ input[type="number"] {
 
 /* ── ToolsPane.tsx ────────────────────────────────────────────────────── */
 
+/* The registry is the one list here long enough to need a cap of its own:
+   58 tools push the filter box off the top of the pane as you scroll, and
+   without a height the pane simply runs past its own bottom. The global
+   `.list` deliberately has no height -- most lists using it are short. */
+.tool-list {
+    max-height: 380px;
+    overflow-y: auto;
+}
+
 .controls {
     display: flex;
     gap: var(--sp-2);
