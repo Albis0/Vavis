@@ -1,4 +1,4 @@
-.bar {
+.status-bar {
     flex: 0 0 auto;
     height: 26px;
     display: flex;
@@ -23,7 +23,7 @@
     min-width: 0;
 }
 
-.item {
+.status-item {
     display: flex;
     align-items: center;
     gap: var(--sp-1);
@@ -35,7 +35,7 @@
     white-space: nowrap;
 }
 
-button.item:hover {
+button.status-item:hover {
     color: var(--text-muted);
     background: var(--surface-hover);
 }
@@ -59,10 +59,10 @@ button.item:hover {
     text-overflow: ellipsis;
 }
 
-.warn {
+.status-warn {
     color: var(--warning);
 }
-button.warn:hover {
+button.status-warn:hover {
     color: var(--warning);
     background: rgba(251, 191, 36, 0.1);
 }

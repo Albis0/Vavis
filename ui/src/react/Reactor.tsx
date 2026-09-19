@@ -82,7 +82,7 @@ export default function Reactor({ mode, level = 0 }: Props) {
     }, [mode, level]);
 
     return (
-        <div className="stage">
+        <div className="reactor-stage">
             <div className="host" ref={hostRef}></div>
 
             {failed ? (

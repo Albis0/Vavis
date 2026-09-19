@@ -83,7 +83,7 @@
     flex: 0 0 auto;
 }
 
-.body {
+.toast-body {
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -98,7 +98,7 @@
     overflow-wrap: anywhere;
 }
 
-.detail {
+.toast-detail {
     font-size: var(--text-xs);
     color: var(--text-muted);
     line-height: 1.5;

@@ -105,24 +105,24 @@ h2 {
     line-height: 1.5;
 }
 
-.header-actions {
+.modal-header-actions {
     display: flex;
     align-items: center;
     gap: var(--sp-1);
     flex: 0 0 auto;
 }
 
-.close {
+.modal-close {
     padding: var(--sp-2);
     color: var(--text-faint);
 }
 
-.content {
+.modal-content {
     overflow-y: auto;
     min-height: 0;
     flex: 1;
 }
-.content.padded {
+.modal-content.padded {
     padding: var(--sp-4) var(--sp-5) var(--sp-5);
 }
 

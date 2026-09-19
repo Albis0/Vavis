@@ -264,10 +264,10 @@ export default function CouncilView() {
                 ></textarea>
 
                 <div className="go-column">
-                    <button className="primary go" disabled={!canRun} onClick={run}>
+                    <button className="primary council-go" disabled={!canRun} onClick={run}>
                         {running ? (
                             <>
-                                <span className="spinner" aria-hidden="true"></span>
+                                <span className="council-spinner" aria-hidden="true"></span>
                                 Running…
                             </>
                         ) : (
@@ -296,7 +296,7 @@ export default function CouncilView() {
 
             <div className="seats">
                 {panels.map((panel) => (
-                    <section className="panel" data-phase={panel.phase} key={panel.seat.id}>
+                    <section className="seat" data-phase={panel.phase} key={panel.seat.id}>
                         <div className="panel-head">
                             <span className="seat-name" title={seatName(panel)}>
                                 {seatName(panel)}

@@ -1,10 +1,10 @@
-.search {
+.panels-search {
     display: flex;
     align-items: center;
     gap: var(--sp-2);
     padding: var(--sp-2) var(--sp-4) var(--sp-3);
 }
-.search input {
+.panels-search input {
     font-size: var(--text-sm);
     background: var(--surface-sunken);
     border: 1px solid var(--line);
@@ -12,16 +12,16 @@
     padding: var(--sp-2) var(--sp-3);
     transition: border-color var(--fast) var(--ease);
 }
-.search input:focus {
+.panels-search input:focus {
     border-color: var(--accent-line);
 }
-.clear {
+.panels-clear {
     padding: var(--sp-2);
     color: var(--text-faint);
     flex: 0 0 auto;
 }
 
-.content {
+.panels-content {
     padding: var(--sp-2) var(--sp-3) var(--sp-3);
 }
 
@@ -34,7 +34,7 @@
 
 /* -- Loading, empty and failed ------------------------------------- */
 
-.state {
+.panels-state {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -44,13 +44,13 @@
     color: var(--text-faint);
 }
 
-.state-title {
+.panels-state-title {
     font-size: var(--text-base);
     font-weight: 600;
     color: var(--text);
 }
 
-.state-body {
+.panels-state-body {
     font-size: var(--text-sm);
     color: var(--text-muted);
     line-height: 1.6;
@@ -58,18 +58,18 @@
     overflow-wrap: anywhere;
 }
 
-.state button {
+.panels-state button {
     margin-top: var(--sp-2);
 }
 
-.skeletons {
+.panels-skeletons {
     display: flex;
     flex-direction: column;
     gap: var(--sp-3);
     padding: var(--sp-4) var(--sp-3);
 }
 
-.skeleton {
+.panels-skeleton {
     height: 14px;
     border-radius: var(--r-sm);
     background: var(--surface-hover);
@@ -86,7 +86,7 @@
     white-space: nowrap;
 }
 
-.entry {
+.panels-entry {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
@@ -95,10 +95,10 @@
     border-radius: var(--r-md);
     transition: background var(--fast) var(--ease);
 }
-.entry:hover {
+.panels-entry:hover {
     background: var(--surface-hover);
 }
-.entry.off {
+.panels-entry.off {
     opacity: 0.5;
 }
 
@@ -136,7 +136,7 @@
     opacity: 0;
     transition: opacity var(--fast) var(--ease);
 }
-.entry:hover .row-action,
+.panels-entry:hover .row-action,
 .row-action:focus-visible {
     opacity: 1;
 }
@@ -145,7 +145,7 @@
     background: transparent;
 }
 
-.tool-name {
+.panels-tool-name {
     display: flex;
     align-items: center;
     gap: var(--sp-2);

@@ -52,9 +52,9 @@ export default function Toasts() {
                         <Icon name={ICONS[item.kind]} size={15} />
                     </span>
 
-                    <div className="body">
+                    <div className="toast-body">
                         <span className="text">{item.text}</span>
-                        {item.detail ? <span className="detail selectable">{item.detail}</span> : null}
+                        {item.detail ? <span className="toast-detail selectable">{item.detail}</span> : null}
                     </div>
 
                     {item.action ? (

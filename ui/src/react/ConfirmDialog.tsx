@@ -61,7 +61,7 @@ export default function ConfirmDialog() {
                 </>
             }
         >
-            {pending.body ? <p className="body">{pending.body}</p> : null}
+            {pending.body ? <p className="confirm-body">{pending.body}</p> : null}
         </Modal>
     );
 }

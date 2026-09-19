@@ -202,7 +202,7 @@ export default function CodeView() {
         return (
             <div key={entry.path}>
                 <button
-                    className={`entry${file === entry.path ? " active" : ""}${entry.isDir ? " folder" : ""}`}
+                    className={`code-entry${file === entry.path ? " active" : ""}${entry.isDir ? " folder" : ""}`}
                     style={{ paddingLeft: `${8 + depth * 14}px` }}
                     onClick={() => toggle(entry)}
                 >
@@ -238,7 +238,7 @@ export default function CodeView() {
 
                 {root ? (
                     <>
-                        <div className="search">
+                        <div className="code-search">
                             <input
                                 value={query}
                                 onChange={(e) => setQuery(e.target.value)}
@@ -249,21 +249,21 @@ export default function CodeView() {
                                 onKeyDown={(e) => e.key === "Enter" && runSearch()}
                             />
                             {query ? (
-                                <button className="clear" onClick={clearSearch} aria-label="Clear search">
+                                <button className="code-clear" onClick={clearSearch} aria-label="Clear search">
                                     <Icon name="close" size={13} />
                                 </button>
                             ) : null}
                         </div>
 
                         {searching ? (
-                            <div className="skeletons" aria-hidden="true">
+                            <div className="code-skeletons" aria-hidden="true">
                                 {Array.from({ length: 6 }, (_, row) => (
-                                    <div key={row} className="skeleton" style={{ width: `${82 - row * 7}%` }}></div>
+                                    <div key={row} className="code-skeleton" style={{ width: `${82 - row * 7}%` }}></div>
                                 ))}
                             </div>
                         ) : hits.length ? (
                             <div className="hits">
-                                <div className="section">
+                                <div className="code-section">
                                     <span>{hits.length} matches</span>
                                     <button onClick={clearSearch}>Clear</button>
                                 </div>
@@ -281,8 +281,8 @@ export default function CodeView() {
                                 ))}
                             </div>
                         ) : searchedEmpty ? (
-                            <div className="state">
-                                <p className="state-title">Nothing matches "{query}"</p>
+                            <div className="code-state">
+                                <p className="code-state-title">Nothing matches "{query}"</p>
                                 <button className="outline" onClick={clearSearch}>
                                     Back to the tree
                                 </button>
@@ -294,10 +294,10 @@ export default function CodeView() {
                         )}
                     </>
                 ) : (
-                    <div className="state">
+                    <div className="code-state">
                         <Icon name="code" size={22} />
-                        <p className="state-title">No folder open</p>
-                        <p className="state-body">
+                        <p className="code-state-title">No folder open</p>
+                        <p className="code-state-body">
                             Put a folder path in the box above and press Enter. The
                             assistant reads and writes inside it, and nowhere else.
                         </p>
@@ -306,12 +306,12 @@ export default function CodeView() {
             </aside>
 
             <main className="editor">
-                <div className="bar">
+                <div className="code-bar">
                     <span className="filename" title={file ?? ""}>
                         {file ? (
                             <>
                                 {fileName}
-                                {dirty ? <span className="dot" title="Unsaved changes"></span> : null}
+                                {dirty ? <span className="code-dot" title="Unsaved changes"></span> : null}
                             </>
                         ) : (
                             <span className="muted">No file open</span>
@@ -333,7 +333,7 @@ export default function CodeView() {
                 </div>
 
                 {file ? (
-                    <div className="pane">
+                    <div className="code-pane">
                         {/* A gutter rather than nothing: line numbers are how people
                              talk about code, and the assistant quotes them back. */}
                         <div className="gutter" ref={gutterRef} aria-hidden="true">
@@ -353,10 +353,10 @@ export default function CodeView() {
                         ></textarea>
                     </div>
                 ) : (
-                    <div className="state blank">
+                    <div className="code-state blank">
                         <Icon name="code" size={26} />
-                        <p className="state-title">Nothing open</p>
-                        <p className="state-body">
+                        <p className="code-state-title">Nothing open</p>
+                        <p className="code-state-body">
                             Pick a file from the tree, or search the workspace to jump
                             straight to a line.
                         </p>

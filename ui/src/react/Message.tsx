@@ -104,7 +104,7 @@ export default function Message({ message }: Props) {
 
     if (message.speaker === "user") {
         return (
-            <div className="row user">
+            <div className="msg-row user">
                 <div className="bubble selectable">{message.text}</div>
             </div>
         );
@@ -112,7 +112,7 @@ export default function Message({ message }: Props) {
 
     if (message.speaker === "assistant") {
         return (
-            <div className="row assistant">
+            <div className="msg-row assistant">
                 <div className="reply selectable">
                     <div
                         className="md"
@@ -126,7 +126,7 @@ export default function Message({ message }: Props) {
                 {/* Actions appear on hover. Always-visible buttons under every reply
                     are clutter on the 90% of turns nobody copies. */}
                 {!message.streaming ? (
-                    <div className="actions">
+                    <div className="msg-actions">
                         <button className="ghost-action" onClick={copyMessage} title="Copy">
                             <Icon name={copied ? "check" : "copy"} size={14} />
                             {copied ? "Copied" : "Copy"}
@@ -144,7 +144,7 @@ export default function Message({ message }: Props) {
                     <span className="approval-icon">
                         <Icon name="warning" size={16} />
                     </span>
-                    <span className="tool-name">{message.text}</span>
+                    <span className="msg-tool-name">{message.text}</span>
                     {message.decision ? (
                         <span className="decided" data-decision={message.decision}>
                             {message.decision === "deny" ? "Denied" : message.decision}
@@ -215,7 +215,7 @@ export default function Message({ message }: Props) {
             ) : null}
 
             {openable && expanded ? (
-                <div className="detail">
+                <div className="msg-detail">
                     {message.args?.trim() ? (
                         <>
                             <div className="detail-label">Called with</div>

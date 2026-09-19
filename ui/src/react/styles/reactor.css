@@ -1,4 +1,4 @@
-.stage {
+.reactor-stage {
     position: absolute;
     inset: 0;
     /* Not a centring grid: the canvas is full-bleed and centres the reactor

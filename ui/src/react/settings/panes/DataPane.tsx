@@ -55,7 +55,7 @@ export default function DataPane({ status, canvas, onclear }: Props) {
             <Section title="Stored">
                 <div className="rows">
                     {rows.map((row) => (
-                        <div className="row" key={row.label}>
+                        <div className="stat-row" key={row.label}>
                             <span className="label">{row.label}</span>
                             <span className="value">{row.value}</span>
                         </div>

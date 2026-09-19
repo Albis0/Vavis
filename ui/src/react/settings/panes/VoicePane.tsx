@@ -115,7 +115,7 @@ export default function VoicePane({ status, voice, onupdate, onsavekey }: Props)
                 title="Listening"
                 blurb="Off, wake word, or always listening. The rail on the left switches between them, and so does Ctrl+M."
             >
-                <div className="row">
+                <div className="stat-row">
                     <span className="label">Mode</span>
                     <span className="value">{status?.voiceMode ?? "off"}</span>
                 </div>

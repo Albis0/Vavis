@@ -222,7 +222,7 @@ function ChatPanel({ onClose }: Props, ref: ForwardedRef<ChatPanelHandle>) {
 
     return (
         <aside
-            className={dragging ? "panel dragging" : "panel"}
+            className={dragging ? "chat-panel dragging" : "chat-panel"}
             style={{ width: `${width}px` }}
         >
             {/* Resize handle. Wider than it looks: a 1px target is a target you
@@ -241,11 +241,11 @@ function ChatPanel({ onClose }: Props, ref: ForwardedRef<ChatPanelHandle>) {
 
             <header>
                 <div className="title">
-                    <span className="dot" data-state={chat.coreState}></span>
+                    <span className="chat-dot" data-state={chat.coreState}></span>
                     <span className="name">{status?.assistantName || "Vavis"}</span>
                 </div>
 
-                <div className="header-actions">
+                <div className="chat-header-actions">
                     <button
                         className="icon-btn"
                         title="New conversation (Ctrl+L)"
@@ -261,7 +261,7 @@ function ChatPanel({ onClose }: Props, ref: ForwardedRef<ChatPanelHandle>) {
 
             <div className="feed" ref={feedRef} onScroll={trackScroll}>
                 {state.messages.length === 0 ? (
-                    <div className="empty">
+                    <div className="chat-empty">
                         <p className="empty-title">
                             {status?.keys.length ? "What can I do?" : "Add a key to start"}
                         </p>
@@ -282,7 +282,7 @@ function ChatPanel({ onClose }: Props, ref: ForwardedRef<ChatPanelHandle>) {
                     hang. */}
                 {state.runningTool ? (
                     <div className="running">
-                        <span className="spinner"></span>
+                        <span className="chat-spinner"></span>
                         <span>{state.runningTool}</span>
                     </div>
                 ) : null}

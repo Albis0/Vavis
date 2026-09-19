@@ -107,7 +107,7 @@ export default function CommandPalette({ commands, onClose }: Props) {
 
     return (
         <Modal label="Commands" align="top" bare showClose={false} onClose={onClose}>
-            <div className="search">
+            <div className="palette-search">
                 <Icon name="chevronRight" size={16} />
                 <input
                     data-autofocus
@@ -129,7 +129,7 @@ export default function CommandPalette({ commands, onClose }: Props) {
                             {heading ? <div className="group">{heading}</div> : null}
 
                             <button
-                                className="item"
+                                className="palette-item"
                                 role="option"
                                 aria-selected={index === selected}
                                 data-selected={index === selected}
@@ -137,7 +137,7 @@ export default function CommandPalette({ commands, onClose }: Props) {
                                 onMouseEnter={() => setSelected(index)}
                             >
                                 <Icon name={command.icon} size={16} />
-                                <span className="label">{command.label}</span>
+                                <span className="palette-label">{command.label}</span>
                                 {command.hint ? <kbd className="hint">{command.hint}</kbd> : null}
                             </button>
                         </Fragment>
