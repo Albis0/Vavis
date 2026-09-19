@@ -194,12 +194,4 @@
         gap: var(--sp-3);
         flex-wrap: wrap;
     }
-
-    .result {
-        font-size: var(--text-xs);
-        color: var(--ok, #9ece6a);
-    }
-    .result.bad {
-        color: var(--danger, #f7768e);
-    }
 </style>

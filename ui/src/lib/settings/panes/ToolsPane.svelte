@@ -146,22 +146,25 @@
         background: var(--surface-sunken);
     }
 
+    /* The registry is the one list here long enough to need a cap of its own:
+       58 tools would otherwise push the filter box off the top of the pane as
+       you scroll. The global `.list` deliberately has no height — most lists
+       using it are short. */
     .list {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
         max-height: 380px;
         overflow-y: auto;
     }
 
-    .entry {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: var(--sp-3);
-        padding: var(--sp-2) 0;
-        border-bottom: 1px solid var(--line);
-        min-width: 0;
+    /* The global `.risk` is a 9px marker for a dense list. These labels are
+       read one at a time beside a tool name, so they carry the normal small
+       size — and `moderate`, which only this pane has, gets its own tone. */
+    .risk {
+        font-size: var(--text-xs);
+        padding: 0 var(--sp-1);
+        border-radius: var(--r-sm);
+    }
+    .risk[data-risk="moderate"] {
+        color: var(--warn, #e0af68);
     }
 
     .main {
@@ -184,19 +187,6 @@
         font-size: var(--text-xs);
         color: var(--text-muted);
         line-height: 1.45;
-    }
-
-    .risk {
-        font-size: var(--text-xs);
-        padding: 0 var(--sp-1);
-        border-radius: var(--r-sm);
-        color: var(--text-faint);
-    }
-    .risk[data-risk="moderate"] {
-        color: var(--warn, #e0af68);
-    }
-    .risk[data-risk="destructive"] {
-        color: var(--danger, #f7768e);
     }
 
     .domain {
