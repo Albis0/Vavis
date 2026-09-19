@@ -15,8 +15,8 @@ describe("Reactor", () => {
     it("falls back to the CSS ring when no 2D context is available, and unmounts cleanly", () => {
         const { container, unmount } = render(<Reactor mode="idle" />);
 
-        expect(container.querySelector(".fallback")).toBeTruthy();
-        expect(container.querySelector(".fallback")?.getAttribute("data-state")).toBe(
+        expect(container.querySelector(".reactor-fallback")).toBeTruthy();
+        expect(container.querySelector(".reactor-fallback")?.getAttribute("data-state")).toBe(
             "idle",
         );
 

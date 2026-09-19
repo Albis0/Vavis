@@ -246,7 +246,7 @@ export default function Modal({
                     </header>
                 ) : null}
 
-                <div className={bare ? "content" : "content padded"}>{children}</div>
+                <div className={bare ? "modal-content" : "modal-content padded"}>{children}</div>
 
                 {footer ? <div className="footer">{footer}</div> : null}
             </div>

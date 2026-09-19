@@ -61,7 +61,7 @@ header {
     min-width: 0;
 }
 
-.name {
+.chat-name {
     font-size: var(--text-sm);
     font-weight: 600;
     color: var(--text);

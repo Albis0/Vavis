@@ -286,7 +286,7 @@ export default function Panels() {
                     ))
                 ) : state.panel === "tools" ? (
                     <>
-                        <p className="hint">
+                        <p className="panels-hint">
                             {tools.length} tools. At most 12 reach the model on any one request,
                             chosen by what the request is about.
                         </p>
@@ -295,7 +295,7 @@ export default function Panels() {
                                 <div className="entry-main">
                                     <span className="panels-tool-name">
                                         {tool.name}
-                                        <span className="risk" data-risk={tool.risk}>
+                                        <span className="panels-risk" data-risk={tool.risk}>
                                             {tool.risk}
                                         </span>
                                     </span>

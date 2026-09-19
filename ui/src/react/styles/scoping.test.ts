@@ -1,23 +1,26 @@
 /**
- * No two component stylesheets may define the same bare class.
+ * A component stylesheet may not reach into another component.
  *
- * Svelte scoped every `<style>` block to its own component, so two files
- * could both call something `.panel` and never meet. Plain CSS has no such
- * boundary: once the blocks became ordinary stylesheets, whichever imported
- * last won.
+ * Svelte scoped every `<style>` block to its own markup, so two files could
+ * both call something `.panel` and never meet. Plain CSS has no boundary:
+ * once those blocks became ordinary stylesheets, whichever imported last
+ * won, silently.
  *
- * That was not theoretical. `.panel` was ChatPanel's docked column
- * (`position: relative`), Modal's floating window (`position: fixed`) and
- * CouncilView's seat, all at once -- and the settings window opened halfway
- * off the bottom of the screen because it inherited the chat panel's
- * positioning. Every test passed while it was broken.
+ * This check has been wrong twice, and each time the app was visibly broken
+ * while every test passed:
  *
- * A first version of this check compared property values and reported it
- * clean, because it only looked for the SAME property set differently. It
- * missed CodeView's `.section` adding `justify-content: space-between` to
- * the settings column, which has no `justify-content` of its own to
- * disagree with. So the rule here is the blunt one: a bare class belongs to
- * exactly one stylesheet. Anything shared belongs in `styles.css`, which is
+ *   1. First it compared property VALUES and called seventeen collisions
+ *      harmless. Wrong: CodeView's `.section` added `justify-content` to the
+ *      settings column, which had none of its own to disagree with.
+ *   2. Then it only looked at bare single-class rules. Wrong again: the
+ *      reactor's `.fallback` is a 220px spinning circle, and the settings
+ *      `.setting .fallback` label inherited it -- the user saw a rotating
+ *      ring drawn over the provider list.
+ *
+ * So the rule here is the blunt one, stated positively: a rule whose
+ * selector is not anchored to something a single component owns can hit
+ * markup anywhere, and therefore each such class must belong to exactly one
+ * stylesheet. Anything genuinely shared belongs in `styles.css`, which is
  * global on purpose.
  */
 
@@ -27,45 +30,77 @@ import { describe, expect, it } from "vitest";
 
 const DIR = path.resolve(__dirname);
 
-/** Bare single-class selectors (`.thing {`), which are the ones that collide. */
-function bareClasses(css: string): Set<string> {
-    const stripped = css.replace(/\/\*[\s\S]*?\*\//g, "");
-    const found = new Set<string>();
-    for (const match of stripped.matchAll(/(?:^|\})\s*([^{}@]+?)\s*\{/g)) {
-        for (const part of match[1].split(",")) {
-            const bare = /^\.([A-Za-z0-9_-]+)\s*$/.exec(part.trim());
-            if (bare) found.add(bare[1]);
+interface Usage {
+    /** Files whose selector for this class has no ancestor qualifier. */
+    loose: Set<string>;
+    /** Every file mentioning the class anywhere in a selector. */
+    all: Set<string>;
+}
+
+function collectUsage(): Map<string, Usage> {
+    const usage = new Map<string, Usage>();
+    const note = (cls: string, file: string, loose: boolean) => {
+        const entry = usage.get(cls) ?? { loose: new Set(), all: new Set() };
+        entry.all.add(file);
+        if (loose) entry.loose.add(file);
+        usage.set(cls, entry);
+    };
+
+    for (const file of fs.readdirSync(DIR).filter((f) => f.endsWith(".css"))) {
+        const css = fs
+            .readFileSync(path.join(DIR, file), "utf8")
+            .replace(/\/\*[\s\S]*?\*\//g, "");
+
+        for (const rule of css.matchAll(/(?:^|\})\s*([^{}@]+?)\s*\{/g)) {
+            for (const raw of rule[1].split(",")) {
+                const selector = raw.trim();
+                if (!selector) continue;
+
+                // A descendant or sibling combinator means the rule is
+                // anchored: `.setting .fallback` cannot escape a `.setting`.
+                // One compound selector (`.code-entry.active`) is anchored
+                // too -- its first class is the owner.
+                const anchored = /[ >+~]/.test(selector);
+                const classes = [...selector.matchAll(/\.([A-Za-z0-9_-]+)/g)].map(
+                    (m) => m[1],
+                );
+
+                classes.forEach((cls, index) => {
+                    // Only the FIRST class of an unanchored compound is the
+                    // one doing the reaching; the rest narrow it.
+                    note(cls, file, !anchored && index === 0);
+                });
+            }
         }
     }
-    return found;
+    return usage;
 }
 
 describe("component stylesheets", () => {
-    it("never define the same bare class in two files", () => {
-        const owners = new Map<string, string[]>();
+    it("never let one component's rule reach another's markup", () => {
+        const offenders: string[] = [];
 
-        for (const file of fs.readdirSync(DIR).filter((f) => f.endsWith(".css"))) {
-            const css = fs.readFileSync(path.join(DIR, file), "utf8");
-            for (const cls of bareClasses(css)) {
-                owners.set(cls, [...(owners.get(cls) ?? []), file]);
+        for (const [cls, { loose, all }] of collectUsage()) {
+            if (loose.size === 0 || all.size < 2) continue;
+            // Loose in one file and used in another, or loose in two at once.
+            const elsewhere = [...all].filter((f) => !loose.has(f));
+            if (elsewhere.length > 0 || loose.size > 1) {
+                offenders.push(
+                    `.${cls} — unanchored in ${[...loose].sort().join(", ")}; ` +
+                        `also styled in ${[...all].sort().join(", ")}`,
+                );
             }
         }
 
-        const shared = [...owners.entries()]
-            .filter(([, files]) => files.length > 1)
-            .map(([cls, files]) => `.${cls} -> ${files.sort().join(", ")}`)
-            .sort();
-
-        expect(shared).toEqual([]);
+        expect(offenders.sort()).toEqual([]);
     });
 
     it("finds the classes it is meant to be checking", () => {
-        // Guards the parser itself: a regex that silently matched nothing
-        // would make the check above pass for the wrong reason.
-        const settings = fs.readFileSync(path.join(DIR, "settings.css"), "utf8");
-        const classes = bareClasses(settings);
+        // Guards the parser itself: a regex matching nothing would make the
+        // check above pass for the wrong reason.
+        const usage = collectUsage();
 
-        expect(classes.size).toBeGreaterThan(10);
-        expect(classes).toContain("pane");
+        expect(usage.size).toBeGreaterThan(50);
+        expect(usage.has("pane")).toBe(true);
     });
 });

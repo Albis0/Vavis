@@ -264,7 +264,7 @@ export default function SpotifyPanel({ onClose }: Props) {
                 aria-label="Move the now playing box with the arrow keys"
             >
                 <span className="grip" aria-hidden="true"></span>
-                <span className="label">Now playing</span>
+                <span className="np-label">Now playing</span>
                 <button className="np-close" onClick={onClose} aria-label="Hide">
                     <Icon name="close" size={13} />
                 </button>

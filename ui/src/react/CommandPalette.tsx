@@ -121,7 +121,7 @@ export default function CommandPalette({ commands, onClose }: Props) {
                 <kbd>Esc</kbd>
             </div>
 
-            <div className="list" ref={listRef} role="listbox" tabIndex={-1}>
+            <div className="palette-list" ref={listRef} role="listbox" tabIndex={-1}>
                 {matches.map((command, index) => {
                     const heading = headingFor(index);
                     return (

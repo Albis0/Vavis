@@ -393,9 +393,9 @@ export default function CouncilView() {
                                     dangerouslySetInnerHTML={{ __html: renderMarkdown(panel.text) }}
                                 ></div>
                             ) : panel.phase === "streaming" ? (
-                                <div className="skeletons" aria-hidden="true">
+                                <div className="council-skeletons" aria-hidden="true">
                                     {Array.from({ length: 5 }, (_, row) => (
-                                        <div key={row} className="skeleton" style={{ width: `${92 - row * 11}%` }}></div>
+                                        <div key={row} className="council-skeleton" style={{ width: `${92 - row * 11}%` }}></div>
                                     ))}
                                 </div>
                             ) : (
