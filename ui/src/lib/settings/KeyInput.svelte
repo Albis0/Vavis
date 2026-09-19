@@ -85,7 +85,7 @@
 
             {#if !p.keyless}
                 {#if open === p.id}
-                    <div class="entry">
+                    <div class="key-entry">
                         <!-- svelte-ignore a11y_autofocus -->
                         <input
                             type="password"
@@ -165,20 +165,22 @@
         font-size: var(--text-xs);
         color: var(--text-faint);
     }
-
     /* The input gets the room, the buttons take what they need. Sized here
-       rather than inherited, which is what used to collapse it to nothing. */
-    .entry {
+       rather than inherited, which is what used to collapse it to nothing.
+
+       Named `key-entry`, not `entry`: the global `.entry` is a bordered list
+       row, a different thing that happened to share the name. */
+    .key-entry {
         display: flex;
         gap: var(--sp-1);
         flex: 1 1 320px;
         min-width: 0;
     }
-    .entry input {
+    .key-entry input {
         flex: 1 1 auto;
         min-width: 0;
     }
-    .entry button {
+    .key-entry button {
         flex: 0 0 auto;
     }
 

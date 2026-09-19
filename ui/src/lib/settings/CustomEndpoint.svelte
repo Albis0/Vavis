@@ -52,7 +52,7 @@
      * toast about it, leaving a saved-but-broken value behind.
      */
     const urlError = $derived(
-        url.trim() && requires && !url.includes(requires)
+        (url ?? "").trim() && requires && !url.includes(requires)
             ? `must contain ${requires}`
             : "",
     );
@@ -120,20 +120,15 @@
         line-height: 1.5;
     }
 
+    /* This disclosure carries three children -- arrow, label, count -- so it
+       needs the row layout the global `.disclosure` does not provide; the
+       global handles the colour and the hover. */
     .disclosure {
         display: flex;
         align-items: center;
         gap: var(--sp-2);
-        background: transparent;
-        border: none;
-        padding: var(--sp-1) 0;
         font-size: var(--text-sm);
-        color: var(--text-muted);
-        cursor: pointer;
         text-align: left;
-    }
-    .disclosure:hover {
-        color: var(--text);
     }
 
     .arrow {

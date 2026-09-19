@@ -264,12 +264,4 @@
         color: var(--text-muted);
         margin: 0;
     }
-
-    .result {
-        font-size: var(--text-xs);
-        color: var(--ok, #9ece6a);
-    }
-    .result.bad {
-        color: var(--danger, #f7768e);
-    }
 </style>

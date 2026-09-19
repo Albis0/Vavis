@@ -368,3 +368,155 @@ textarea::placeholder {
         transition-duration: 0.01ms !important;
     }
 }
+
+
+/* ── Settings vocabulary ──────────────────────────────────────────────
+   These live here rather than in Settings.svelte because the settings
+   screen is now a shell plus fourteen panes, and a Svelte component's
+   styles are scoped to its own markup. A pane writing `class="row"` was
+   getting nothing: the rule sat in the parent, which no longer holds the
+   markup that uses it. Promoting them once beats pasting the same block
+   into every pane and letting the copies drift. */
+
+/* The title of a settings pane. Scoped to the pane so it cannot restyle
+   headings elsewhere in the app. */
+.pane h2 {
+    margin: 0 0 var(--sp-2);
+    font-size: var(--text-lg);
+    font-weight: 600;
+    color: var(--text);
+}
+
+/* A quiet list row: a pickable line in a list of models, vaults or tools. */
+.row {
+    border: none;
+    background: none;
+    text-align: left;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    padding: var(--sp-1) var(--sp-2);
+    border-radius: var(--r-sm);
+}
+.row:hover {
+    background: var(--surface-hover);
+    color: var(--text);
+}
+.row.active {
+    color: var(--accent-hover);
+}
+
+/* A list long enough to need a cap of its own rather than growing the pane. */
+.scroll {
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+/* The outcome of a test: green when it worked, amber when it did not. */
+.result {
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--success);
+}
+.result.bad {
+    color: var(--warning);
+}
+
+.warn-text {
+    color: var(--warning);
+}
+
+/* A risk label on a tool or a server. Deliberately small: it repeats down a
+   long list and should read as a marker, not as a heading. */
+.risk {
+    font-size: 9px;
+    padding: 0 5px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    color: var(--text-faint);
+}
+.risk[data-risk="safe"] {
+    color: var(--accent);
+    border-color: var(--accent-line);
+}
+.risk[data-risk="destructive"] {
+    color: var(--warning);
+    border-color: rgba(245, 158, 11, 0.4);
+}
+
+/* A secondary button sitting inside a row it must not dominate. */
+.tiny {
+    font-size: var(--text-xs);
+    padding: 3px 10px;
+    border-radius: var(--r-sm);
+}
+
+/* A command or release note the user is meant to read and copy. Monospace
+   because the spacing is load-bearing. */
+.snippet {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--text);
+    background: var(--surface-sunken);
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    padding: var(--sp-2) var(--sp-3);
+    margin: var(--sp-2) 0;
+    /* A long command scrolls inside its box rather than widening the panel
+       and pushing everything else off the edge. */
+    overflow-x: auto;
+    white-space: pre;
+}
+
+/* A disclosure toggle: a caret and a label, no button chrome. */
+.disclosure {
+    align-self: flex-start;
+    padding: 0;
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    background: none;
+}
+.disclosure:hover:not(:disabled) {
+    color: var(--text);
+    background: none;
+}
+
+/* One entry in a list of things with their own actions: a tool, an MCP
+   server, a remembered fact. */
+.entry {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    padding: var(--sp-2) 0;
+    border-bottom: 1px solid var(--line);
+    min-width: 0;
+}
+.entry.off {
+    opacity: 0.55;
+}
+.entry-main {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.entry-actions {
+    display: flex;
+    gap: var(--sp-2);
+    flex: 0 0 auto;
+}
+.tool-name {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    font-size: var(--text-sm);
+    color: var(--text);
+}
+.tool-desc {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    line-height: 1.45;
+    min-width: 0;
+    word-break: break-word;
+}
