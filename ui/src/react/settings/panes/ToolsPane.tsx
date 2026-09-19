@@ -82,12 +82,12 @@ export default function ToolsPane({ tools, fullAuthority, ontoggle }: Props) {
                         aria-label="Filter tools"
                     />
                     <div className="risks">
-                        <button className={risk === "" ? "chip on" : "chip"} onClick={() => setRisk("")}>
+                        <button className={risk === "" ? "settings-chip on" : "settings-chip"} onClick={() => setRisk("")}>
                             all {tools.length}
                         </button>
                         {LEVELS.map((level) => (
                             <button
-                                className={risk === level ? "chip on" : "chip"}
+                                className={risk === level ? "settings-chip on" : "settings-chip"}
                                 data-risk={level}
                                 onClick={() => setRisk(risk === level ? "" : level)}
                                 key={level}

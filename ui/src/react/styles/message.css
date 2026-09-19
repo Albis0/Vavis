@@ -69,12 +69,12 @@
 
 /* -- Notes -------------------------------------------------------- */
 
-.note {
+.msg-note {
     margin: var(--sp-2) 0;
     animation: fade-in var(--normal) var(--ease);
 }
 
-.note-line {
+.msg-note-line {
     display: flex;
     align-items: center;
     gap: var(--sp-2);
@@ -85,29 +85,29 @@
     text-align: left;
     border-radius: var(--r-sm);
 }
-.note-line.static {
+.msg-note-line.static {
     cursor: default;
 }
-button.note-line:hover {
+button.msg-note-line:hover {
     color: var(--text-muted);
     background: var(--surface-hover);
 }
 
-.note-text {
+.msg-note-text {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.note.error .note-line {
+.msg-note.error .msg-note-line {
     color: var(--danger);
 }
 
 /* Tool lines are one-liners that open, so they are clipped to stay tidy.
    An error is the opposite: it is the whole of what the user gets, and a
    provider message that ends in an ellipsis is one they cannot act on. */
-.note.error .note-text {
+.msg-note.error .msg-note-text {
     white-space: normal;
     overflow: visible;
     overflow-wrap: anywhere;
@@ -255,46 +255,46 @@ button.note-line:hover {
    the same reason; a plain CSS file already applies them everywhere, so no
    special syntax is needed here. */
 
-.md p {
+.msg-md p {
     margin: 0 0 var(--sp-3);
 }
-.md p:last-child {
+.msg-md p:last-child {
     margin-bottom: 0;
 }
 
-.md h1,
-.md h2,
-.md h3 {
+.msg-md h1,
+.msg-md h2,
+.msg-md h3 {
     font-size: var(--text-md);
     font-weight: 600;
     margin: var(--sp-4) 0 var(--sp-2);
     line-height: 1.4;
 }
-.md h1:first-child,
-.md h2:first-child,
-.md h3:first-child {
+.msg-md h1:first-child,
+.msg-md h2:first-child,
+.msg-md h3:first-child {
     margin-top: 0;
 }
 
-.md ul,
-.md ol {
+.msg-md ul,
+.msg-md ol {
     margin: 0 0 var(--sp-3);
     padding-left: var(--sp-5);
 }
-.md li {
+.msg-md li {
     margin-bottom: var(--sp-1);
 }
 
-.md a {
+.msg-md a {
     color: var(--accent-text);
     text-decoration: none;
     border-bottom: 1px solid var(--accent-line);
 }
-.md a:hover {
+.msg-md a:hover {
     border-bottom-color: var(--accent);
 }
 
-.md code {
+.msg-md code {
     font-family: var(--font-mono);
     font-size: 0.9em;
     background: var(--surface-sunken);
@@ -302,7 +302,7 @@ button.note-line:hover {
     padding: 1px 5px;
 }
 
-.md pre {
+.msg-md pre {
     background: var(--surface-sunken);
     border: 1px solid var(--line);
     border-radius: var(--r-md);
@@ -311,14 +311,14 @@ button.note-line:hover {
     margin: 0 0 var(--sp-3);
     position: relative;
 }
-.md pre code {
+.msg-md pre code {
     background: none;
     padding: 0;
     font-size: var(--text-sm);
     line-height: 1.6;
 }
 
-.md .copy {
+.msg-md .copy {
     position: absolute;
     top: var(--sp-2);
     right: var(--sp-2);
@@ -332,34 +332,34 @@ button.note-line:hover {
     opacity: 0;
     transition: opacity var(--fast) var(--ease);
 }
-.md pre:hover .copy {
+.msg-md pre:hover .copy {
     opacity: 1;
 }
-.md .copy:hover {
+.msg-md .copy:hover {
     color: var(--text);
     border-color: var(--line-strong);
 }
 
-.md blockquote {
+.msg-md blockquote {
     border-left: 2px solid var(--line-strong);
     padding-left: var(--sp-3);
     color: var(--text-muted);
     margin: 0 0 var(--sp-3);
 }
 
-.md table {
+.msg-md table {
     border-collapse: collapse;
     width: 100%;
     margin-bottom: var(--sp-3);
     font-size: var(--text-sm);
 }
-.md th,
-.md td {
+.msg-md th,
+.msg-md td {
     border: 1px solid var(--line);
     padding: var(--sp-1) var(--sp-2);
     text-align: left;
 }
-.md th {
+.msg-md th {
     background: var(--surface-sunken);
     font-weight: 600;
 }

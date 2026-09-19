@@ -28,7 +28,7 @@
     pointer-events: auto;
 }
 
-.fallback {
+.reactor-fallback {
     position: absolute;
     top: 50%;
     left: 50%;
@@ -40,10 +40,10 @@
     border-top-color: var(--accent);
     animation: spin 8s linear infinite;
 }
-.fallback[data-state="thinking"] {
+.reactor-fallback[data-state="thinking"] {
     animation-duration: 2.4s;
     animation-direction: reverse;
 }
-.fallback[data-state="working"] {
+.reactor-fallback[data-state="working"] {
     animation-duration: 1.6s;
 }

@@ -53,7 +53,7 @@ export default function Toasts() {
                     </span>
 
                     <div className="toast-body">
-                        <span className="text">{item.text}</span>
+                        <span className="toast-text">{item.text}</span>
                         {item.detail ? <span className="toast-detail selectable">{item.detail}</span> : null}
                     </div>
 

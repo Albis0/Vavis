@@ -221,12 +221,12 @@
     overflow-wrap: anywhere;
 }
 
-.skeletons {
+.council-skeletons {
     display: flex;
     flex-direction: column;
     gap: var(--sp-3);
 }
-.skeleton {
+.council-skeleton {
     height: 12px;
     border-radius: var(--r-sm);
     background: var(--surface-hover);

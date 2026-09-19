@@ -115,7 +115,7 @@ export default function Message({ message }: Props) {
             <div className="msg-row assistant">
                 <div className="reply selectable">
                     <div
-                        className="md"
+                        className="msg-md"
                         onClick={handleClick}
                         role="presentation"
                         dangerouslySetInnerHTML={{ __html: html }}
@@ -180,17 +180,17 @@ export default function Message({ message }: Props) {
     }
 
     return (
-        <div className={`note ${message.speaker}`}>
+        <div className={`msg-note ${message.speaker}`}>
             {openable ? (
-                <button className="note-line" onClick={() => setExpanded((v) => !v)}>
+                <button className="msg-note-line" onClick={() => setExpanded((v) => !v)}>
                     <span className={expanded ? "chev open" : "chev"}>
                         <Icon name="chevronRight" size={12} />
                     </span>
                     <Icon name="tool" size={13} />
-                    <span className="note-text">{message.text}</span>
+                    <span className="msg-note-text">{message.text}</span>
                 </button>
             ) : (
-                <span className="note-line static">
+                <span className="msg-note-line static">
                     {message.speaker === "tool" ? (
                         <Icon name="tool" size={13} />
                     ) : message.speaker === "error" ? (
@@ -198,7 +198,7 @@ export default function Message({ message }: Props) {
                     ) : (
                         <Icon name="info" size={13} />
                     )}
-                    <span className="note-text selectable">{message.text}</span>
+                    <span className="msg-note-text selectable">{message.text}</span>
                 </span>
             )}
 

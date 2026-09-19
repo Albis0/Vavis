@@ -25,7 +25,7 @@
     padding: var(--sp-2) var(--sp-3) var(--sp-3);
 }
 
-.hint {
+.panels-hint {
     font-size: var(--text-sm);
     color: var(--text-faint);
     padding: var(--sp-2) var(--sp-3) var(--sp-3);
@@ -160,7 +160,7 @@
     line-height: 1.5;
 }
 
-.risk {
+.panels-risk {
     font-family: var(--font);
     font-size: 10px;
     text-transform: uppercase;
@@ -170,7 +170,7 @@
     background: var(--surface-active);
     color: var(--text-faint);
 }
-.risk[data-risk="destructive"] {
+.panels-risk[data-risk="destructive"] {
     background: rgba(248, 113, 113, 0.14);
     color: var(--danger);
 }

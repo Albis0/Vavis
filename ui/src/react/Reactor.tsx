@@ -88,7 +88,7 @@ export default function Reactor({ mode, level = 0 }: Props) {
             {failed ? (
                 // No canvas: a plain CSS ring, so the centre of the window is still
                 // something rather than nothing.
-                <div className="fallback" data-state={mode}></div>
+                <div className="reactor-fallback" data-state={mode}></div>
             ) : null}
         </div>
     );

@@ -242,7 +242,7 @@ function ChatPanel({ onClose }: Props, ref: ForwardedRef<ChatPanelHandle>) {
             <header>
                 <div className="title">
                     <span className="chat-dot" data-state={chat.coreState}></span>
-                    <span className="name">{status?.assistantName || "Vavis"}</span>
+                    <span className="chat-name">{status?.assistantName || "Vavis"}</span>
                 </div>
 
                 <div className="chat-header-actions">

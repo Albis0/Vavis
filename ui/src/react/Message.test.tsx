@@ -56,7 +56,7 @@ describe("the assistant reply", () => {
                 message={baseMessage({ speaker: "assistant", text: "**bold** text" })}
             />,
         );
-        const strong = document.querySelector(".md strong");
+        const strong = document.querySelector(".msg-md strong");
         expect(strong).not.toBeNull();
         expect(strong?.textContent).toBe("bold");
     });
