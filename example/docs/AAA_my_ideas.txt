@@ -1,0 +1,35 @@
+total virus api entegrasyonu
+böylece kullanıcı isterse virus taraması yapabilecek
+kendi apisini girebilecek kullanıcı fakat isterse bizim apiyide kullanabilecek ( farklı hesaplardan birden fazla api alıp free tierleri zincirleyesim var)
+bizim api kullanılırsa sınırlandırmaları olacak .
+
+    hdfilmcehennemi&fullhddiziizlesene vs gibi sitelerin kullandığı ücretsiz film db sini bağlamak,
+bununlar birlikte app e Watch modu eklenecek 
+ayrı bir ekranı olacak app tamamaen bir video player gibi olcak isterse kullanıcı geri döncebilecek ai kısmına
+son izlenenler tavsiye edilenler vs vs olcak kullanıcı misal filmin yarısında kapadı diyelim orayı kayda alcaz sonra tekrar açtığında ordan devam edebilecek
+ek fikir : watch together yapıp birlikte izlemelerinide sağlayabiliriz .
+bi oda oluşturulur (ai a tool olacak anlattıklarımın hepsi ) birisi yönetmen olur sadece o durdur devam et değiştir yapabilir diğerleri sadece talep edebilir bunu 
+film bulma,film durrdurma devam ettirme, belirtilen zamana sarma , film açma değiştirme kapama , oda yönetmenliği .
+gibi şeyler ai a tool olacak watch ekranı kullanıcı kendi açamicak ai açabilecek 
+
+
+    app in code kısmına vscode extensionları entegre ettirme
+bu nasıl yapılır bilmiom ama o bölmede claude code çalıştırmak şahane olurdu
+
+
+    improve:
+code bölümünün harness i sağlam olmalı gerekirse providera özel olmalı 
+claude code codex kalitesinde
+
+kişi code için ayrı chat için ayrı ai modeli provider seçebilmeli
+
+niyeyse diğer insanlar bazıları opus 4.8 gibi bir canavar kullanırken geri cevap almaları 2sn sürerken bizim gemini flash 10 saniyede falan tool kullanmaya başlıo orda bi sıkıntı var
+
+(canvas komple siki tutmuş)
+
+
+    APIS:
+ayarlarda apiyi tek yere toplarız sonra oraya seçenek ekleriz sekme vs. bişi isteyen o ayar penceresi içinde karıştırmadan image ayrı chat ayrı diğerleri ayrı vs vs karıştırmadan tek pencerede api ayarlayabilsin .
+
+
+
