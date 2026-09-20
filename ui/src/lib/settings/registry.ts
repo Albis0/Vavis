@@ -43,6 +43,18 @@ export const GROUPS: Group[] = [
                 keywords:
                     "provider model llm groq openai anthropic claude gemini local ollama temperature key token secret credential api auth",
             },
+            // Every key in the app, on one screen. The provider cards under
+            // "Model & keys" keep their own key button -- there the key is
+            // part of choosing a provider -- but someone who has just
+            // collected four keys and wants to paste them in should not have
+            // to know which ability each one belongs to first.
+            {
+                id: "keys",
+                label: "API keys",
+                icon: "⚿",
+                keywords:
+                    "key api token secret credential auth groq openai anthropic claude gemini mistral deepseek xai grok nvidia tavily brave stability replicate paste add replace",
+            },
             {
                 id: "voice",
                 label: "Voice",

@@ -150,9 +150,14 @@ export default function SearchPane({ search, reload }: Props) {
                 <ProviderChain items={items} onreorder={reorder} />
             </Section>
 
+            {/* Kept here as well as on the API keys screen, deliberately: this
+                is where you are when you notice a provider says "no key —
+                skipped", and being sent elsewhere to fix what you are looking
+                at is the thing that screen exists to stop. Same store, same
+                command, either way. */}
             <Section
                 title="API keys"
-                blurb="Stored encrypted on this machine and never shown again once saved."
+                blurb="Stored encrypted on this machine and never shown again once saved. All of the app's keys are together under API keys."
             >
                 <KeyInput
                     providers={[...KEYED, { id: "duckduckgo", keyless: true, note: BLURB.duckduckgo }]}
