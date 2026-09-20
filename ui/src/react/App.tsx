@@ -85,6 +85,21 @@ export default function App() {
 
     const chatPanel = useRef<ChatPanelHandle | null>(null);
 
+    /**
+     * Whether the conversation has started.
+     *
+     * This is the whole layout switch. An empty app gave the reactor 73% of
+     * the window and the conversation a 400px strip down the side -- the
+     * largest, brightest, only moving thing on screen was the one thing with
+     * nothing to do, and the actual work happened in the margin.
+     *
+     * So the reactor keeps the stage while there is nothing to read, which is
+     * when it is the point, and steps aside the moment there is. Only the
+     * chat view swaps: code, canvas and council already own the stage, and
+     * there the panel beside them is exactly what it should be.
+     */
+    const conversing = state.view === "chat" && state.messages.length > 0;
+
     // Started once, for the life of the app. `chat.start()` subscribes to
     // backend events and opens two pollers, so the cleanup matters: without
     // it a remount leaves the old ones running and the app gets slower the
@@ -431,7 +446,13 @@ export default function App() {
                     </div>
                 </div>
 
-                <div className="shell-body">
+                <div
+                    className={`shell-body${conversing ? " conversing" : ""}`}
+                    /* Drives the dimmed reactor back up while the assistant is
+                       actually doing something, so it still reads as a status
+                       light once it has stepped aside. */
+                    data-busy={state.coreState !== "idle" ? "true" : "false"}
+                >
                     <main className="stage">
                         {state.view === "code" ? (
                             <CodeView />

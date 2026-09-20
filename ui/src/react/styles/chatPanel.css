@@ -1,6 +1,20 @@
 .chat-panel {
     position: relative;
-    flex: 0 0 auto;
+    /* How much room the panel takes is the shell's call -- it is the one
+       that knows whether there is a conversation to read -- but applying it
+       belongs here, in the file that owns this class. So the shell sets
+       `--chat-grow` and `--chat-max` on the body around it and these two
+       read them; two files styling one class is the collision the scoping
+       test exists to catch.
+
+       The defaults are the panel-beside-a-stage layout: no growing, no cap.
+       Once there is something to read the shell raises both and this becomes
+       the main column, taking the width the reactor gives up -- because a
+       reply, especially a code block, laid out in a 400px strip while half
+       the window sits empty is what this exists to stop. */
+    flex: 0 1 auto;
+    flex-grow: var(--chat-grow, 0);
+    max-width: var(--chat-max, none);
     height: 100%;
     display: flex;
     flex-direction: column;

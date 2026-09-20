@@ -52,6 +52,11 @@ function ChatPanel({ onClose }: Props, ref: ForwardedRef<ChatPanelHandle>) {
     const [dragging, setDragging] = useState(false);
     const [atBottom, setAtBottom] = useState(true);
 
+    /** Matches `App`'s switch, read from the same store rather than passed
+        down: both are answering "is there anything to read yet", and two
+        copies of that question can disagree. */
+    const conversing = state.view === "chat" && state.messages.length > 0;
+
     const feedRef = useRef<HTMLDivElement | null>(null);
     const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -223,7 +228,16 @@ function ChatPanel({ onClose }: Props, ref: ForwardedRef<ChatPanelHandle>) {
     return (
         <aside
             className={dragging ? "chat-panel dragging" : "chat-panel"}
-            style={{ width: `${width}px` }}
+            /* While there is a conversation the panel is the main column and
+               the layout sizes it, so the dragged width becomes its floor
+               rather than its size -- an inline `width` would win over the
+               stylesheet and pin it back to a strip. Dragging still works:
+               it sets the floor, and the panel never goes below it. */
+            style={
+                conversing
+                    ? { minWidth: `${width}px` }
+                    : { width: `${width}px` }
+            }
         >
             {/* Resize handle. Wider than it looks: a 1px target is a target you
                 miss, so the hit area is 9px and only the line inside it is drawn. */}
