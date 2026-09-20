@@ -89,3 +89,59 @@
         overflow: hidden;
     }
 
+    /* -- Once the conversation has started ------------------------------ */
+    /* Reading is the job now, so the reading column gets the room and the
+       reactor becomes what it actually is at that point: a status light.
+
+       It keeps drawing rather than unmounting -- the canvas holds the
+       animation's state, and tearing it down and rebuilding it on the first
+       message would cost a visible hitch at exactly the wrong moment. It is
+       also still the thing that tells you the assistant is thinking, so it
+       stays on screen; it just stops being the largest thing on it. */
+    .shell-body.conversing .stage {
+        /* Sized by ratio rather than pixels: on a wide monitor a fixed
+           reactor is a stamp in a field of background, and on a small one it
+           crowds the text it is supposed to be yielding to.
+
+           No `max-width`. Capping it looked right until the panel hit its own
+           reading cap on a wide window: the panel stopped growing, the stage
+           stopped growing, and 311px of dead background sat between the
+           conversation and the right edge. The stage absorbs the surplus
+           instead -- it is the one element here that can be any size without
+           being wrong, because it holds a circle and some space. */
+        flex: 1 1 26%;
+        min-width: 180px;
+        opacity: 0.55;
+        transition:
+            flex-basis var(--slow) var(--ease),
+            opacity var(--slow) var(--ease);
+    }
+    /* Awake again whenever it has something to report, so a glance at it
+       still answers "is it working?" without going back to full size. */
+    .shell-body.conversing .stage:hover,
+    .shell-body.conversing[data-busy="true"] .stage {
+        opacity: 0.9;
+    }
+
+    /* The other half of the same trade is the panel's to apply, so the shell
+       states it as values rather than reaching into `.chat-panel` itself --
+       the layout says how much room it is giving up, and the panel decides
+       what to do with it. Two files styling one class is the collision the
+       scoping test exists to catch, and a shared custom property is how two
+       components agree on a number without either owning the other. */
+    .shell-body.conversing {
+        /* Outweighs the stage's `flex-grow: 1` so the reading column fills
+           first and only the surplus past its cap goes back to the reactor. */
+        --chat-grow: 6;
+        /* Reading measure. Past roughly this width prose stops being easier
+           to read and starts being harder, so the extra room goes to the
+           margin rather than to the line. */
+        --chat-max: 1100px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .shell-body.conversing .stage {
+            transition: none;
+        }
+    }
+
