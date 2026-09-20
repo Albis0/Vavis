@@ -29,6 +29,7 @@ pub mod spotify;
 pub mod steam;
 pub mod tool;
 pub mod untrusted;
+pub mod virustotal;
 pub mod websearch;
 
 pub use agent::{Agent, AgentHost, Approval, MAX_STEPS};

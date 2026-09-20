@@ -28,7 +28,13 @@
  * never revealed.
  */
 
-import { api, type CanvasSettings, type SearchSettings, type Status } from "../../../lib/api";
+import {
+    api,
+    type CanvasSettings,
+    type SearchSettings,
+    type Status,
+    type VirusTotalSettings,
+} from "../../../lib/api";
 import { toast } from "../../store/toast";
 import KeyInput, { type Provider } from "../KeyInput";
 import Section from "../Section";
@@ -37,6 +43,7 @@ interface Props {
     status: Status | null;
     search: SearchSettings | null;
     canvas: CanvasSettings | null;
+    virustotal: VirusTotalSettings | null;
     /** Re-reads settings so a saved key shows as stored straight away. */
     reload: () => Promise<void>;
 }
@@ -86,18 +93,37 @@ const CANVAS: Provider[] = [
     { id: "custom", label: "custom (images)", note: "only fills {key} in your header" },
 ];
 
-export default function KeysPane({ status, search, canvas, reload }: Props) {
+/** File and link reputation. One provider, so the list is one row -- but it
+    belongs on this screen rather than in a corner of its own, because
+    "where do I put a key" has to keep having one answer. */
+const SECURITY: Provider[] = [
+    {
+        id: "virustotal",
+        note: "free account is enough — 4 lookups a minute, 500 a day",
+    },
+];
+
+export default function KeysPane({ status, search, canvas, virustotal, reload }: Props) {
     /** One saver per store. They look alike and are not interchangeable:
         the same provider id means a different credential in each. */
     async function save(
-        kind: "chat" | "search" | "canvas",
+        kind: "chat" | "search" | "canvas" | "security",
         provider: string,
         key: string,
     ): Promise<void> {
         try {
             if (kind === "chat") await api.setKey(provider, key);
             else if (kind === "search") await api.setSearchKey(provider, key);
-            else await api.setCanvasKey(provider, key);
+            else if (kind === "canvas") await api.setCanvasKey(provider, key);
+            else {
+                // This one checks the key against the service and says what
+                // came back, so a key with a stray character is caught here
+                // rather than at the first scan, when nobody connects the two.
+                const said = await api.setVirusTotalKey(key);
+                await reload();
+                toast.success(said);
+                return;
+            }
             await reload();
             toast.success("Key saved, encrypted.");
         } catch (e) {
@@ -142,6 +168,17 @@ export default function KeysPane({ status, search, canvas, reload }: Props) {
                     providers={CANVAS}
                     configured={canvas?.configured ?? []}
                     onsave={(p, k) => save("canvas", p, k)}
+                />
+            </Section>
+
+            <Section
+                title="File & link checks"
+                blurb="Lets you ask whether a file or a link is known to be malicious. Files are never uploaded — only a fingerprint calculated on this machine is sent, so nothing leaves your disk."
+            >
+                <KeyInput
+                    providers={SECURITY}
+                    configured={virustotal?.hasKey ? ["virustotal"] : []}
+                    onsave={(p, k) => save("security", p, k)}
                 />
             </Section>
 

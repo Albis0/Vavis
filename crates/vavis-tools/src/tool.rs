@@ -46,6 +46,8 @@ pub enum Domain {
     Spotify,
     /// Canvas — görsel üretimi.
     Canvas,
+    /// VirusTotal — dosya ve adres itibar sorgusu.
+    Security,
     /// Bir MCP sunucusu. **Her sunucu kendi alanı**: üç sunucu bağlayan
     /// kullanıcı 60 tool'a ulaşabilir ve hepsini modele göndermek eski
     /// projedeki 353 tool felaketinin aynısı olur.
@@ -55,7 +57,7 @@ pub enum Domain {
 }
 
 impl Domain {
-    pub const ALL: [Domain; 13] = [
+    pub const ALL: [Domain; 14] = [
         Self::Core,
         Self::Files,
         Self::System,
@@ -69,6 +71,7 @@ impl Domain {
         Self::Steam,
         Self::Spotify,
         Self::Canvas,
+        Self::Security,
     ];
 
     pub fn name(self) -> &'static str {
@@ -86,6 +89,7 @@ impl Domain {
             Self::Steam => "steam",
             Self::Spotify => "spotify",
             Self::Canvas => "canvas",
+            Self::Security => "security",
             Self::Mcp(id) => id,
         }
     }

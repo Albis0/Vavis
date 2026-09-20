@@ -307,6 +307,11 @@ export interface GenerateRequest {
 
 // ── Commands ─────────────────────────────────────────────────────────
 
+/** VirusTotal. Only whether a key is stored -- never the key. */
+export interface VirusTotalSettings {
+    hasKey: boolean;
+}
+
 export const api = {
     status: () => invoke<Status>("get_status"),
     loadHistory: () => invoke<StoredLine[]>("load_history"),
@@ -328,6 +333,12 @@ export const api = {
 
     setKey: (provider: string, key: string) =>
         invoke<void>("set_key", { provider, key }),
+    virusTotalSettings: () =>
+        invoke<VirusTotalSettings>("get_virustotal_settings"),
+    /** Saves and verifies. Returns what the check found, to show the user.
+        An empty key removes the stored one. */
+    setVirusTotalKey: (key: string) =>
+        invoke<string>("set_virustotal_key", { key }),
     setProvider: (provider: string) =>
         invoke<string>("set_provider", { provider }),
     setModel: (model: string) => invoke<void>("set_model", { model }),
