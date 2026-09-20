@@ -578,3 +578,46 @@ mod tests {
         assert_eq!(WindowMode::parse("saçmalık"), WindowMode::Windowed);
     }
 }
+
+#[cfg(test)]
+mod code_slot_tests {
+    use super::*;
+
+    /// Every config written before the code slot existed lacks these two
+    /// fields, and `deny_unknown_fields` makes a parse either work or fail
+    /// outright -- so "it probably defaults" is not good enough to ship.
+    /// This is the user's own file, shape for shape.
+    #[test]
+    fn a_config_written_before_the_code_slot_still_loads() {
+        let older = r#"
+[general]
+assistant_name = "Vavis"
+language = "tr"
+
+[llm]
+provider = "gemini"
+model = "gemini-3.5-flash"
+router_model = ""
+"#;
+        let parsed: Config = toml::from_str(older).expect("an older config must still load");
+        assert_eq!(parsed.llm.provider, "gemini");
+        assert_eq!(
+            parsed.llm.code_provider, "",
+            "a missing code slot means: use the chat model"
+        );
+        assert_eq!(parsed.llm.code_model, "");
+    }
+
+    /// And once set, it survives a save/load round trip.
+    #[test]
+    fn the_code_slot_round_trips() {
+        let mut c = Config::default();
+        c.llm.code_provider = "openai".into();
+        c.llm.code_model = "o3-mini".into();
+
+        let text = toml::to_string(&c).expect("serialises");
+        let back: Config = toml::from_str(&text).expect("parses back");
+        assert_eq!(back.llm.code_provider, "openai");
+        assert_eq!(back.llm.code_model, "o3-mini");
+    }
+}
