@@ -61,7 +61,15 @@ Status legend: `[x]` done and tested · `[~]` partly done · `[ ]` not started
         palette.
 - [~] **Code interface** — workspace backend done and tested (tree, read,
       write, search, path-escape refusal). View written.
-      `crates/vavis-shell/src/workspace.rs`, `ui/src/lib/CodeView.svelte`
+      `crates/vavis-shell/src/workspace.rs`, `ui/src/react/CodeView.tsx`
+  - [x] code work can go to its own provider and model, separate from chat.
+        Optional and empty by default. A code provider with no key, a model
+        the provider filter would not offer, or a name we no longer
+        recognise all fall back to the chat model rather than failing the
+        turn. The interface marks the handed-over turn, because only it
+        knows which pane the message came from.
+  - [ ] the harness itself — a real edit/run/read loop rather than one
+        question and one answer. This is the large remaining piece.
 - [x] **Canvas interface** — image and video. Provider chain (OpenAI,
       Stability, Replicate, custom OpenAI-compatible endpoint) with the same
       failover shape as search. Every result keeps the seed the provider
