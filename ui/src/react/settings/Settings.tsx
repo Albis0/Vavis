@@ -46,6 +46,7 @@ import { useStore } from "../store/useStore";
 import { chatSignal } from "../store/chat";
 import { toast } from "../store/toast";
 import { filterGroups } from "../../lib/settings/registry";
+import KeysPane from "./panes/KeysPane";
 import SearchPane from "./panes/SearchPane";
 import CanvasPane from "./panes/CanvasPane";
 import ToolsPane from "./panes/ToolsPane";
@@ -508,6 +509,14 @@ export default function Settings() {
                                     await chat.refresh();
                                 })
                             }
+                        />
+                    )}
+                    {active === "keys" && (
+                        <KeysPane
+                            status={status}
+                            search={search}
+                            canvas={canvas}
+                            reload={load}
                         />
                     )}
                     {active === "search" && <SearchPane search={search} reload={load} />}

@@ -176,9 +176,12 @@ export default function CanvasPane({ canvas, reload }: Props) {
                 <ProviderChain items={videoChain} onreorder={(o) => reorder("video", o)} />
             </Section>
 
+            {/* Also on the API keys screen. Kept here for the same reason the
+                search pane keeps its own: this is where a "no key — skipped"
+                note is read, and that is where it should be fixable. */}
             <Section
                 title="API keys"
-                blurb="Stored encrypted on this machine and never shown again once saved."
+                blurb="Stored encrypted on this machine and never shown again once saved. All of the app's keys are together under API keys."
             >
                 <KeyInput providers={KEYED} configured={canvas.configured} onsave={saveKey} />
             </Section>
