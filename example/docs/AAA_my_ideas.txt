@@ -21,15 +21,8 @@ bu nasıl yapılır bilmiom ama o bölmede claude code çalıştırmak şahane o
 code bölümünün harness i sağlam olmalı gerekirse providera özel olmalı 
 claude code codex kalitesinde
 
-kişi code için ayrı chat için ayrı ai modeli provider seçebilmeli
 
 niyeyse diğer insanlar bazıları opus 4.8 gibi bir canavar kullanırken geri cevap almaları 2sn sürerken bizim gemini flash 10 saniyede falan tool kullanmaya başlıo orda bi sıkıntı var
 
 (canvas komple siki tutmuş)
-
-
-    APIS:
-ayarlarda apiyi tek yere toplarız sonra oraya seçenek ekleriz sekme vs. bişi isteyen o ayar penceresi içinde karıştırmadan image ayrı chat ayrı diğerleri ayrı vs vs karıştırmadan tek pencerede api ayarlayabilsin .
-
-
 

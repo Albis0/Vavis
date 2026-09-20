@@ -17,6 +17,7 @@ pub mod request_tools;
 pub mod spotify;
 pub mod steam;
 pub mod system;
+pub mod virustotal;
 pub mod vision;
 pub mod web;
 
@@ -98,6 +99,10 @@ pub fn register_all(registry: &mut Registry) {
     registry.register(Box::new(steam::StorePrice));
     registry.register(Box::new(steam::Wishlist));
     registry.register(Box::new(steam::Friends));
+
+    registry.register(Box::new(virustotal::ScanFile));
+    registry.register(Box::new(virustotal::LookupHash));
+    registry.register(Box::new(virustotal::CheckUrl));
 
     // Canvas — tek tool: varyasyon, büyütme ve parametre ayarı arayüzde.
     registry.register(Box::new(canvas::Generate));

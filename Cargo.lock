@@ -5003,6 +5003,7 @@ name = "vavis-tools"
 version = "0.7.4"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "chrono",
  "rand 0.8.8",
  "reqwest 0.12.28",

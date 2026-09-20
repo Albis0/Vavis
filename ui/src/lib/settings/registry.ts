@@ -53,7 +53,7 @@ export const GROUPS: Group[] = [
                 label: "API keys",
                 icon: "⚿",
                 keywords:
-                    "key api token secret credential auth groq openai anthropic claude gemini mistral deepseek xai grok nvidia tavily brave stability replicate paste add replace",
+                    "key api token secret credential auth groq openai anthropic claude gemini mistral deepseek xai grok nvidia tavily brave stability replicate virustotal virus malware scan security paste add replace",
             },
             {
                 id: "voice",

@@ -91,3 +91,17 @@ describe("settings registry", () => {
         }
     });
 });
+
+/**
+ * VirusTotal's key lives on the keys screen like every other key, so the
+ * words someone would actually type -- 'virus', 'malware' -- have to reach
+ * it. Without this the row exists but is unfindable by search.
+ */
+describe("the security key", () => {
+    it.each(["virustotal", "virus", "malware", "scan"])(
+        "reaches the keys screen by %s",
+        (term) => {
+            expect(filterCategories(term).map((c) => c.id)).toContain("keys");
+        },
+    );
+});

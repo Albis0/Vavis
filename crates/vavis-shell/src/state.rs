@@ -60,6 +60,7 @@ impl AppState {
         push_canvas_settings(&core.config, &keys);
         push_steam_settings(&core.config, &keys);
         push_spotify_settings(&core.config, &keys);
+        push_virustotal_settings(&keys);
 
         // Pick a vault up front: the configured one, else whichever Obsidian
         // opened last. The note tools are useless without one, and asking the
@@ -150,6 +151,12 @@ impl AppState {
         let core = Self::lock(&self.core);
         let keys = Self::lock(&self.keys);
         push_steam_settings(&core.config, &keys);
+    }
+
+    /// Re-installs the VirusTotal key.
+    pub fn refresh_virustotal(&self) {
+        let keys = Self::lock(&self.keys);
+        push_virustotal_settings(&keys);
     }
 
     /// Re-installs the Spotify snapshot.
@@ -290,6 +297,16 @@ fn push_spotify_settings(config: &vavis_core::Config, keys: &KeyStore) {
 }
 
 /// Copies Steam credentials into the tool layer.
+/// Installs the VirusTotal key.
+///
+/// No config half, unlike Steam: there is nothing to configure but the
+/// key, and the key never belongs in the settings file.
+fn push_virustotal_settings(keys: &KeyStore) {
+    vavis_tools::virustotal::configure(vavis_tools::virustotal::Settings {
+        api_key: keys.get("virustotal").unwrap_or_default().to_string(),
+    });
+}
+
 fn push_steam_settings(config: &vavis_core::Config, keys: &KeyStore) {
     vavis_tools::steam::configure(vavis_tools::steam::Settings {
         api_key: keys.get("steam").unwrap_or_default().to_string(),

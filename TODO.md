@@ -7,6 +7,13 @@ Status legend: `[x]` done and tested · `[~]` partly done · `[ ]` not started
 
 ## Integrations
 
+- [x] **VirusTotal** — dosya ve adres itibarı, 3 tool. Dosya **hiçbir zaman
+      yüklenmiyor**: SHA-256 yerel hesaplanıp yalnızca o soruluyor, bilinmeyen
+      hash "bilinmiyor" dönüyor. Eşik oran üzerinden — sabit sayı google.com'u
+      "ciddi" diye işaretliyordu. Dakika sınırı istemcide de sayılıyor, anahtar
+      kaydedilirken gerçek bir sorguyla doğrulanıyor.
+      `crates/vavis-tools/src/virustotal/`
+
 - [x] **Web search chain** — Tavily → Brave → custom → DuckDuckGo, sequential
       failover, 15-min cooldown after a rate limit, order editable in settings.
       `crates/vavis-tools/src/websearch/`

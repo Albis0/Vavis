@@ -85,6 +85,8 @@ fn main() {
             commands::list_vaults,
             commands::set_vault,
             commands::get_steam_settings,
+            commands::get_virustotal_settings,
+            commands::set_virustotal_key,
             commands::set_steam,
             commands::get_spotify_settings,
             commands::set_spotify_client_id,

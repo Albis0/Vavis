@@ -27,6 +27,7 @@ import { useEffect, useState } from "react";
 import {
     api,
     type CanvasSettings,
+    type VirusTotalSettings,
     type ConnectionTest,
     type Fact,
     type McpServerInfo,
@@ -155,6 +156,7 @@ export default function Settings() {
     const [search, setSearch] = useState<SearchSettings | null>(null);
     const [voice, setVoice] = useState<VoiceSettings | null>(null);
     const [canvas, setCanvas] = useState<CanvasSettings | null>(null);
+    const [virustotal, setVirustotal] = useState<VirusTotalSettings | null>(null);
     const [vaults, setVaults] = useState<VaultInfo[]>([]);
     const [spotify, setSpotify] = useState<SpotifySettings | null>(null);
     const [steam, setSteam] = useState<SteamSettings | null>(null);
@@ -196,6 +198,7 @@ export default function Settings() {
                 factsResult,
                 toolsResult,
                 voiceResult,
+                virustotalResult,
             ] = await Promise.all([
                 api.searchSettings(),
                 api.canvasSettings(),
@@ -206,9 +209,11 @@ export default function Settings() {
                 api.listFacts(),
                 api.listTools(),
                 api.voiceSettings(),
+                api.virusTotalSettings(),
             ]);
             setSearch(searchResult);
             setCanvas(canvasResult);
+            setVirustotal(virustotalResult);
             setVaults(vaultsResult);
             setSpotify(spotifyResult);
             setSteam(steamResult);
@@ -550,6 +555,7 @@ export default function Settings() {
                             status={status}
                             search={search}
                             canvas={canvas}
+                            virustotal={virustotal}
                             reload={load}
                         />
                     )}
