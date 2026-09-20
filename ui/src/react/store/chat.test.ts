@@ -243,3 +243,45 @@ describe("streaming a reply", () => {
         ]);
     });
 });
+
+/**
+ * The code-context flag.
+ *
+ * It exists because the code screen sends you to the chat screen to type,
+ * so by the time the message leaves, `view` says "chat" and where the
+ * question came from is gone. The flag has to mark exactly one turn: the
+ * handed-over one. Marking every turn after it would quietly send ordinary
+ * chat to the code model.
+ */
+describe("code context", () => {
+    it("is off until the code screen hands a turn over", async () => {
+        const { api } = await import("../../lib/api");
+        await chat.send("naber");
+        expect(api.send).toHaveBeenCalledWith("naber", false);
+    });
+
+    it("marks the handed-over turn", async () => {
+        const { api } = await import("../../lib/api");
+        chat.codeContext = true;
+        await chat.send("bu dosyada ne var");
+        expect(api.send).toHaveBeenCalledWith("bu dosyada ne var", true);
+    });
+
+    it("marks only that turn, not the ones after it", async () => {
+        const { api } = await import("../../lib/api");
+        chat.codeContext = true;
+        await chat.send("ilk");
+        await chat.send("ikinci");
+
+        expect(api.send).toHaveBeenNthCalledWith(1, "ilk", true);
+        expect(api.send).toHaveBeenNthCalledWith(2, "ikinci", false);
+    });
+
+    /** An empty or busy send returns early, so the mark must survive it --
+        otherwise a stray keystroke would silently spend the handover. */
+    it("survives a send that never went out", async () => {
+        chat.codeContext = true;
+        await chat.send("   ");
+        expect(chat.codeContext).toBe(true);
+    });
+});
