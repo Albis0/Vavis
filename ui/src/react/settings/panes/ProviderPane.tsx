@@ -26,6 +26,11 @@ interface Props {
     onsavekey: (id: string) => void;
     oncancelkey: () => void;
     onfetchmodels: () => void;
+    codeModels: string[];
+    loadingCodeModels: boolean;
+    onpickcodeprovider: (id: string) => void;
+    onpickcodemodel: (model: string) => void;
+    onfetchcodemodels: () => void;
     ontest: (id: string) => void;
     onchange: (key: string, value: string) => void;
 }
@@ -45,9 +50,16 @@ export default function ProviderPane({
     onsavekey,
     oncancelkey,
     onfetchmodels,
+    codeModels,
+    loadingCodeModels,
+    onpickcodeprovider,
+    onpickcodemodel,
+    onfetchcodemodels,
     ontest,
     onchange,
 }: Props) {
+    const codeProvider = status?.codeProvider ?? "";
+    const codeOn = codeProvider !== "";
     return (
         <>
             <h2>Model & keys</h2>
@@ -189,6 +201,65 @@ export default function ProviderPane({
                         );
                     })}
                 </div>
+            </Section>
+
+            <Section
+                title="Code model"
+                blurb="Code work can go to a different provider than chat. Chat wants an answer before the thought is gone; code wants the answer to be right and will wait — one model rarely does both well. Off by default, in which case code uses the model above."
+            >
+                <Field label="Provider for code" fallback="same as chat">
+                    <select
+                        value={codeProvider}
+                        onChange={(e) => onpickcodeprovider(e.target.value)}
+                    >
+                        <option value="">same as chat</option>
+                        {(status?.providers ?? []).map((p) => (
+                            <option value={p.id} key={p.id}>
+                                {p.id}
+                                {p.needsKey && !p.hasKey ? " — no key yet" : ""}
+                            </option>
+                        ))}
+                    </select>
+                </Field>
+
+                {codeOn && (
+                    <>
+                        <Field label="Model" fallback={`the ${codeProvider} default`}>
+                            <div className="actions">
+                                <span className="current-model">
+                                    {status?.codeModel || "provider default"}
+                                </span>
+                                <button
+                                    className="tiny"
+                                    onClick={onfetchcodemodels}
+                                    disabled={loadingCodeModels}
+                                >
+                                    {loadingCodeModels ? "loading…" : "change model"}
+                                </button>
+                            </div>
+                        </Field>
+
+                        {codeModels.length > 0 && (
+                            <div className="list scroll">
+                                {codeModels.map((m) => (
+                                    <button
+                                        className={m === status?.codeModel ? "row active" : "row"}
+                                        onClick={() => onpickcodemodel(m)}
+                                        key={m}
+                                    >
+                                        {m}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+
+                        <p className="blurb">
+                            Used when you ask about a file from the code screen. Everything
+                            else stays on the chat model. If this provider has no key
+                            stored, code falls back to the chat model rather than failing.
+                        </p>
+                    </>
+                )}
             </Section>
 
             <Section

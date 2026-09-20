@@ -24,6 +24,10 @@ export interface Status {
     model: string;
     /** Cheap model that picks tools. Empty when routing is off. */
     routerModel: string;
+    /** Provider for code work. Empty means code uses the chat provider. */
+    codeProvider: string;
+    /** Model for code work. Meaningless while `codeProvider` is empty. */
+    codeModel: string;
     /**
      * Every approval and budget is off.
      *
@@ -307,7 +311,15 @@ export const api = {
     status: () => invoke<Status>("get_status"),
     loadHistory: () => invoke<StoredLine[]>("load_history"),
 
-    send: (text: string) => invoke<void>("send_message", { text }),
+    /**
+     * Sends a message.
+     *
+     * `code` marks the turn as code work so it can go to the code model when
+     * the user has set one. Only the interface knows which pane the message
+     * came from, so only the interface can answer this.
+     */
+    send: (text: string, code = false) =>
+        invoke<void>("send_message", { text, code }),
     answerApproval: (decision: "allow" | "always" | "deny") =>
         invoke<void>("answer_approval", { decision }),
     clear: () => invoke<void>("clear_conversation"),
@@ -320,6 +332,11 @@ export const api = {
         invoke<string>("set_provider", { provider }),
     setModel: (model: string) => invoke<void>("set_model", { model }),
     listModels: () => invoke<string[]>("list_models"),
+    /** Empty string clears it, meaning code shares the chat model. */
+    setCodeProvider: (provider: string) =>
+        invoke<string>("set_code_provider", { provider }),
+    setCodeModel: (model: string) => invoke<void>("set_code_model", { model }),
+    listCodeModels: () => invoke<string[]>("list_code_models"),
     setSetting: (field: string, value: string) =>
         invoke<void>("set_setting", { field, value }),
 

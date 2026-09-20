@@ -777,6 +777,21 @@ input[type="number"] {
     white-space: nowrap;
     min-width: 0;
 }
+/* The value a setting currently holds, shown beside the button that changes
+   it. Deliberately not .card-model: that one is faint because it sits under
+   a card's own name as a secondary detail, whereas here the model IS the
+   setting, and faint type made a real choice look like placeholder text
+   waiting to be filled in. */
+.current-model {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
 /* Same width whether it says "use this" or "answering", so the right edge of
    the column is a straight line rather than a ragged one that shifts as the
    selection moves from card to card. */

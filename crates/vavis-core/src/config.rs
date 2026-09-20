@@ -316,6 +316,23 @@ pub struct Llm {
     /// gerekmiyor.
     #[serde(default)]
     pub router_model: String,
+
+    /// Kod işi için ayrı sağlayıcı. Boşsa sohbetinki kullanılır.
+    ///
+    /// İkisi farklı işler: sohbet hızlı ve ucuz olsun ister, kod doğru
+    /// olsun ister. Tek slot varken kullanıcı ikisinden birini feda
+    /// etmek zorunda kalıyordu — ya sohbet için gereksiz pahalı bir model,
+    /// ya kod için yetersiz bir model.
+    ///
+    /// Boş varsayılan kasıtlı: ayrı model kuran kullanıcı bunu bilerek
+    /// yapar, kurmayanın davranışı hiç değişmez.
+    #[serde(default)]
+    pub code_provider: String,
+
+    /// Kod işi için model. `code_provider` boşken anlamsız; dolu olduğunda
+    /// boş bırakılırsa o sağlayıcının varsayılanı kullanılır.
+    #[serde(default)]
+    pub code_model: String,
 }
 
 impl Default for Llm {
@@ -327,6 +344,10 @@ impl Default for Llm {
             // Kapalı gelir: yönlendirme fazladan bir model çağrısı demek.
             // Kullanıcı isterse açar.
             router_model: String::new(),
+            // Boş: kod da sohbetle aynı modeli kullanır. Ayıran kullanıcı
+            // doldurur.
+            code_provider: String::new(),
+            code_model: String::new(),
         }
     }
 }
