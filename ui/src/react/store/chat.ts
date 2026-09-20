@@ -159,6 +159,21 @@ export class ChatStore {
     /** Which interface is showing. */
     view: Interface = "chat";
 
+    /**
+     * The next message is about code, so it goes to the code model.
+     *
+     * Not derived from `view`: the code pane sends you to the chat pane to
+     * type, so by the time the message leaves, the view says "chat" and the
+     * question it was really asked from is lost. This is set when the code
+     * pane hands the composer over and cleared once the message is sent, so
+     * exactly the handed-over turn is marked -- the next one you type
+     * unprompted is chat again.
+     *
+     * Costs nothing when no code model is configured: the backend falls
+     * straight back to the chat provider.
+     */
+    codeContext = false;
+
     private unlisteners: (() => void)[] = [];
 
     /** The state the core visual should show. */
@@ -231,8 +246,13 @@ export class ChatStore {
         this.remember(trimmed);
         this.input = "";
 
+        // Read and cleared together: the flag marks one handed-over turn,
+        // not every turn after it.
+        const code = this.codeContext;
+        this.codeContext = false;
+
         try {
-            await api.send(trimmed);
+            await api.send(trimmed, code);
             await this.refresh();
         } catch (e) {
             this.add("error", String(e));
@@ -347,6 +367,9 @@ export class ChatStore {
     async clear() {
         await api.clear();
         this.messages = [];
+        // A handed-over prompt that was never sent does not survive into the
+        // new conversation.
+        this.codeContext = false;
         this.add("system", "Conversation cleared. Remembered facts are kept.");
         await this.refresh();
     }

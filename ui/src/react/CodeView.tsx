@@ -164,6 +164,9 @@ export default function CodeView() {
         if (!file) return;
         chat.view = "chat";
         chat.input = `In ${file}, `;
+        // Marks the turn as code work, so it goes to the code model when one
+        // is set. The store clears it as soon as the message is sent.
+        chat.codeContext = true;
     }
 
     function onKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {

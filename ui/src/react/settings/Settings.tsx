@@ -163,6 +163,11 @@ export default function Settings() {
     const [tools, setTools] = useState<Tool[]>([]);
     const [models, setModels] = useState<string[]>([]);
     const [loadingModels, setLoadingModels] = useState(false);
+    /** The code provider's own model list, kept apart from the chat one so
+        opening one picker does not fill the other with the wrong provider's
+        models. */
+    const [codeModels, setCodeModels] = useState<string[]>([]);
+    const [loadingCodeModels, setLoadingCodeModels] = useState(false);
 
     /**
      * Which provider's key box is open, if any.
@@ -355,6 +360,30 @@ export default function Settings() {
         });
     }
 
+    async function pickCodeProvider(id: string) {
+        await run(async () => {
+            await api.setCodeProvider(id);
+            setCodeModels([]);
+            await chat.refresh();
+        });
+    }
+
+    async function fetchCodeModels() {
+        setLoadingCodeModels(true);
+        await run(async () => {
+            setCodeModels(await api.listCodeModels());
+        });
+        setLoadingCodeModels(false);
+    }
+
+    async function pickCodeModel(model: string) {
+        await run(async () => {
+            await api.setCodeModel(model);
+            setCodeModels([]);
+            await chat.refresh();
+        });
+    }
+
     async function pickVault(path: string) {
         await run(async () => {
             await api.setVault(path);
@@ -487,6 +516,11 @@ export default function Settings() {
                                 setKeyOpen(null);
                             }}
                             onfetchmodels={fetchModels}
+                            codeModels={codeModels}
+                            loadingCodeModels={loadingCodeModels}
+                            onpickcodeprovider={pickCodeProvider}
+                            onpickcodemodel={pickCodeModel}
+                            onfetchcodemodels={fetchCodeModels}
                             ontest={test}
                             onchange={updateSetting}
                         />
