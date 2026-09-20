@@ -231,7 +231,10 @@ fn get(path: &str) -> Result<(u16, String), VtError> {
         let client = reqwest::Client::builder()
             .timeout(REQUEST_TIMEOUT)
             .build()
-            .map_err(|e| VtError::Failed(e.to_string()))?;
+            .map_err(|e| {
+                tracing::warn!(%e, "HTTP istemcisi kurulamadı");
+                VtError::Failed("ağ katmanı hazırlanamadı".into())
+            })?;
 
         let resp = client
             .get(&url)
@@ -239,18 +242,28 @@ fn get(path: &str) -> Result<(u16, String), VtError> {
             .send()
             .await
             .map_err(|e| {
+                // reqwest'in hata metni isteğin tam adresini içeriyor. Ölçüldü:
+                // geçici bir ağ hatasında kullanıcıya "error sending request for
+                // url (https://www.virustotal.com/api/v3/files/<hash>)" gösterildi
+                // -- ne olduğunu söylemeyen, ama sorulan dosyanın parmak izini
+                // ekrana basan bir metin. Ayrıntı günlüğe, kullanıcıya cümle.
+                tracing::warn!(%e, "VirusTotal isteği başarısız");
                 if e.is_timeout() {
                     VtError::Failed("VirusTotal yanıt vermedi (zaman aşımı)".into())
+                } else if e.is_connect() {
+                    VtError::Failed(
+                        "VirusTotal'a bağlanılamadı — internet bağlantını kontrol et".into(),
+                    )
                 } else {
-                    VtError::Failed(e.to_string())
+                    VtError::Failed("VirusTotal'a ulaşılamadı".into())
                 }
             })?;
 
         let status = resp.status().as_u16();
-        let text = resp
-            .text()
-            .await
-            .map_err(|e| VtError::Failed(e.to_string()))?;
+        let text = resp.text().await.map_err(|e| {
+            tracing::warn!(%e, "VirusTotal yanıtı okunamadı");
+            VtError::Failed("VirusTotal yanıtı yarıda kesildi".into())
+        })?;
         Ok((status, text))
     })
     .map_err(VtError::Failed)?
@@ -546,6 +559,31 @@ mod tests {
             msg.contains("yüklemedim"),
             "dosyanın gönderilmediği söylenmeli: {msg}"
         );
+    }
+
+    /// Ağ hatası kullanıcıya adres basmamalı.
+    ///
+    /// Ölçülmüş: geçici bir hatada reqwest'in metni ekrana
+    /// "error sending request for url (https://www.virustotal.com/api/v3/
+    /// files/<hash>)" olarak düşüyordu -- ne olduğunu söylemeyen, ama
+    /// sorulan dosyanın parmak izini gösteren bir metin. Ayrıntı günlüğe
+    /// gider, kullanıcı cümle görür.
+    #[test]
+    fn a_network_error_never_shows_the_user_a_url() {
+        let messages = [
+            VtError::Failed("VirusTotal yanıt vermedi (zaman aşımı)".into()),
+            VtError::Failed("VirusTotal'a bağlanılamadı — internet bağlantını kontrol et".into()),
+            VtError::Failed("VirusTotal'a ulaşılamadı".into()),
+            VtError::Failed("VirusTotal yanıtı yarıda kesildi".into()),
+            VtError::NotConfigured,
+            VtError::RateLimited,
+            VtError::BadKey,
+        ];
+        for m in messages {
+            let text = m.to_string();
+            assert!(!text.contains("http"), "adres sızdı: {text}");
+            assert!(!text.contains("api/v3"), "uç nokta sızdı: {text}");
+        }
     }
 
     /// Anahtarsız çağrı ağa hiç çıkmamalı.
