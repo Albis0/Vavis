@@ -81,6 +81,14 @@ pub fn resolve(media_dir: &Path, name: &str) -> Option<PathBuf> {
     if candidate.is_absolute() {
         return None;
     }
+    // Windows spellings of "somewhere else", refused on every platform:
+    // `Path` only recognises its own OS's forms, so on anything but Windows
+    // `C:\Windows` is one ordinary file name and `..\x` another. Names are
+    // written by this app and never contain either separator or a colon, so
+    // one that does is a hand-edited row, not a file of ours.
+    if name.contains('\\') || name.contains(':') {
+        return None;
+    }
 
     for part in candidate.components() {
         use std::path::Component;
