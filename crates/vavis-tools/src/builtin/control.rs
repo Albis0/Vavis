@@ -119,6 +119,7 @@ fn launch_platform(name: &str, arguments: Option<&str>) -> ToolOutcome {
 
     // `cmd /C start` kabuk kısayollarını (chrome, spotify…) da çözer.
     let mut cmd = Command::new("cmd");
+    vavis_core::process::hidden(&mut cmd);
     cmd.args(["/C", "start", ""]);
     cmd.arg(name);
     if let Some(a) = arguments {

@@ -77,13 +77,8 @@ impl StdioTransport {
             cmd.env(key, value);
         }
 
-        #[cfg(windows)]
-        {
-            // Without this every stdio server flashes a console window.
-            use std::os::windows::process::CommandExt;
-            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-            cmd.creation_flags(CREATE_NO_WINDOW);
-        }
+        // Without this every stdio server flashes a console window.
+        vavis_core::process::hidden(&mut cmd);
 
         let mut child = cmd
             .spawn()

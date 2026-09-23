@@ -295,16 +295,18 @@ fn set_system_volume(_level: u8) -> ToolOutcome {
 pub(crate) fn run_powershell(script: &str) -> std::io::Result<String> {
     use std::process::Command;
 
-    let output = Command::new("powershell")
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            script,
-        ])
-        .output()?;
+    let mut cmd = Command::new("powershell");
+    cmd.args([
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        script,
+    ]);
+    // No console window flashing up on every click and keystroke.
+    vavis_core::process::hidden(&mut cmd);
+    let output = cmd.output()?;
 
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
