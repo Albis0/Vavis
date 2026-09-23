@@ -39,6 +39,12 @@ pub struct AppState {
 
     /// Wall-clock start, used by the interface for uptime.
     pub started: std::time::Instant,
+
+    /// The MCP server Claude Code reaches Vavis's tools through. Started
+    /// the first time a Claude Code turn needs it, then kept for the life of
+    /// the app -- its token is what the CLI was told, so it cannot change
+    /// mid-session.
+    pub claude_bridge: Mutex<Option<Arc<vavis_tools::mcp::bridge::Bridge>>>,
 }
 
 impl AppState {
@@ -96,7 +102,28 @@ impl AppState {
             approval_rx: Arc::new(Mutex::new(approval_rx)),
             voice: Arc::new(Mutex::new(voice)),
             started: std::time::Instant::now(),
+            claude_bridge: Mutex::new(None),
         })
+    }
+
+    /// The tool bridge, started on first use.
+    pub fn claude_bridge(
+        &self,
+        app: &tauri::AppHandle,
+    ) -> Result<Arc<vavis_tools::mcp::bridge::Bridge>, String> {
+        let mut slot = Self::lock(&self.claude_bridge);
+        if let Some(bridge) = slot.as_ref() {
+            return Ok(bridge.clone());
+        }
+        let handler = Arc::new(crate::commands::chat::ToolBridgeHandler {
+            agent: self.agent.clone(),
+            app: app.clone(),
+            approval_rx: self.approval_rx.clone(),
+        });
+        let bridge =
+            Arc::new(vavis_tools::mcp::bridge::Bridge::start(handler).map_err(|e| e.to_string())?);
+        *slot = Some(bridge.clone());
+        Ok(bridge)
     }
 
     /// Claims the busy flag. Returns false if a request is already running.

@@ -27,6 +27,28 @@ pub enum BrainError {
 
     #[error("cevap çözümlenemedi: {0}")]
     Parse(String),
+
+    /// A setting the request cannot go out without, such as a custom
+    /// provider with no URL.
+    #[error("ayar eksik: {0}")]
+    Config(String),
+
+    /// The Claude Code CLI is not installed, or not where we looked.
+    #[error("Claude Code bulunamadı")]
+    CliMissing,
+
+    /// The CLI is installed but not logged in.
+    #[error("Claude Code oturumu yok: {0}")]
+    CliLogin(String),
+
+    /// The subscription's limit for this window is used up. `resets_at` is
+    /// a unix timestamp when the CLI named one.
+    #[error("Claude kullanım sınırı doldu")]
+    UsageLimit { resets_at: Option<i64> },
+
+    /// Anything else the CLI reported.
+    #[error("Claude Code: {0}")]
+    Cli(String),
 }
 
 pub type Result<T> = std::result::Result<T, BrainError>;
@@ -62,6 +84,10 @@ pub struct ChatConfig {
     /// Gerçek kullanımı: yerel sunucu farklı portta koşuyorsa (Ollama 11434
     /// yerine LM Studio 1234). Testlerde de sahte sunucuya yönlendirmek için.
     pub url_override: Option<String>,
+    /// Where Vavis's tools can be reached over MCP. Only the Claude Code
+    /// provider reads it: every other provider takes tool schemas in the
+    /// request body instead.
+    pub tool_bridge: Option<crate::claude_code::ToolBridge>,
 }
 
 impl ChatConfig {
@@ -72,6 +98,7 @@ impl ChatConfig {
             api_key: api_key.into(),
             temperature: 0.7,
             url_override: None,
+            tool_bridge: None,
         }
     }
 
@@ -146,6 +173,25 @@ impl BrainClient {
             });
         }
 
+        // A custom endpoint has no URL of its own to fall back on.
+        if cfg.provider == Provider::Custom && cfg.url_override.is_none() {
+            return Err(BrainError::Config(
+                "the custom provider has no URL — set one in settings".into(),
+            ));
+        }
+
+        // Not HTTP at all: a program on the user's machine. Tools reach it
+        // over MCP rather than in a request body, so what it gets here is
+        // whether to attach them, not the schemas themselves.
+        if cfg.provider == Provider::ClaudeCode {
+            let bridge = if tools.is_empty() {
+                None
+            } else {
+                cfg.tool_bridge.as_ref()
+            };
+            return crate::claude_code::run(cfg, messages, bridge, on_event).await;
+        }
+
         let caps = ModelCaps::for_model(&cfg.model);
 
         // Anthropic tamamen farklı gövde/akış şeması kullanıyor — ayrı yol.
@@ -191,10 +237,13 @@ impl BrainClient {
         let mut body = serde_json::json!({
             "model": cfg.model,
             "messages": openai_messages(&fitted.messages),
-            "temperature": cfg.temperature,
-            "max_tokens": caps.max_output,
             "stream": true,
         });
+        let shape = RequestShape::for_model(cfg.provider, &cfg.model);
+        body[shape.token_field] = serde_json::json!(caps.max_output);
+        if shape.temperature {
+            body["temperature"] = serde_json::json!(cfg.temperature);
+        }
         // `fitted.tools`, not `tools`: the trimmed list is the one that fits.
         // Sending the full set here is exactly the bug that made the budget
         // module's trimming pointless.
@@ -212,9 +261,10 @@ impl BrainClient {
             .http
             .post(cfg.chat_url())
             .header("content-type", "application/json");
-        if cfg.provider.needs_key() {
+        if !cfg.api_key.trim().is_empty() && cfg.provider != Provider::Local {
             req = req.bearer_auth(&cfg.api_key);
         }
+        req = provider_headers(req, cfg.provider);
 
         let resp = req.json(&body).send().await?;
         let status = resp.status();
@@ -502,18 +552,52 @@ impl BrainClient {
 
     /// Canlı model listesi. Sağlayıcı gürültüsü süzülür.
     pub async fn list_models(&self, provider: Provider, api_key: &str) -> Result<Vec<String>> {
+        self.list_models_at(provider, api_key, None).await
+    }
+
+    /// As [`Self::list_models`], for a provider reached at a URL of the
+    /// user's choosing (`chat_url` is the chat endpoint they configured).
+    pub async fn list_models_at(
+        &self,
+        provider: Provider,
+        api_key: &str,
+        chat_url: Option<&str>,
+    ) -> Result<Vec<String>> {
         if provider.needs_key() && api_key.trim().is_empty() {
             return Err(BrainError::MissingKey { provider });
         }
 
-        let mut req = self.http.get(provider.models_url());
+        // No endpoint to ask: the CLI resolves these aliases itself, to the
+        // newest model of each tier. Checking that the CLI is there at all
+        // is what makes this a useful answer rather than a constant.
+        if provider == Provider::ClaudeCode {
+            crate::claude_code::version().await?;
+            return Ok(crate::claude_code::MODELS
+                .iter()
+                .map(|m| m.to_string())
+                .collect());
+        }
+
+        let url = match chat_url {
+            Some(chat) => models_url_from_chat(chat),
+            None if provider == Provider::Custom => {
+                return Err(BrainError::Config(
+                    "the custom provider has no URL — set one in settings".into(),
+                ))
+            }
+            None => provider.models_url().to_string(),
+        };
+
+        let mut req = self.http.get(url);
         req = match provider {
             // Gemini's own endpoint takes the key in a header and answers
             // with `models[].name`, not `data[].id`.
             Provider::Gemini => req.header(crate::gemini::KEY_HEADER, api_key),
-            _ if provider.needs_key() => req.bearer_auth(api_key),
+            Provider::Local => req,
+            _ if !api_key.trim().is_empty() => req.bearer_auth(api_key),
             _ => req,
         };
+        req = provider_headers(req, provider);
 
         let resp = req.send().await?;
         let status = resp.status();
@@ -558,6 +642,21 @@ impl BrainClient {
                 // screen and the chat config both use the bare name.
                 .map(|m| m.name.trim_start_matches("models/").to_string())
                 .collect()
+        } else if provider == Provider::GitHub {
+            // GitHub's catalog is a bare array with its own field names, and
+            // it lists embedding models beside the chat ones -- each entry
+            // says what it outputs, so ask rather than guess.
+            let list: Vec<GitHubModel> = resp
+                .json()
+                .await
+                .map_err(|e| BrainError::Parse(e.to_string()))?;
+            list.into_iter()
+                .filter(|m| {
+                    m.supported_output_modalities.is_empty()
+                        || m.supported_output_modalities.iter().any(|o| o == "text")
+                })
+                .map(|m| m.id)
+                .collect()
         } else {
             let list: ModelList = resp
                 .json()
@@ -573,7 +672,12 @@ impl BrainClient {
 
         // Süzgeç her şeyi elerse süzülmemiş listeye dön — boş liste en kötüsü.
         let mut out = if useful.is_empty() { all } else { useful };
-        out.sort_unstable();
+        // Free models first where a provider marks them, then by name:
+        // OpenRouter lists several hundred, and the ones that cost nothing
+        // are the ones a new key can actually use.
+        out.sort_unstable_by(|a, b| {
+            (!a.ends_with(":free"), a.as_str()).cmp(&(!b.ends_with(":free"), b.as_str()))
+        });
         Ok(out)
     }
 }
@@ -611,19 +715,137 @@ fn openai_messages(messages: &[Message]) -> Vec<serde_json::Value> {
         .collect()
 }
 
+/// How an OpenAI-compatible request has to be shaped for one model.
+///
+/// OpenAI's reasoning models (the `o` series and GPT-5) refuse two things
+/// every other chat model accepts: `max_tokens`, which they want spelled
+/// `max_completion_tokens`, and any temperature but the default. Sending
+/// the usual body gets a 400 before a word is generated -- so every one of
+/// these models, all of which the picker offers, simply did not work.
+struct RequestShape {
+    token_field: &'static str,
+    temperature: bool,
+}
+
+impl RequestShape {
+    fn for_model(provider: Provider, model: &str) -> Self {
+        // The part after a vendor prefix: GitHub and OpenRouter name models
+        // `openai/gpt-5-mini`.
+        let bare = model
+            .rsplit('/')
+            .next()
+            .unwrap_or(model)
+            .to_ascii_lowercase();
+        let reasoning = bare.starts_with("gpt-5")
+            || (bare.starts_with('o') && bare[1..].starts_with(|c: char| c.is_ascii_digit()));
+        let openai_backed = matches!(provider, Provider::OpenAI | Provider::GitHub)
+            || (provider == Provider::OpenRouter && model.starts_with("openai/"));
+        match (openai_backed, reasoning) {
+            (true, true) => Self {
+                token_field: "max_completion_tokens",
+                temperature: false,
+            },
+            // OpenAI's own API takes the new spelling for every model, and
+            // is the only one guaranteed to.
+            (true, false) if provider == Provider::OpenAI => Self {
+                token_field: "max_completion_tokens",
+                temperature: true,
+            },
+            _ => Self {
+                token_field: "max_tokens",
+                temperature: true,
+            },
+        }
+    }
+}
+
+/// Headers a provider asks for beyond authentication.
+fn provider_headers(req: reqwest::RequestBuilder, provider: Provider) -> reqwest::RequestBuilder {
+    match provider {
+        // Optional, but it is how OpenRouter attributes traffic, and apps
+        // that send it are ranked rather than anonymous.
+        Provider::OpenRouter => req
+            .header("HTTP-Referer", "https://github.com/albis0/vavis")
+            .header("X-Title", "Vavis"),
+        Provider::GitHub => req.header("X-GitHub-Api-Version", "2022-11-28"),
+        _ => req,
+    }
+}
+
+/// The models endpoint that sits beside a chat endpoint.
+///
+/// OpenAI-compatible servers put both under the same `/v1`, so
+/// `…/v1/chat/completions` becomes `…/v1/models`. A URL that does not end
+/// that way is taken to be the base itself.
+fn models_url_from_chat(chat: &str) -> String {
+    let chat = chat.trim().trim_end_matches('/');
+    match chat.strip_suffix("/chat/completions") {
+        Some(base) => format!("{base}/models"),
+        None => format!("{chat}/models"),
+    }
+}
+
+/// The chat endpoint for a URL the user typed.
+///
+/// People paste the base (`http://localhost:1234/v1`) as often as the full
+/// endpoint; both should work.
+pub fn chat_url_from_user(url: &str) -> String {
+    let url = url.trim().trim_end_matches('/');
+    if url.ends_with("/chat/completions") {
+        url.to_string()
+    } else {
+        format!("{url}/chat/completions")
+    }
+}
+
 /// Sistem istemi — asistanın kimliği.
+///
+/// Every provider but Claude Code gets the same text; see
+/// [`system_prompt_for`] for the one that differs.
 pub fn system_prompt(assistant_name: &str, language: &str) -> String {
-    let lang = match language {
+    system_prompt_for(Provider::Groq, assistant_name, language)
+}
+
+/// The language to answer in, named in the prompt's own words.
+///
+/// Every interface language gets its own name. This used to know only
+/// English and fall through to Turkish for the rest, so choosing German,
+/// French or Spanish in settings got an assistant told to speak Turkish.
+fn language_name(language: &str) -> &'static str {
+    match language {
         "en" => "English",
+        "de" => "Deutsch",
+        "fr" => "Français",
+        "es" => "Español",
         _ => "Türkçe",
+    }
+}
+
+/// The system prompt for a particular provider.
+///
+/// Only how tools are described differs. Most providers are handed a few
+/// tools per request and can ask for more with `request_tools`. Claude Code
+/// holds every tool at once, over MCP, under the `mcp__vavis__` prefix --
+/// telling it to call `request_tools` would send it looking for a tool it
+/// was never given.
+pub fn system_prompt_for(provider: Provider, assistant_name: &str, language: &str) -> String {
+    let lang = language_name(language);
+    let tools = if provider == Provider::ClaudeCode {
+        "Bilgisayarda iş yapan araçların Vavis'in kendi araçları; adları \
+         `mcp__vavis__` ile başlıyor. Web için WebSearch ve WebFetch de elinde. \
+         Yıkıcı bir araç (dosya yazma, komut, tıklama) kullanıcıdan onay ister; \
+         reddedilirse ısrar etme, başka yol öner. Kendi dosya, kabuk veya düzenleme \
+         araçların yok — bilgisayarda yapılacak her şey Vavis araçlarından geçer."
+    } else {
+        "Sana her istekte yalnızca o iş için gerekli görünen araçlar veriliyor. \
+         İhtiyacın olan bir araç elinde yoksa uydurma: `request_tools` ile ne \
+         yapmak istediğini yaz, ilgili araçlar bir sonraki adımda elinde olur."
     };
     format!(
         "Sen {assistant_name} adlı kişisel bir asistansın. Kullanıcının bilgisayarında \
          çalışıyorsun. {lang} konuş. Kısa, net ve doğrudan cevap ver — gereksiz \
          nezaket cümleleri kurma. Bilmediğin bir şeyi uydurma, bilmiyorum de.\n\n\
-         Sana her istekte yalnızca o iş için gerekli görünen araçlar veriliyor. \
-         İhtiyacın olan bir araç elinde yoksa uydurma: `request_tools` ile ne \
-         yapmak istediğini yaz, ilgili araçlar bir sonraki adımda elinde olur."
+         {tools}"
     )
 }
 
@@ -756,6 +978,15 @@ struct ModelEntry {
     id: String,
 }
 
+/// One entry in GitHub's model catalog.
+#[derive(Deserialize)]
+struct GitHubModel {
+    /// Qualified with the vendor: `openai/gpt-4.1`.
+    id: String,
+    #[serde(default)]
+    supported_output_modalities: Vec<String>,
+}
+
 /// Gemini's own model list — a different shape from the OpenAI one.
 #[derive(Deserialize)]
 struct GeminiModelList {
@@ -804,6 +1035,20 @@ mod tests {
     }
 
     #[test]
+    fn every_interface_language_is_named_in_the_prompt() {
+        assert!(system_prompt("Vavis", "de").contains("Deutsch"));
+        assert!(system_prompt("Vavis", "fr").contains("Français"));
+        assert!(system_prompt("Vavis", "es").contains("Español"));
+    }
+
+    #[test]
+    fn claude_code_is_not_sent_looking_for_request_tools() {
+        let p = system_prompt_for(Provider::ClaudeCode, "Vavis", "tr");
+        assert!(!p.contains("request_tools"), "{p}");
+        assert!(p.contains("mcp__vavis__"), "{p}");
+    }
+
+    #[test]
     fn system_prompt_carries_name_and_language() {
         let p = system_prompt("Vavis", "tr");
         assert!(p.contains("Vavis"));
@@ -825,6 +1070,65 @@ mod tests {
         let p = system_prompt("Vavis", "tr");
         assert!(p.contains("request_tools"), "{p}");
         assert!(!p.contains("arac_iste"), "eski ad kalmış: {p}");
+    }
+
+    #[test]
+    fn reasoning_models_get_the_token_field_and_temperature_they_accept() {
+        let s = RequestShape::for_model(Provider::OpenAI, "gpt-5-mini");
+        assert_eq!(s.token_field, "max_completion_tokens");
+        assert!(!s.temperature);
+        let s = RequestShape::for_model(Provider::OpenAI, "o3-mini");
+        assert!(!s.temperature);
+        let s = RequestShape::for_model(Provider::GitHub, "openai/gpt-5");
+        assert_eq!(s.token_field, "max_completion_tokens");
+        assert!(!s.temperature);
+    }
+
+    #[test]
+    fn ordinary_models_keep_the_usual_body() {
+        let s = RequestShape::for_model(Provider::Groq, "openai/gpt-oss-120b");
+        assert_eq!(s.token_field, "max_tokens");
+        assert!(s.temperature);
+        let s = RequestShape::for_model(Provider::OpenAI, "gpt-4.1");
+        assert!(s.temperature);
+        // A model whose name merely starts with "o".
+        let s = RequestShape::for_model(Provider::OpenRouter, "openrouter/optimus");
+        assert!(s.temperature);
+    }
+
+    #[test]
+    fn a_models_url_is_found_beside_the_chat_url() {
+        assert_eq!(
+            models_url_from_chat("http://localhost:1234/v1/chat/completions"),
+            "http://localhost:1234/v1/models"
+        );
+        assert_eq!(
+            models_url_from_chat("http://localhost:1234/v1/"),
+            "http://localhost:1234/v1/models"
+        );
+    }
+
+    #[test]
+    fn a_pasted_base_url_becomes_a_chat_endpoint() {
+        assert_eq!(
+            chat_url_from_user("http://localhost:1234/v1"),
+            "http://localhost:1234/v1/chat/completions"
+        );
+        assert_eq!(
+            chat_url_from_user("https://x.ai/v1/chat/completions/"),
+            "https://x.ai/v1/chat/completions"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_custom_provider_without_a_url_fails_before_the_network() {
+        let client = BrainClient::new();
+        let cfg = ChatConfig::new(Provider::Custom, "m", "");
+        let err = client
+            .chat_stream(&cfg, vec![Message::user("selam")], |_| {})
+            .await
+            .unwrap_err();
+        assert!(matches!(err, BrainError::Config(_)), "{err:?}");
     }
 
     #[test]

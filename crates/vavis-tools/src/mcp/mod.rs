@@ -13,6 +13,7 @@
 //!   through the same permission gate; the server's own claim that a tool is
 //!   safe is not taken at face value.
 
+pub mod bridge;
 pub mod rpc;
 
 use crate::tool::{Domain, Param, Registry, Risk, Tool, ToolOutcome};

@@ -4,8 +4,9 @@
 //! Burada hepsi tek şekil: OpenAI-uyumlu uç nokta + anahtar. Farklı olan sadece
 //! URL ve model listesi.
 //!
-//! Anthropic bilinçli olarak **yok** — farklı gövde şeması istiyor, F2'yi
-//! şişirmemek için sonraya bırakıldı (F6).
+//! Üç istisna kendi yoluna sahip: Anthropic ve Gemini'nin gövde şemaları
+//! farklı, Claude Code ise bir HTTP uç noktası değil, kullanıcının
+//! bilgisayarındaki bir program (bkz. `crate::claude_code`).
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -24,20 +25,43 @@ pub enum Provider {
     Nvidia,
     /// Claude — OpenAI-uyumlu DEGIL, ayri govde semasi (bkz. `anthropic` modulu).
     Anthropic,
+    /// Claude through the Claude Code CLI, on the user's own subscription.
+    /// No key: the CLI holds the login. See `crate::claude_code`.
+    #[serde(rename = "claude-code")]
+    ClaudeCode,
+    /// OpenRouter — one key, hundreds of models, and a set of `:free` ones
+    /// that cost nothing at all.
+    OpenRouter,
+    /// Cerebras — a free tier measured in a million tokens a day, and the
+    /// fastest inference of the lot.
+    Cerebras,
+    /// GitHub Models — free with any GitHub account, using a personal access
+    /// token. Small daily limits, but real frontier models.
+    #[serde(rename = "github")]
+    GitHub,
+    /// Any OpenAI-compatible endpoint the user names (`llm.custom_url`).
+    Custom,
     /// Yerel sunucu (Ollama / LM Studio) — anahtar istemez.
     Local,
 }
 
 impl Provider {
-    pub const ALL: [Provider; 9] = [
-        Self::Groq,
-        Self::OpenAI,
+    /// In the order the settings screen lists them: the ones that cost
+    /// nothing first, since that is where most people start.
+    pub const ALL: [Provider; 14] = [
+        Self::ClaudeCode,
         Self::Gemini,
+        Self::Groq,
+        Self::Cerebras,
+        Self::OpenRouter,
+        Self::GitHub,
         Self::Mistral,
+        Self::Nvidia,
+        Self::OpenAI,
+        Self::Anthropic,
         Self::DeepSeek,
         Self::XAI,
-        Self::Nvidia,
-        Self::Anthropic,
+        Self::Custom,
         Self::Local,
     ];
 
@@ -56,6 +80,13 @@ impl Provider {
             Self::XAI => "https://api.x.ai/v1/chat/completions",
             Self::Nvidia => "https://integrate.api.nvidia.com/v1/chat/completions",
             Self::Anthropic => crate::anthropic::CHAT_URL,
+            Self::ClaudeCode => crate::claude_code::PSEUDO_URL,
+            Self::OpenRouter => "https://openrouter.ai/api/v1/chat/completions",
+            Self::Cerebras => "https://api.cerebras.ai/v1/chat/completions",
+            Self::GitHub => "https://models.github.ai/inference/chat/completions",
+            // No default: the user supplies it, and a request with no URL
+            // fails before it leaves (see `ChatConfig::chat_url`).
+            Self::Custom => "custom://unset",
             Self::Local => "http://127.0.0.1:11434/v1/chat/completions",
         }
     }
@@ -71,6 +102,11 @@ impl Provider {
             Self::XAI => "https://api.x.ai/v1/models",
             Self::Nvidia => "https://integrate.api.nvidia.com/v1/models",
             Self::Anthropic => crate::anthropic::MODELS_URL,
+            Self::ClaudeCode => crate::claude_code::PSEUDO_URL,
+            Self::OpenRouter => "https://openrouter.ai/api/v1/models",
+            Self::Cerebras => "https://api.cerebras.ai/v1/models",
+            Self::GitHub => "https://models.github.ai/catalog/models",
+            Self::Custom => "custom://unset",
             Self::Local => "http://127.0.0.1:11434/v1/models",
         }
     }
@@ -86,25 +122,66 @@ impl Provider {
             Self::XAI => "xai",
             Self::Nvidia => "nvidia",
             Self::Anthropic => "anthropic",
+            Self::ClaudeCode => "claude-code",
+            Self::OpenRouter => "openrouter",
+            Self::Cerebras => "cerebras",
+            Self::GitHub => "github",
+            Self::Custom => "custom",
             Self::Local => "local",
         }
     }
 
+    /// Whether a request cannot go out without a stored key.
+    ///
+    /// A custom endpoint may or may not want one -- a self-hosted proxy often
+    /// does not -- so it is sent when present and never demanded.
     pub fn needs_key(self) -> bool {
-        !matches!(self, Self::Local)
+        !matches!(self, Self::Local | Self::ClaudeCode | Self::Custom)
+    }
+
+    /// Whether the settings screen should offer a key field at all.
+    pub fn takes_key(self) -> bool {
+        !matches!(self, Self::Local | Self::ClaudeCode)
+    }
+
+    /// Whether this provider is free to use without paying anyone -- a free
+    /// tier, free models, or hardware the user already owns. Shown as a tag,
+    /// because for a lot of people it is the first thing they filter on.
+    pub fn has_free_tier(self) -> bool {
+        matches!(
+            self,
+            Self::Gemini
+                | Self::Groq
+                | Self::Cerebras
+                | Self::OpenRouter
+                | Self::GitHub
+                | Self::Mistral
+                | Self::Nvidia
+                | Self::Local
+        )
     }
 
     /// Anahtar yokken kullanılacak makul varsayılan model.
     pub fn default_model(self) -> &'static str {
         match self {
-            Self::Groq => "llama-3.3-70b-versatile",
-            Self::OpenAI => "gpt-4o-mini",
+            // gpt-oss-120b rather than Llama 3.3: same free tier, far better
+            // at tools and reasoning, and Groq serves its browser search.
+            Self::Groq => "openai/gpt-oss-120b",
+            Self::OpenAI => "gpt-5-mini",
             Self::Gemini => crate::gemini::DEFAULT_MODEL,
             Self::Mistral => "mistral-small-latest",
             Self::DeepSeek => "deepseek-chat",
-            Self::XAI => "grok-3",
+            Self::XAI => "grok-4",
             Self::Nvidia => "meta/llama-3.3-70b-instruct",
             Self::Anthropic => crate::anthropic::DEFAULT_MODEL,
+            Self::ClaudeCode => crate::claude_code::DEFAULT_MODEL,
+            // A `:free` model, so a new key works before any credit is
+            // bought. The live list offers the rest.
+            Self::OpenRouter => "meta-llama/llama-3.3-70b-instruct:free",
+            Self::Cerebras => "gpt-oss-120b",
+            Self::GitHub => "openai/gpt-4.1",
+            // Whatever the endpoint serves; the user names it in settings.
+            Self::Custom => "default",
             Self::Local => "llama3.2",
         }
     }
@@ -119,7 +196,12 @@ impl Provider {
             "xai" | "grok" => Some(Self::XAI),
             "nvidia" | "nim" => Some(Self::Nvidia),
             "anthropic" | "claude" => Some(Self::Anthropic),
-            "local" | "ollama" => Some(Self::Local),
+            "claude-code" | "claudecode" | "claude_code" | "cli" => Some(Self::ClaudeCode),
+            "openrouter" => Some(Self::OpenRouter),
+            "cerebras" => Some(Self::Cerebras),
+            "github" | "github-models" => Some(Self::GitHub),
+            "custom" | "openai-compatible" => Some(Self::Custom),
+            "local" | "ollama" | "lmstudio" => Some(Self::Local),
             _ => None,
         }
     }
@@ -213,6 +295,9 @@ pub fn is_useful_model(provider: Provider, id: &str) -> bool {
             lower.starts_with("gpt-4") || lower.starts_with("gpt-5") || lower.starts_with('o')
         }
         Provider::XAI => !lower.contains("grok-2") && !lower.contains("beta"),
+        // OpenRouter lists image, audio and embedding models among the chat
+        // ones; the name filter above has already dropped most. What is left
+        // is the user's call.
         _ => true,
     }
 }
@@ -258,6 +343,45 @@ mod tests {
     fn local_needs_no_key() {
         assert!(!Provider::Local.needs_key());
         assert!(Provider::Groq.needs_key());
+    }
+
+    #[test]
+    fn claude_code_needs_no_key_and_offers_no_key_field() {
+        assert!(!Provider::ClaudeCode.needs_key());
+        assert!(!Provider::ClaudeCode.takes_key());
+    }
+
+    #[test]
+    fn a_custom_endpoint_takes_a_key_without_demanding_one() {
+        assert!(!Provider::Custom.needs_key());
+        assert!(Provider::Custom.takes_key());
+    }
+
+    #[test]
+    fn every_provider_round_trips_through_its_key_name() {
+        for p in Provider::ALL {
+            assert_eq!(Provider::parse(p.key_name()), Some(p), "{p}");
+        }
+    }
+
+    #[test]
+    fn serde_spells_every_provider_the_way_the_config_does() {
+        for p in Provider::ALL {
+            let json = serde_json::to_string(&p).unwrap();
+            assert_eq!(json, format!("\"{}\"", p.key_name()), "{p}");
+        }
+    }
+
+    #[test]
+    fn the_free_providers_come_first() {
+        let first_paid = Provider::ALL
+            .iter()
+            .position(|p| !p.has_free_tier() && *p != Provider::ClaudeCode)
+            .unwrap();
+        assert!(Provider::ALL[first_paid..]
+            .iter()
+            .filter(|p| **p != Provider::Local)
+            .all(|p| !p.has_free_tier()));
     }
 
     #[test]

@@ -112,6 +112,91 @@ pub(super) fn llm_for(
     (provider, model_for(config, provider))
 }
 
+/// The request configuration for one provider: its key, and its URL when
+/// the user chose one.
+///
+/// Every place that builds a request goes through here, so a custom or
+/// relocated local endpoint is honoured by chat, council and the model list
+/// alike rather than by whichever of them remembered to look.
+pub(crate) fn chat_config(
+    config: &vavis_core::Config,
+    keys: &vavis_brain::KeyStore,
+    provider: Provider,
+    model: String,
+) -> ChatConfig {
+    let key = keys
+        .get(provider.key_name())
+        .unwrap_or_default()
+        .to_string();
+    let mut cfg = ChatConfig::new(provider, model, key);
+    cfg.url_override = endpoint_for(config, provider);
+    cfg
+}
+
+/// The chat URL a user set for a provider, if any.
+pub(crate) fn endpoint_for(config: &vavis_core::Config, provider: Provider) -> Option<String> {
+    let url = match provider {
+        Provider::Custom => config.llm.custom_url.trim(),
+        Provider::Local => config.llm.local_url.trim(),
+        _ => "",
+    };
+    (!url.is_empty()).then(|| vavis_brain::chat_url_from_user(url))
+}
+
+/// Whether a provider could answer right now: it has what it needs to
+/// send a request.
+pub(crate) fn is_usable(
+    config: &vavis_core::Config,
+    keys: &vavis_brain::KeyStore,
+    provider: Provider,
+) -> bool {
+    match provider {
+        Provider::Custom => !config.llm.custom_url.trim().is_empty(),
+        p if p.needs_key() => keys.get(p.key_name()).is_some(),
+        _ => true,
+    }
+}
+
+/// The failover chain after `first`: configured providers that are usable,
+/// each on its default model, in the order the user put them.
+pub(crate) fn fallbacks_for(
+    config: &vavis_core::Config,
+    keys: &vavis_brain::KeyStore,
+    first: Provider,
+) -> Vec<ChatConfig> {
+    let mut seen = vec![first];
+    let mut out = Vec::new();
+    for name in &config.llm.fallback {
+        let Some(p) = Provider::parse(name) else {
+            continue;
+        };
+        if seen.contains(&p) || !is_usable(config, keys, p) {
+            continue;
+        }
+        seen.push(p);
+        out.push(chat_config(config, keys, p, p.default_model().to_string()));
+    }
+    out
+}
+
+/// Sets the failover chain.
+#[tauri::command]
+pub fn set_fallback(state: State<AppState>, providers: Vec<String>) -> Result<(), String> {
+    let mut clean = Vec::new();
+    for name in providers {
+        let Some(p) = Provider::parse(&name) else {
+            return Err(format!("unknown provider: {name}"));
+        };
+        let key = p.key_name().to_string();
+        if !clean.contains(&key) {
+            clean.push(key);
+        }
+    }
+    let mut core = AppState::lock(&state.core);
+    core.config.llm.fallback = clean;
+    core.config.save(&core.paths).map_err(|e| e.to_string())
+}
+
 /// Stores an API key, encrypted.
 #[tauri::command]
 pub fn set_key(state: State<AppState>, provider: String, key: String) -> Result<(), String> {
@@ -205,7 +290,7 @@ pub fn set_code_model(state: State<AppState>, model: String) -> Result<(), Strin
 /// models under the code picker.
 #[tauri::command]
 pub async fn list_code_models(state: State<'_, AppState>) -> Result<Vec<String>, String> {
-    let (provider, key, client) = {
+    let (provider, key, url, client) = {
         let core = AppState::lock(&state.core);
         let keys = AppState::lock(&state.keys);
         let configured = core.config.llm.code_provider.trim();
@@ -220,12 +305,13 @@ pub async fn list_code_models(state: State<'_, AppState>) -> Result<Vec<String>,
             keys.get(provider.key_name())
                 .unwrap_or_default()
                 .to_string(),
+            endpoint_for(&core.config, provider),
             state.client.clone(),
         )
     };
 
     client
-        .list_models(provider, &key)
+        .list_models_at(provider, &key, url.as_deref())
         .await
         .map_err(|e| friendly_error(&e))
 }
@@ -233,7 +319,7 @@ pub async fn list_code_models(state: State<'_, AppState>) -> Result<Vec<String>,
 /// Fetches the provider's live model list.
 #[tauri::command]
 pub async fn list_models(state: State<'_, AppState>) -> Result<Vec<String>, String> {
-    let (provider, key, client) = {
+    let (provider, key, url, client) = {
         let core = AppState::lock(&state.core);
         let keys = AppState::lock(&state.keys);
         let provider = Provider::parse(&core.config.llm.provider).unwrap_or(Provider::Groq);
@@ -242,12 +328,13 @@ pub async fn list_models(state: State<'_, AppState>) -> Result<Vec<String>, Stri
             keys.get(provider.key_name())
                 .unwrap_or_default()
                 .to_string(),
+            endpoint_for(&core.config, provider),
             state.client.clone(),
         )
     };
 
     client
-        .list_models(provider, &key)
+        .list_models_at(provider, &key, url.as_deref())
         .await
         .map_err(|e| friendly_error(&e))
 }

@@ -9,6 +9,7 @@
 pub mod anthropic;
 pub mod budget;
 pub mod builtin;
+pub mod claude_code;
 pub mod client;
 pub mod gemini;
 pub mod keys;
@@ -18,7 +19,8 @@ pub mod provider;
 pub use budget::{estimate_cost, estimate_tokens, fit_request, FitResult, ModelCaps};
 pub use builtin::{tool_support, ToolSupport};
 pub use client::{
-    system_prompt, BrainClient, BrainError, ChatConfig, ChatResponse, Result, StreamEvent,
+    chat_url_from_user, system_prompt, system_prompt_for, BrainClient, BrainError, ChatConfig,
+    ChatResponse, Result, StreamEvent,
 };
 pub use keys::KeyStore;
 pub use message::{FunctionCall, Message, Role, ToolCall};

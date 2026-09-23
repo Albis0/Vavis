@@ -339,7 +339,7 @@ export default function CouncilView() {
                                         {providers.map((p) => (
                                             <option key={p.id} value={p.id}>
                                                 {p.id}
-                                                {p.hasKey || !p.needsKey ? "" : " — no key"}
+                                                {p.usable ? "" : " — not set up"}
                                             </option>
                                         ))}
                                     </select>

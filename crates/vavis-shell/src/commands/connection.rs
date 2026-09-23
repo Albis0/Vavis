@@ -100,10 +100,14 @@ pub fn test_connection(state: State<AppState>, target: String) -> ConnectionTest
             let Some(parsed) = Provider::parse(provider) else {
                 return ConnectionTest::bad(format!("unknown target: {provider}"));
             };
-            let key = AppState::lock(&state.keys)
-                .get(parsed.key_name())
-                .unwrap_or_default()
-                .to_string();
+            let (key, url) = {
+                let core = AppState::lock(&state.core);
+                let keys = AppState::lock(&state.keys);
+                (
+                    keys.get(parsed.key_name()).unwrap_or_default().to_string(),
+                    super::llm::endpoint_for(&core.config, parsed),
+                )
+            };
 
             if parsed.needs_key() && key.is_empty() {
                 return ConnectionTest::bad("no key stored");
@@ -118,9 +122,37 @@ pub fn test_connection(state: State<AppState>, target: String) -> ConnectionTest
                 Err(e) => return ConnectionTest::bad(e.to_string()),
             };
 
-            match runtime.block_on(client.list_models(parsed, &key)) {
+            // Claude Code has no model list to ask for: being installed says
+            // nothing about being logged in, and only a real answer proves
+            // both. One word from the smallest model costs next to nothing
+            // against a subscription.
+            if parsed == Provider::ClaudeCode {
+                return runtime.block_on(async {
+                    let version = match vavis_brain::claude_code::version().await {
+                        Ok(v) => v,
+                        Err(e) => return ConnectionTest::bad(super::friendly_error(&e)),
+                    };
+                    let cfg = ChatConfig::new(Provider::ClaudeCode, "haiku", "");
+                    let reply = client
+                        .chat_stream(
+                            &cfg,
+                            vec![Message::user("Reply with the single word: ready")],
+                            |_| {},
+                        )
+                        .await;
+                    match reply {
+                        Ok(text) => ConnectionTest::ok(format!(
+                            "{version} · logged in · answered \"{}\"",
+                            text.trim().chars().take(20).collect::<String>()
+                        )),
+                        Err(e) => ConnectionTest::bad(super::friendly_error(&e)),
+                    }
+                });
+            }
+
+            match runtime.block_on(client.list_models_at(parsed, &key, url.as_deref())) {
                 Ok(models) => ConnectionTest::ok(format!("{} models available", models.len())),
-                Err(e) => ConnectionTest::bad(e.to_string()),
+                Err(e) => ConnectionTest::bad(super::friendly_error(&e)),
             }
         }
     }

@@ -125,15 +125,23 @@ pub fn council_run(
     // Configs are built up front, while the key store is at hand — and so a
     // misconfigured seat is reported before any paid request goes out.
     let configs: Vec<Result<ChatConfig, String>> = {
+        let core = AppState::lock(&state.core);
         let keys = AppState::lock(&state.keys);
         seats
             .iter()
             .map(|seat| {
-                let key = Provider::parse(&seat.provider)
+                let provider = Provider::parse(&seat.provider);
+                let key = provider
                     .and_then(|p| keys.get(p.key_name()))
                     .unwrap_or_default()
                     .to_string();
-                crate::council::config_for(seat, &key)
+                let mut cfg = crate::council::config_for(seat, &key)?;
+                // A custom or relocated local endpoint answers here too.
+                cfg.url_override = provider.and_then(|p| super::llm::endpoint_for(&core.config, p));
+                if cfg.provider == Provider::Custom && cfg.url_override.is_none() {
+                    return Err("the custom provider has no URL — set one in settings".into());
+                }
+                Ok(cfg)
             })
             .collect()
     };

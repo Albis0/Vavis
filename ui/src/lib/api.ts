@@ -12,7 +12,14 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 export interface ProviderInfo {
     id: string;
     needsKey: boolean;
+    /** Whether a key field makes sense at all. False for Claude Code, whose
+        login lives in the CLI, and for a local server. */
+    takesKey: boolean;
     hasKey: boolean;
+    /** Could answer right now: a key if one is needed, a URL if one is. */
+    usable: boolean;
+    /** Costs nothing to use: a free tier, free models, or own hardware. */
+    freeTier: boolean;
     defaultModel: string;
 }
 
@@ -36,6 +43,12 @@ export interface Status {
      * tell it apart from a quiet session.
      */
     fullAuthority: boolean;
+    /** Providers tried, in order, when the chosen one cannot answer. */
+    fallback: string[];
+    /** The `custom` provider's endpoint, as typed. */
+    customUrl: string;
+    /** Where the `local` provider listens, when not Ollama's default. */
+    localUrl: string;
     providers: ProviderInfo[];
     keys: string[];
     toolCount: number;
@@ -348,6 +361,9 @@ export const api = {
         invoke<string>("set_code_provider", { provider }),
     setCodeModel: (model: string) => invoke<void>("set_code_model", { model }),
     listCodeModels: () => invoke<string[]>("list_code_models"),
+    /** The failover chain, in order. An empty list turns failover off. */
+    setFallback: (providers: string[]) =>
+        invoke<void>("set_fallback", { providers }),
     setSetting: (field: string, value: string) =>
         invoke<void>("set_setting", { field, value }),
 

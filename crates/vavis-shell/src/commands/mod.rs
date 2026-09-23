@@ -30,12 +30,12 @@ use crate::state::AppState;
 use serde::Serialize;
 use std::sync::atomic::Ordering;
 use tauri::{Emitter, Manager, State};
-use vavis_brain::{system_prompt, ChatConfig, Message, Provider, StreamEvent};
+use vavis_brain::{ChatConfig, Message, Provider, StreamEvent};
 use vavis_tools::{AgentHost, Approval, ApprovalReason, ToolOutcome, MAX_STEPS};
 
 use chat::MAX_RATE_LIMIT_WAIT_SECS;
 use errors::{error_is_too_long, friendly_error, wait_before_retry};
-use llm::{llm_for, model_for};
+use llm::{chat_config, fallbacks_for, is_usable, llm_for, model_for};
 
 /// Opens a URL in the user's default browser.
 ///

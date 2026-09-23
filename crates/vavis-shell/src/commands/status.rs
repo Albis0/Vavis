@@ -21,6 +21,12 @@ pub struct Status {
     /// standing indicator for this, because a mode that removes every prompt
     /// must not itself be invisible.
     pub full_authority: bool,
+    /// Providers tried in order when the chosen one cannot answer.
+    pub fallback: Vec<String>,
+    /// The `custom` provider's endpoint, as typed.
+    pub custom_url: String,
+    /// Where the `local` provider listens, when not Ollama's default.
+    pub local_url: String,
     pub providers: Vec<ProviderInfo>,
     pub keys: Vec<String>,
     pub tool_count: usize,
@@ -48,7 +54,15 @@ pub struct Status {
 pub struct ProviderInfo {
     pub id: String,
     pub needs_key: bool,
+    /// Whether a key field makes sense at all. False for Claude Code, whose
+    /// login lives in the CLI, and for a local server.
+    pub takes_key: bool,
     pub has_key: bool,
+    /// Usable right now: a key if one is needed, a URL if one is needed.
+    pub usable: bool,
+    /// Costs nothing to use: a free tier, free models, or the user's own
+    /// hardware.
+    pub free_tier: bool,
     pub default_model: String,
 }
 
@@ -85,12 +99,18 @@ pub fn get_status(state: State<AppState>) -> Status {
         code_provider: core.config.llm.code_provider.clone(),
         code_model: core.config.llm.code_model.clone(),
         full_authority: core.config.security.full_authority,
+        fallback: core.config.llm.fallback.clone(),
+        custom_url: core.config.llm.custom_url.clone(),
+        local_url: core.config.llm.local_url.clone(),
         providers: Provider::ALL
             .iter()
             .map(|p| ProviderInfo {
                 id: p.key_name().to_string(),
                 needs_key: p.needs_key(),
+                takes_key: p.takes_key(),
                 has_key: keys.get(p.key_name()).is_some(),
+                usable: super::is_usable(&core.config, &keys, *p),
+                free_tier: p.has_free_tier(),
                 default_model: p.default_model().to_string(),
             })
             .collect(),
