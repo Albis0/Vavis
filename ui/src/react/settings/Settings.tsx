@@ -280,10 +280,12 @@ export default function Settings() {
             const confirmed = await ask({
                 title: "Give Vavis full authority?",
                 body:
-                    "Every approval prompt is turned off. Files can be deleted, " +
-                    "commands run and settings changed without asking you first, " +
-                    "including when the model is acting on a web page it just " +
-                    "read. Nothing is undone by turning this back off.",
+                    "Approval prompts are turned off. Files can be deleted, " +
+                    "commands run and settings changed without asking you first. " +
+                    "Two exceptions stay: if a page or file the assistant reads " +
+                    "tries to give it orders, destructive actions still ask; and " +
+                    "anything asked from your phone always asks. Nothing is undone " +
+                    "by turning this back off.",
                 confirmLabel: "Give full authority",
                 danger: true,
             });

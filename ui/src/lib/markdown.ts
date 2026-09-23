@@ -16,12 +16,12 @@
 
 /** Escapes the five characters that matter in HTML. */
 function escapeHtml(text: string): string {
-        return text
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#39;");
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
 }
 
 /**
@@ -31,11 +31,11 @@ function escapeHtml(text: string): string {
  * in the result.
  */
 function renderInline(escaped: string): string {
-        return (
-                escaped
-                        // Inline code first: its contents must not be re-processed for
-                        // emphasis, or `a*b*c` inside code would sprout tags.
-                        .replace(/`([^`]+)`/g, '<code class="inline">$1</code>')
+    return (
+        escaped
+            // Inline code first: its contents must not be re-processed for
+            // emphasis, or `a*b*c` inside code would sprout tags.
+            .replace(/`([^`]+)`/g, '<code class="inline">$1</code>')
             // Bold before italic, so ** is not eaten by the single-* rule.
             .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
             .replace(/__([^_]+)__/g, "<strong>$1</strong>")
