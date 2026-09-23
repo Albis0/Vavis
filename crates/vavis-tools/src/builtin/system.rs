@@ -401,6 +401,64 @@ pub fn battery_percent() -> Option<u32> {
     }
 }
 
+/// Names of the running processes, lower-case, without `.exe`.
+///
+/// Refreshes the process list only -- not disks, networks or CPU -- since
+/// the event watcher asks every few seconds.
+pub fn process_names() -> std::collections::HashSet<String> {
+    let mut guard = SYSTEM.lock().unwrap_or_else(|e| e.into_inner());
+    let sys = guard.get_or_insert_with(System::new);
+    sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+    sys.processes()
+        .values()
+        .map(|p| {
+            let name = p.name().to_string_lossy().to_lowercase();
+            name.strip_suffix(".exe")
+                .map(str::to_string)
+                .unwrap_or(name)
+        })
+        .collect()
+}
+
+/// Seconds since the user last touched the keyboard or mouse.
+///
+/// `None` where the platform does not say -- the "welcome back" trigger then
+/// simply never fires, which is better than guessing.
+#[cfg(windows)]
+pub fn idle_seconds() -> Option<u64> {
+    #[repr(C)]
+    struct LastInputInfo {
+        size: u32,
+        time: u32,
+    }
+    #[link(name = "user32")]
+    extern "system" {
+        fn GetLastInputInfo(info: *mut LastInputInfo) -> i32;
+    }
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetTickCount() -> u32;
+    }
+    let mut info = LastInputInfo {
+        size: std::mem::size_of::<LastInputInfo>() as u32,
+        time: 0,
+    };
+    // SAFETY: `info` is a correctly sized, writable struct as the API wants.
+    let ok = unsafe { GetLastInputInfo(&mut info) };
+    if ok == 0 {
+        return None;
+    }
+    // Both are 32-bit millisecond tick counts; wrapping subtraction stays
+    // right across the 49-day rollover.
+    let now = unsafe { GetTickCount() };
+    Some(u64::from(now.wrapping_sub(info.time)) / 1000)
+}
+
+#[cfg(not(windows))]
+pub fn idle_seconds() -> Option<u64> {
+    None
+}
+
 /// Anlık CPU kullanım yüzdesi.
 pub fn cpu_percent() -> Option<u32> {
     // `with_cpu`, not `with_system`: this is on the once-a-second status

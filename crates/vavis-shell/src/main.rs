@@ -14,6 +14,7 @@ mod recall;
 mod state;
 mod update;
 mod voice;
+mod watch;
 mod workspace;
 
 use state::AppState;
@@ -205,6 +206,9 @@ fn start_ticker(app: tauri::AppHandle) {
 
     std::thread::spawn(move || {
         let mut last_automation_check = std::time::Instant::now();
+        let mut last_event_check = std::time::Instant::now();
+        let mut watcher = watch::Watcher::new();
+        let launched = chrono::Utc::now().timestamp();
 
         loop {
             std::thread::sleep(std::time::Duration::from_millis(250));
@@ -217,6 +221,34 @@ fn start_ticker(app: tauri::AppHandle) {
             let events = AppState::lock(&state.voice).poll();
             for event in events {
                 let _ = app.emit("voice", event);
+            }
+
+            // Events -- a new file, a program starting, the user coming
+            // back -- are noticed within a few seconds.
+            if last_event_check.elapsed().as_secs() >= 4 {
+                last_event_check = std::time::Instant::now();
+                let now = chrono::Utc::now().timestamp();
+                let automations = AppState::lock(&state.store)
+                    .all_automations()
+                    .unwrap_or_default();
+                if automations
+                    .iter()
+                    .any(|a| a.enabled && a.trigger.is_event())
+                {
+                    for firing in watcher.poll(&automations, &watch::Machine, launched, now) {
+                        tracing::info!(id = firing.automation, "event automation fired");
+                        let _ = AppState::lock(&state.store)
+                            .mark_automation_fired(firing.automation, now);
+                        let _ = app.emit(
+                            "automation",
+                            serde_json::json!({
+                                "id": firing.automation,
+                                "prompt": firing.prompt,
+                                "trigger": firing.trigger,
+                            }),
+                        );
+                    }
+                }
             }
 
             // Automations only need minute resolution.
