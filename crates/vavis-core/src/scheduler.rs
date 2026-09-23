@@ -1,9 +1,13 @@
 //! Zamanlanmış görevler ve koşullu tetikleyiciler.
 //!
-//! İki tür otomasyon:
+//! Üç tür otomasyon:
 //!
 //! - **Zamanlanmış**: "her sabah 9'da hava durumunu söyle"
 //! - **Koşullu**: "pil %20'nin altına inince uyar"
+//! - **Olay**: "indirilenlere yeni dosya gelince VirusTotal'a sor",
+//!   "Steam açılınca arkadaşlarımdan kim çevrimiçi söyle", "bilgisayar
+//!   başına dönünce ne kaçırdığımı özetle". These are noticed by the
+//!   shell's watcher, which polls the world; `should_fire` never fires them.
 //!
 //! # Tasarım kararı: kendi zamanlayıcımız
 //!
@@ -32,6 +36,22 @@ pub enum Trigger {
     BatteryBelow { percent: u32 },
     /// CPU kullanımı bu değerin üstüne çıkınca.
     CpuAbove { percent: u32 },
+    /// A finished file appears in a folder. `folder` is a path, or one of
+    /// the names `downloads`, `desktop`, `documents`. The prompt may say
+    /// `{file}` where the file's path should go.
+    #[serde(rename = "fileadded")]
+    FileAdded { folder: String },
+    /// A program starts, matched by process name (`steam`, `chrome`).
+    #[serde(rename = "appstarted")]
+    AppStarted { app: String },
+    /// A program that was running is no longer running.
+    #[serde(rename = "appstopped")]
+    AppStopped { app: String },
+    /// Once each time Vavis starts: the morning briefing.
+    Startup,
+    /// The user comes back after at least `minutes` without touching the
+    /// keyboard or mouse.
+    Returned { minutes: u32 },
 }
 
 impl Trigger {
@@ -46,12 +66,32 @@ impl Trigger {
             Self::Once { at } => format!("bir kez ({at})"),
             Self::BatteryBelow { percent } => format!("pil %{percent} altına inince"),
             Self::CpuAbove { percent } => format!("cpu %{percent} üstüne çıkınca"),
+            Self::FileAdded { folder } => format!("{folder} klasörüne yeni dosya gelince"),
+            Self::AppStarted { app } => format!("{app} açılınca"),
+            Self::AppStopped { app } => format!("{app} kapanınca"),
+            Self::Startup => "Vavis her açıldığında".to_string(),
+            Self::Returned { minutes } => {
+                format!("{minutes} dakikadan uzun ara verip dönünce")
+            }
         }
     }
 
     /// Bu tetikleyici zamana mı yoksa duruma mı bağlı?
     pub fn is_conditional(&self) -> bool {
         matches!(self, Self::BatteryBelow { .. } | Self::CpuAbove { .. })
+    }
+
+    /// Fired by something happening rather than by the clock -- the
+    /// watcher's job, not `should_fire`'s.
+    pub fn is_event(&self) -> bool {
+        matches!(
+            self,
+            Self::FileAdded { .. }
+                | Self::AppStarted { .. }
+                | Self::AppStopped { .. }
+                | Self::Startup
+                | Self::Returned { .. }
+        )
     }
 }
 
@@ -129,6 +169,13 @@ impl Automation {
                 // Yüksek CPU dalgalanır; 10 dakikada birden sık uyarma.
                 now - self.last_fired > 600
             }
+
+            // The watcher decides these; the clock never does.
+            Trigger::FileAdded { .. }
+            | Trigger::AppStarted { .. }
+            | Trigger::AppStopped { .. }
+            | Trigger::Startup
+            | Trigger::Returned { .. } => false,
         }
     }
 }
@@ -220,6 +267,36 @@ impl Store {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn event_triggers_never_fire_on_the_clock() {
+        for t in [
+            Trigger::FileAdded {
+                folder: "downloads".into(),
+            },
+            Trigger::AppStarted {
+                app: "steam".into(),
+            },
+            Trigger::Startup,
+            Trigger::Returned { minutes: 30 },
+        ] {
+            assert!(t.is_event());
+            assert!(!automation(t, 0).should_fire(NOW, 9, 0, Some(99)));
+        }
+    }
+
+    #[test]
+    fn event_triggers_survive_the_database() {
+        let store = Store::open_in_memory().unwrap();
+        let t = Trigger::FileAdded {
+            folder: "downloads".into(),
+        };
+        store.add_automation("tara: {file}", &t).unwrap();
+        store.add_automation("günaydın", &Trigger::Startup).unwrap();
+        let all = store.all_automations().unwrap();
+        assert_eq!(all[0].trigger, t);
+        assert_eq!(all[1].trigger, Trigger::Startup);
+    }
 
     fn automation(trigger: Trigger, last_fired: i64) -> Automation {
         Automation {

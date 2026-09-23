@@ -134,6 +134,12 @@ export class ChatStore {
     runningArgs = "";
     /** Microphone level, 0.0–1.0. Polled faster than the rest of the status. */
     micLevel = 0;
+    /**
+     * Automation prompts that fired while a reply was running, sent in order
+     * once it finishes. `send` refuses while busy, and an automation that
+     * fired mid-reply used to vanish without a trace.
+     */
+    queued: string[] = [];
     /** Wake-word training in progress: recordings taken so far. */
     enrol: { count: number; needed: number } | null = null;
     /** How the last training ended, for the voice settings to show. */
@@ -263,6 +269,14 @@ export class ChatStore {
         } catch (e) {
             this.add("error", String(e));
         }
+    }
+
+    /** Sends the next queued automation prompt, if the way is clear. */
+    private async sendQueued() {
+        if (this.queued.length === 0 || this.status?.busy) return;
+        const [next, ...rest] = this.queued;
+        this.queued = rest;
+        await this.send(next);
     }
 
     /**
@@ -537,7 +551,7 @@ export class ChatStore {
             on<DoneEvent>("chat:done", () => {
                 this.finishStreaming();
                 this.runningTool = null;
-                void this.refresh();
+                void this.refresh().then(() => this.sendQueued());
             }),
 
             on<ErrorEvent>("chat:error", (p) => {
@@ -558,7 +572,7 @@ export class ChatStore {
                           }
                         : undefined,
                 });
-                void this.refresh();
+                void this.refresh().then(() => this.sendQueued());
             }),
 
             // A rate-limit wait, said out loud. Without it the turn just
@@ -633,7 +647,12 @@ export class ChatStore {
 
             on<AutomationEvent>("automation", (p) => {
                 this.add("system", `Automation fired — ${p.trigger}`);
-                void this.send(p.prompt);
+                if (this.status?.busy) {
+                    this.queued = [...this.queued, p.prompt];
+                    this.add("system", "Queued until the current reply finishes.");
+                } else {
+                    void this.send(p.prompt);
+                }
             }),
 
             // The Spotify consent round trip finishes on a worker thread, long

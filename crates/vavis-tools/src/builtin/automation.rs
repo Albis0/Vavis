@@ -32,8 +32,16 @@ fn with_store<T>(f: impl FnOnce(&Store) -> T) -> Option<T> {
 /// - `"30 dakika"` · `"2 saat"` → aralıklı
 /// - `"pil 20"` → pil %20 altına inince
 /// - `"cpu 80"` → CPU %80 üstüne çıkınca
+/// - `"dosya: indirilenler"` → o klasöre yeni dosya gelince
+/// - `"açılınca: steam"` / `"kapanınca: steam"` → program açılınca / kapanınca
+/// - `"açılışta"` → Vavis her açıldığında
+/// - `"dönünce 30"` → 30 dakikadan uzun aradan sonra dönünce
 pub fn parse_trigger(input: &str) -> Option<Trigger> {
     let s = input.trim().to_lowercase();
+
+    if let Some(t) = parse_event(&s) {
+        return Some(t);
+    }
 
     // Koşullu: "pil 20" / "batarya 15"
     if s.starts_with("pil") || s.starts_with("batarya") {
@@ -77,6 +85,84 @@ pub fn parse_trigger(input: &str) -> Option<Trigger> {
     None
 }
 
+/// The event forms. Checked first: "açılışta" contains no number and would
+/// otherwise fall through to nothing, and "dosya: rapor 2024" would be
+/// read as an interval.
+fn parse_event(s: &str) -> Option<Trigger> {
+    // "önek: değer" or "önek değer", with the value trimmed of quotes.
+    let after = |prefixes: &[&str]| -> Option<String> {
+        prefixes.iter().find_map(|p| {
+            s.strip_prefix(p).map(|rest| {
+                rest.trim_start_matches([':', ' '])
+                    .trim()
+                    .trim_matches(['\'', '"'])
+                    .to_string()
+            })
+        })
+    };
+    // "steam açılınca" -- the value before the keyword.
+    let before = |suffixes: &[&str]| -> Option<String> {
+        suffixes.iter().find_map(|x| {
+            s.strip_suffix(x)
+                .map(|rest| rest.trim().trim_matches(['\'', '"']).to_string())
+                .filter(|v| !v.is_empty())
+        })
+    };
+
+    if [
+        "açılışta",
+        "acilista",
+        "başlangıçta",
+        "baslangicta",
+        "startup",
+        "on startup",
+    ]
+    .contains(&s)
+    {
+        return Some(Trigger::Startup);
+    }
+
+    if let Some(rest) = after(&["dönünce", "donunce", "geri dönünce", "returned", "away"]) {
+        let minutes = extract_number(&rest).unwrap_or(30);
+        return (minutes > 0).then_some(Trigger::Returned { minutes });
+    }
+
+    if let Some(folder) = after(&["yeni dosya", "dosya", "klasör", "klasor", "folder", "file"]) {
+        let folder = if folder.is_empty() {
+            "downloads".into()
+        } else {
+            folder
+        };
+        return Some(Trigger::FileAdded { folder });
+    }
+    if s.contains("indirilen") || s.contains("download") {
+        return Some(Trigger::FileAdded {
+            folder: "downloads".into(),
+        });
+    }
+
+    if let Some(app) = after(&[
+        "açılınca",
+        "acilinca",
+        "başlayınca",
+        "baslayinca",
+        "app start",
+        "starts",
+    ])
+    .or_else(|| before(&["açılınca", "acilinca", "başlayınca", "baslayinca", "starts"]))
+    .filter(|a| !a.is_empty())
+    {
+        return Some(Trigger::AppStarted { app });
+    }
+    if let Some(app) = after(&["kapanınca", "kapaninca", "app stop", "stops"])
+        .or_else(|| before(&["kapanınca", "kapaninca", "stops"]))
+        .filter(|a| !a.is_empty())
+    {
+        return Some(Trigger::AppStopped { app });
+    }
+    None
+}
+
 /// "09:30" / "9.30" / "9 30" → (9, 30)
 fn parse_clock(s: &str) -> Option<(u32, u32)> {
     let separator = s.find([':', '.'])?;
@@ -110,9 +196,12 @@ impl Tool for CreateAutomation {
     }
 
     fn description(&self) -> &'static str {
-        "Zamanlanmış veya koşullu bir görev kurar. Zaman biçimleri: '09:00' \
-         (her gün), '30 dakika' (aralıklı), 'pil 20' (pil %20 altına inince), \
-         'cpu 80' (cpu %80 üstüne çıkınca)."
+        "Sets up a scheduled, conditional or event task. 'when' formats: '09:00' \
+         (daily), '30 dakika' (every 30 min), 'pil 20' (battery under 20%), 'cpu 80' \
+         (cpu over 80%), 'dosya: indirilenler' (a new file lands in that folder; \
+         write {file} in the task where its path goes), 'açılınca: steam' / \
+         'kapanınca: steam' (a program starts / stops), 'açılışta' (each time Vavis \
+         starts), 'dönünce 30' (the user comes back after 30+ minutes away)."
     }
 
     fn domain(&self) -> Domain {
@@ -132,7 +221,16 @@ impl Tool for CreateAutomation {
     }
 
     fn keywords(&self) -> &'static [&'static str] {
-        &["hatırlat", "her", "zamanla", "otomatik", "uyar"]
+        &[
+            "hatırlat",
+            "her",
+            "zamanla",
+            "otomatik",
+            "uyar",
+            "açılınca",
+            "gelince",
+            "dönünce",
+        ]
     }
 
     fn run(&self, args: &Value) -> ToolOutcome {
@@ -143,7 +241,8 @@ impl Tool for CreateAutomation {
         let Some(trigger) = parse_trigger(when) else {
             return ToolOutcome::err(format!(
                 "'{when}' anlaşılmadı. Örnekler: '09:00', '30 dakika', '2 saat', \
-                 'pil 20', 'cpu 80'"
+                 'pil 20', 'cpu 80', 'dosya: indirilenler', 'açılınca: steam', \
+                 'kapanınca: steam', 'açılışta', 'dönünce 30'"
             ));
         };
 
@@ -252,6 +351,62 @@ impl Tool for DeleteAutomation {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn events_are_understood() {
+        assert_eq!(parse_trigger("açılışta"), Some(Trigger::Startup));
+        assert_eq!(parse_trigger("Startup"), Some(Trigger::Startup));
+        assert_eq!(
+            parse_trigger("dosya: indirilenler"),
+            Some(Trigger::FileAdded {
+                folder: "indirilenler".into()
+            })
+        );
+        assert_eq!(
+            parse_trigger("indirilenlere yeni bir şey gelince"),
+            Some(Trigger::FileAdded {
+                folder: "downloads".into()
+            })
+        );
+        assert_eq!(
+            parse_trigger("dosya: C:\\Users\\ali\\Desktop"),
+            Some(Trigger::FileAdded {
+                folder: "c:\\users\\ali\\desktop".into()
+            })
+        );
+        assert_eq!(
+            parse_trigger("açılınca: steam"),
+            Some(Trigger::AppStarted {
+                app: "steam".into()
+            })
+        );
+        assert_eq!(
+            parse_trigger("steam açılınca"),
+            Some(Trigger::AppStarted {
+                app: "steam".into()
+            })
+        );
+        assert_eq!(
+            parse_trigger("kapanınca: chrome"),
+            Some(Trigger::AppStopped {
+                app: "chrome".into()
+            })
+        );
+        assert_eq!(
+            parse_trigger("dönünce 45"),
+            Some(Trigger::Returned { minutes: 45 })
+        );
+        assert_eq!(
+            parse_trigger("geri dönünce"),
+            Some(Trigger::Returned { minutes: 30 })
+        );
+    }
+
+    #[test]
+    fn a_bare_event_word_with_nothing_to_watch_is_refused() {
+        assert_eq!(parse_trigger("açılınca"), None);
+        assert_eq!(parse_trigger("kapanınca:"), None);
+    }
 
     fn ensure_store() {
         static INIT: std::sync::Once = std::sync::Once::new();
