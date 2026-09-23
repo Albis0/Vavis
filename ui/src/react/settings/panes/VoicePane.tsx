@@ -29,6 +29,8 @@ interface Props {
 
 export default function VoicePane({ status, voice, onupdate, onsavekey, onreload }: Props) {
     const store = useStore(chatSignal, chat);
+    const [liveModels, setLiveModels] = useState<string[]>([]);
+    const [loadingLive, setLoadingLive] = useState(false);
     const training = store.enrol !== null;
     const [starting, setStarting] = useState(false);
 
@@ -160,6 +162,75 @@ export default function VoicePane({ status, voice, onupdate, onsavekey, onreload
                     another provider is answering.
                 </p>
             </Section>
+
+            {voice && (
+                <Section
+                    title="Live conversation"
+                    blurb="Talk with the assistant the way you would with a person: it starts answering within a second, and you can interrupt it mid-sentence. Runs on Gemini's Live API, which the free Gemini key covers. Tools still work, and destructive ones still ask."
+                >
+                    <div className="actions">
+                        <button onClick={() => void chat.toggleLive()}>
+                            {status?.live ? "end live conversation" : "start live conversation"}
+                        </button>
+                    </div>
+
+                    <Field label="Model" fallback={voice.liveDefaultModel}>
+                        <div className="actions">
+                            <span className="current-model">{voice.liveModel || voice.liveDefaultModel}</span>
+                            <button
+                                className="tiny"
+                                disabled={loadingLive}
+                                onClick={async () => {
+                                    setLoadingLive(true);
+                                    try {
+                                        setLiveModels(await api.listLiveModels());
+                                    } catch (e) {
+                                        toast.failure("Could not list live models.", e);
+                                    } finally {
+                                        setLoadingLive(false);
+                                    }
+                                }}
+                            >
+                                {loadingLive ? "loading…" : "change model"}
+                            </button>
+                        </div>
+                    </Field>
+                    {liveModels.length > 0 && (
+                        <div className="list scroll">
+                            {liveModels.map((m) => (
+                                <button
+                                    className={m === voice.liveModel ? "row active" : "row"}
+                                    key={m}
+                                    onClick={() => {
+                                        onupdate("liveModel", m);
+                                        setLiveModels([]);
+                                    }}
+                                >
+                                    {m}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    <Field label="Voice" fallback="Puck">
+                        <select
+                            value={voice.liveVoice || "Puck"}
+                            onChange={(e) => onupdate("liveVoice", e.target.value)}
+                        >
+                            {voice.liveVoices.map((v) => (
+                                <option value={v} key={v}>
+                                    {v}
+                                </option>
+                            ))}
+                        </select>
+                    </Field>
+                    <p className="blurb">
+                        With speakers rather than headphones, the assistant's own voice is kept from
+                        interrupting it by holding back quiet input while it talks — speak clearly
+                        to cut in.
+                    </p>
+                </Section>
+            )}
 
             {voice && (
                 <Section

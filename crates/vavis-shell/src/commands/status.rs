@@ -35,6 +35,8 @@ pub struct Status {
     pub automation_count: usize,
     pub message_count: i64,
     pub voice_mode: String,
+    /// A live conversation is running.
+    pub live: bool,
     /// Microphone level, 0.0-1.0. Drives the meter next to the mic button.
     pub mic_level: f32,
     pub busy: bool,
@@ -121,6 +123,7 @@ pub fn get_status(state: State<AppState>) -> Status {
         automation_count: automations,
         message_count: messages,
         voice_mode: crate::voice::mode_name(voice.mode()).to_string(),
+        live: voice.is_live(),
         mic_level: voice.mic_level(),
         busy: state.busy.load(Ordering::SeqCst),
         speaking: voice.is_speaking(),

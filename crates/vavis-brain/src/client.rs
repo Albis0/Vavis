@@ -559,6 +559,47 @@ impl BrainClient {
         crate::embeddings::embed(&self.http, cfg, texts).await
     }
 
+    /// Gemini models that speak the Live API (`bidiGenerateContent`) -- the
+    /// ones the chat picker hides, and the only ones a live conversation can
+    /// use.
+    pub async fn list_live_models(&self, api_key: &str) -> Result<Vec<String>> {
+        if api_key.trim().is_empty() {
+            return Err(BrainError::MissingKey {
+                provider: Provider::Gemini,
+            });
+        }
+        let resp = self
+            .http
+            .get(Provider::Gemini.models_url())
+            .header(crate::gemini::KEY_HEADER, api_key)
+            .send()
+            .await?;
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(BrainError::Api {
+                status: status.as_u16(),
+                body: body.chars().take(300).collect(),
+            });
+        }
+        let list: GeminiModelList = resp
+            .json()
+            .await
+            .map_err(|e| BrainError::Parse(e.to_string()))?;
+        let mut out: Vec<String> = list
+            .models
+            .into_iter()
+            .filter(|m| {
+                m.supported_generation_methods
+                    .iter()
+                    .any(|s| s == "bidiGenerateContent")
+            })
+            .map(|m| m.name.trim_start_matches("models/").to_string())
+            .collect();
+        out.sort_unstable();
+        Ok(out)
+    }
+
     /// Canlı model listesi. Sağlayıcı gürültüsü süzülür.
     pub async fn list_models(&self, provider: Provider, api_key: &str) -> Result<Vec<String>> {
         self.list_models_at(provider, api_key, None).await

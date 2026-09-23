@@ -112,6 +112,10 @@ pub struct Voice {
     /// How readily the on-device wake word fires, 1 (strict) to 10
     /// (lenient). Only used once the wake word has been trained.
     pub wake_sensitivity: u8,
+    /// Model for the live conversation (Gemini Live API).
+    pub live_model: String,
+    /// Voice for the live conversation, one of the Live API's prebuilt ones.
+    pub live_voice: String,
 }
 
 impl Default for Voice {
@@ -141,6 +145,8 @@ impl Default for Voice {
             // taşımıyor.
             match_provider: true,
             wake_sensitivity: 5,
+            live_model: String::new(),
+            live_voice: String::new(),
         }
     }
 }

@@ -515,6 +515,21 @@ export class ChatStore {
         await this.refresh();
     }
 
+    /** Starts or ends the live, spoken conversation. */
+    async toggleLive() {
+        try {
+            if (this.status?.live) {
+                await api.stopLive();
+            } else {
+                await api.startLive();
+                this.add("system", "Connecting the live conversation…");
+            }
+            await this.refresh();
+        } catch (e) {
+            this.add("error", String(e));
+        }
+    }
+
     /** Wires up backend events and the status poll. */
     async start() {
         const restored = await api.loadHistory();
@@ -627,6 +642,20 @@ export class ChatStore {
                         break;
                     case "enrol":
                         this.enrol = { count: event.count, needed: event.needed };
+                        break;
+                    case "live":
+                        if (event.active) {
+                            this.add("system", "Live conversation — just talk. Speak over it to interrupt.");
+                        } else if (event.error) {
+                            this.add("error", `Live conversation ended: ${event.error}`);
+                        } else {
+                            this.add("system", "Live conversation ended.");
+                        }
+                        void this.refresh();
+                        break;
+                    case "liveTurn":
+                        if (event.user) this.add("user", event.user);
+                        if (event.assistant) this.add("assistant", event.assistant);
                         break;
                     case "enrolDone":
                         this.enrol = null;

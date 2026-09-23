@@ -4942,6 +4942,7 @@ name = "vavis-audio"
 version = "0.7.4"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "cpal",
  "reqwest 0.12.28",
  "serde",

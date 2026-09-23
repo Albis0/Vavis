@@ -187,6 +187,10 @@ pub struct Microphone {
     /// channel because it is a gauge, not a stream: the reader wants the
     /// current value, and a missed frame is of no consequence.
     level: Arc<AtomicU32>,
+    /// Where every 16 kHz mono frame goes while something is tapping the
+    /// raw stream (the live conversation mode), in addition to the
+    /// utterance detector.
+    tap: Arc<std::sync::Mutex<Option<std::sync::mpsc::Sender<Vec<f32>>>>>,
 }
 
 impl Microphone {
@@ -206,9 +210,13 @@ impl Microphone {
         let device_rate = config.sample_rate().0;
         let channels = config.channels() as usize;
 
+        let tap: Arc<std::sync::Mutex<Option<std::sync::mpsc::Sender<Vec<f32>>>>> =
+            Arc::new(std::sync::Mutex::new(None));
+
         let thread_running = running.clone();
         let thread_muted = muted.clone();
         let thread_level = level.clone();
+        let thread_tap = tap.clone();
 
         // Ses akışı kendi thread'inde yaşar — `Stream` Send olmadığı için.
         std::thread::spawn(move || {
@@ -233,6 +241,14 @@ impl Microphone {
                     // Published before the detector runs: the meter should
                     // move while someone speaks, not only when a sentence ends.
                     thread_level.store(level_permille(&mono), Ordering::Relaxed);
+
+                    // try_lock: the audio callback must never wait. A frame
+                    // missed while the tap is being swapped is inaudible.
+                    if let Ok(guard) = thread_tap.try_lock() {
+                        if let Some(sender) = guard.as_ref() {
+                            let _ = sender.send(mono.clone());
+                        }
+                    }
 
                     if let Some(utterance) = detector.feed(&mono) {
                         let _ = tx.send(utterance);
@@ -269,7 +285,21 @@ impl Microphone {
             receiver,
             muted,
             level,
+            tap,
         })
+    }
+
+    /// Starts receiving every captured frame, 16 kHz mono, as it arrives.
+    /// Replaces any earlier tap.
+    pub fn tap(&self) -> std::sync::mpsc::Receiver<Vec<f32>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        *self.tap.lock().unwrap_or_else(|e| e.into_inner()) = Some(tx);
+        rx
+    }
+
+    /// Stops the raw stream.
+    pub fn untap(&self) {
+        *self.tap.lock().unwrap_or_else(|e| e.into_inner()) = None;
     }
 
     /// Bekleyen konuşmaları alır — bloklamaz.
