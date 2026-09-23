@@ -27,6 +27,7 @@ pub mod router;
 pub mod selection;
 pub mod spotify;
 pub mod steam;
+pub mod telegram;
 pub mod tool;
 pub mod untrusted;
 pub mod virustotal;

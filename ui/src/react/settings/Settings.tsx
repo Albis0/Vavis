@@ -55,6 +55,7 @@ import ToolsPane from "./panes/ToolsPane";
 import ShortcutsPane from "./panes/ShortcutsPane";
 import DataPane from "./panes/DataPane";
 import MemoryPane from "./panes/MemoryPane";
+import PhonePane from "./panes/PhonePane";
 import ObsidianPane from "./panes/ObsidianPane";
 import SpotifyPane from "./panes/SpotifyPane";
 import SteamPane from "./panes/SteamPane";
@@ -580,6 +581,7 @@ export default function Settings() {
                     )}
                     {active === "search" && <SearchPane search={search} reload={load} />}
                     {active === "canvas" && <CanvasPane canvas={canvas} reload={load} />}
+                    {active === "phone" && <PhonePane />}
                     {active === "obsidian" && (
                         <ObsidianPane
                             vaults={vaults}

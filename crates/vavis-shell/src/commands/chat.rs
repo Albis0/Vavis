@@ -103,25 +103,13 @@ pub fn send_message(
         let core = AppState::lock(&state.core);
         let keys = AppState::lock(&state.keys);
 
-        let (provider, model) = llm_for(&core.config, code, |p| is_usable(&core.config, &keys, p));
-        let first = chat_config(&core.config, &keys, provider, model);
-        let fallbacks = fallbacks_for(&core.config, &keys, provider);
-
-        // The chosen provider cannot answer, but a fallback can: start
-        // there rather than refusing the message outright.
-        let mut chain = Vec::new();
-        if is_usable(&core.config, &keys, provider) {
-            chain.push(first);
-        }
-        chain.extend(fallbacks);
-        if chain.is_empty() {
-            state.release();
-            return Err(if provider == vavis_brain::Provider::Custom {
-                "the custom provider has no URL — set one in settings".to_string()
-            } else {
-                format!("no API key for {provider}")
-            });
-        }
+        let chain = match build_chain(&core.config, &keys, code) {
+            Ok(chain) => chain,
+            Err(e) => {
+                state.release();
+                return Err(e);
+            }
+        };
 
         // Rebuilt each turn so a settings change takes effect on the very
         // next message.
@@ -222,6 +210,7 @@ pub fn send_message(
             full_authority,
             identity: &identity,
             bridge: bridge.as_deref(),
+            quiet: false,
         };
         let result =
             runtime.block_on(turn.run_with_failover(&chain, &router_model, history, &text));
@@ -288,6 +277,113 @@ pub fn send_message(
     });
 
     Ok(())
+}
+
+/// Runs one turn asked from outside the window (the phone) and returns the
+/// answer. Blocks; call it from its own thread.
+///
+/// Shares the busy flag with the window, so the two never interleave.
+/// Approvals go to `asker` -- and always go there: full authority is off
+/// for a remote turn whatever the setting, because it is a statement about
+/// the person at this keyboard.
+pub(crate) fn run_remote(
+    app: &tauri::AppHandle,
+    history: &std::sync::Arc<std::sync::Mutex<Vec<Message>>>,
+    text: &str,
+    asker: Asker,
+) -> Result<String, String> {
+    let state = app.state::<AppState>();
+    if !state.try_claim() {
+        return Err("busy".into());
+    }
+    let prepared = (|| {
+        let core = AppState::lock(&state.core);
+        let keys = AppState::lock(&state.keys);
+        let chain = build_chain(&core.config, &keys, false)?;
+        let identity = Identity {
+            name: core.config.general.assistant_name.clone(),
+            language: core.config.general.language.clone(),
+            memory: String::new(),
+        };
+        let embed = core
+            .config
+            .memory
+            .inject
+            .then(|| crate::recall::embed_config(&core.config, &keys))
+            .flatten();
+        let inject = core.config.memory.inject;
+        Ok::<_, String>((chain, identity, embed, inject))
+    })();
+    let (chain, mut identity, embed, inject) = match prepared {
+        Ok(p) => p,
+        Err(e) => {
+            state.release();
+            return Err(e);
+        }
+    };
+
+    let bridge = if chain
+        .iter()
+        .any(|c| c.provider == vavis_brain::Provider::ClaudeCode)
+    {
+        state.claude_bridge(app).ok()
+    } else {
+        None
+    };
+
+    let past = {
+        let mut h = AppState::lock(history);
+        h.push(Message::user(text));
+        // A phone conversation stays short; the window's has its own budget.
+        let excess = h.len().saturating_sub(30);
+        h.drain(..excess);
+        h.clone()
+    };
+
+    let result = (|| {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|e| e.to_string())?;
+        if inject {
+            identity.memory = runtime.block_on(crate::recall::relevant_block(
+                &state.client,
+                &state.store,
+                embed.as_ref(),
+                text,
+            ));
+        }
+        let _route = RemoteRoute::install(asker);
+        let turn = Turn {
+            app,
+            client: &state.client,
+            agent: &state.agent,
+            voice: &state.voice,
+            approval_rx: &state.approval_rx,
+            full_authority: false,
+            identity: &identity,
+            bridge: bridge.as_deref(),
+            quiet: true,
+        };
+        runtime
+            .block_on(turn.run_with_failover(&chain, "", past, text))
+            .map_err(|e| e.message)
+    })();
+
+    {
+        let mut h = AppState::lock(history);
+        match &result {
+            Ok(reply) if !reply.trim().is_empty() => h.push(Message::assistant(reply.clone())),
+            // Drop the unanswered question, as the window does.
+            _ => {
+                if h.last().map(|m| m.role) == Some(vavis_brain::Role::User) {
+                    h.pop();
+                }
+            }
+        }
+    }
+    state.release();
+    result
 }
 
 #[derive(Serialize, Clone)]
@@ -428,6 +524,34 @@ impl From<String> for TurnError {
             elsewhere: false,
         }
     }
+}
+
+/// The providers a turn may use, chosen first: the configured one if it is
+/// usable, then the failover chain.
+fn build_chain(
+    config: &vavis_core::Config,
+    keys: &vavis_brain::KeyStore,
+    code: bool,
+) -> Result<Vec<ChatConfig>, String> {
+    let (provider, model) = llm_for(config, code, |p| is_usable(config, keys, p));
+    let first = chat_config(config, keys, provider, model);
+    let fallbacks = fallbacks_for(config, keys, provider);
+
+    // The chosen provider cannot answer, but a fallback can: start there
+    // rather than refusing the message outright.
+    let mut chain = Vec::new();
+    if is_usable(config, keys, provider) {
+        chain.push(first);
+    }
+    chain.extend(fallbacks);
+    if chain.is_empty() {
+        return Err(if provider == vavis_brain::Provider::Custom {
+            "the custom provider has no URL — set one in settings".to_string()
+        } else {
+            format!("no API key for {provider}")
+        });
+    }
+    Ok(chain)
 }
 
 /// Who the assistant is: rebuilt into a system prompt for whichever
@@ -609,6 +733,9 @@ struct Turn<'a> {
     /// Where Claude Code finds Vavis's tools. `None` for every other
     /// provider, and for Claude Code if the server could not start.
     bridge: Option<&'a vavis_tools::mcp::bridge::Bridge>,
+    /// A turn asked from elsewhere (the phone): nothing is drawn in the
+    /// window or spoken aloud, since nobody there asked.
+    quiet: bool,
 }
 
 impl Turn<'_> {
@@ -641,17 +768,19 @@ impl Turn<'_> {
                         reason = %e.message,
                         "provider failed; moving to the next in the chain"
                     );
-                    let _ = self.app.emit(
-                        "chat:notice",
-                        NoticePayload {
-                            text: format!(
-                                "{} could not answer ({}) — trying {}.",
-                                cfg.provider,
-                                e.message.trim_end_matches('.'),
-                                next.provider
-                            ),
-                        },
-                    );
+                    let _ = (!self.quiet).then(|| {
+                        self.app.emit(
+                            "chat:notice",
+                            NoticePayload {
+                                text: format!(
+                                    "{} could not answer ({}) — trying {}.",
+                                    cfg.provider,
+                                    e.message.trim_end_matches('.'),
+                                    next.provider
+                                ),
+                            },
+                        )
+                    });
                     last = e;
                 }
                 Err(e) => return Err(e),
@@ -675,6 +804,7 @@ impl Turn<'_> {
             voice,
             approval_rx,
             full_authority,
+            quiet,
             ..
         } = *self;
         let claude = cfg.provider == vavis_brain::Provider::ClaudeCode;
@@ -783,7 +913,9 @@ impl Turn<'_> {
 
         // A fresh turn: drop any half-sentence left buffered by an abandoned
         // one.
-        AppState::lock(voice).begin_stream();
+        if !quiet {
+            AppState::lock(voice).begin_stream();
+        }
 
         for step in 0..MAX_STEPS {
             let emit = app.clone();
@@ -796,6 +928,9 @@ impl Turn<'_> {
                     move |event| {
                         if let StreamEvent::Delta(text) = event {
                             streamed.store(true, Ordering::SeqCst);
+                            if quiet {
+                                return;
+                            }
                             // Speak first, then paint: synthesis has to start
                             // as early as possible, and emitting is the cheap
                             // half.
@@ -855,12 +990,14 @@ impl Turn<'_> {
 
                     // Said out loud: several seconds of silence with no
                     // explanation reads as the app having hung.
-                    let _ = app.emit(
-                        "chat:notice",
-                        NoticePayload {
-                            text: format!("Rate limited — waiting {secs}s."),
-                        },
-                    );
+                    if !quiet {
+                        let _ = app.emit(
+                            "chat:notice",
+                            NoticePayload {
+                                text: format!("Rate limited — waiting {secs}s."),
+                            },
+                        );
+                    }
 
                     tokio::time::sleep(std::time::Duration::from_secs(secs)).await;
                     continue;
@@ -946,6 +1083,36 @@ impl Turn<'_> {
     }
 }
 
+/// Asks for approval somewhere other than the window: the phone.
+pub(crate) type Asker =
+    std::sync::Arc<dyn Fn(&str, &str, ApprovalReason) -> Approval + Send + Sync>;
+
+/// Where approvals go while a remote turn runs. One turn runs at a time
+/// (the busy flag), so one slot is enough -- and a slot rather than a
+/// field on each host, because Claude Code's tool calls arrive through the
+/// MCP bridge's own host, which must route the same way.
+static REMOTE: std::sync::Mutex<Option<Asker>> = std::sync::Mutex::new(None);
+
+fn remote_asker() -> Option<Asker> {
+    REMOTE.lock().unwrap_or_else(|e| e.into_inner()).clone()
+}
+
+/// Sends approvals to `asker` until dropped.
+pub(crate) struct RemoteRoute;
+
+impl RemoteRoute {
+    pub(crate) fn install(asker: Asker) -> Self {
+        *REMOTE.lock().unwrap_or_else(|e| e.into_inner()) = Some(asker);
+        Self
+    }
+}
+
+impl Drop for RemoteRoute {
+    fn drop(&mut self) {
+        *REMOTE.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    }
+}
+
 /// Bridges the agent to the interface: emits events, waits for approvals.
 pub(crate) struct EventHost {
     pub app: tauri::AppHandle,
@@ -954,6 +1121,9 @@ pub(crate) struct EventHost {
 
 impl AgentHost for EventHost {
     fn ask_approval(&mut self, tool: &str, args: &str, reason: ApprovalReason) -> Approval {
+        if let Some(asker) = remote_asker() {
+            return asker(tool, args, reason);
+        }
         let _ = self.app.emit(
             "chat:approval",
             ApprovalPayload {
@@ -977,6 +1147,9 @@ impl AgentHost for EventHost {
 
     fn on_tool_start(&mut self, tool: &str, args: &str) {
         TOOL_RUNS.fetch_add(1, Ordering::SeqCst);
+        if remote_asker().is_some() {
+            return;
+        }
         let _ = self.app.emit(
             "chat:tool-start",
             ToolStartPayload {
@@ -994,6 +1167,9 @@ impl AgentHost for EventHost {
         // to the reader -- a feed line saying "DIŞ İÇERİK BAŞLANGICI" tells
         // them nothing about what the tool found. Strip it for display; the
         // model still receives it intact.
+        if remote_asker().is_some() {
+            return;
+        }
         let shown = vavis_tools::untrusted::strip_framing(&outcome.content);
 
         let _ = self.app.emit(

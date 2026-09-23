@@ -96,6 +96,16 @@ export interface MemorySettings {
     embeddingProviders: string[];
 }
 
+export interface PhoneSettings {
+    enabled: boolean;
+    hasToken: boolean;
+    botName: string;
+    paired: boolean;
+    ownerName: string;
+    pairingCode: string | null;
+    error: string | null;
+}
+
 export interface ConversationView {
     id: number;
     title: string;
@@ -393,6 +403,12 @@ export const api = {
     startWakeTraining: () => invoke<void>("start_wake_training"),
     cancelWakeTraining: () => invoke<void>("cancel_wake_training"),
     forgetWakeWord: () => invoke<void>("forget_wake_word"),
+    phoneSettings: () => invoke<PhoneSettings>("get_phone_settings"),
+    /** Checks the token with Telegram and starts the bot; returns its @name. */
+    setTelegramToken: (token: string) => invoke<string>("set_telegram_token", { token }),
+    telegramPairingCode: () => invoke<string>("telegram_pairing_code"),
+    telegramUnpair: () => invoke<void>("telegram_unpair"),
+    setTelegramEnabled: (enabled: boolean) => invoke<void>("set_telegram_enabled", { enabled }),
     startLive: () => invoke<void>("start_live"),
     stopLive: () => invoke<void>("stop_live"),
     listLiveModels: () => invoke<string[]>("list_live_models"),

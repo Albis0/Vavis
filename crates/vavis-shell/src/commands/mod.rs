@@ -17,6 +17,7 @@ pub mod llm;
 pub mod mcp;
 pub mod memory;
 pub mod obsidian;
+pub mod phone;
 pub mod search;
 pub mod settings;
 pub mod speech;

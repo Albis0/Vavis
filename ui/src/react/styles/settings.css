@@ -988,3 +988,17 @@ input[type="number"] {
     font-variant-numeric: tabular-nums;
 }
 
+
+/* ── PhonePane.tsx ────────────────────────────────────────────────────── */
+/* The pairing command, big enough to read off the screen and type on a
+   phone without squinting. */
+.pairing-code {
+    font-family: var(--font-mono);
+    font-size: var(--text-lg, 1.25rem);
+    letter-spacing: 0.08em;
+    padding: var(--sp-3);
+    border: 1px dashed var(--line-strong);
+    border-radius: var(--r-md, 8px);
+    user-select: all;
+    text-align: center;
+}
