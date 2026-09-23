@@ -10,6 +10,7 @@
 
 mod commands;
 mod council;
+mod recall;
 mod state;
 mod update;
 mod voice;
@@ -60,6 +61,11 @@ fn main() {
             commands::chat::send_message,
             commands::chat::answer_approval,
             commands::chat::clear_conversation,
+            commands::conversations::list_conversations,
+            commands::conversations::new_conversation,
+            commands::conversations::open_conversation,
+            commands::conversations::rename_conversation,
+            commands::conversations::delete_conversation,
             commands::chat::forget_oldest,
             commands::llm::set_key,
             commands::llm::set_provider,
@@ -74,6 +80,7 @@ fn main() {
             commands::speech::stop_speaking,
             commands::speech::poll_voice,
             commands::memory::list_facts,
+            commands::memory::get_memory_settings,
             commands::memory::forget_fact,
             commands::memory::list_automations,
             commands::memory::delete_automation,

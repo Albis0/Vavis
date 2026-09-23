@@ -79,6 +79,32 @@ export interface StoredLine {
 export interface Fact {
     id: number;
     text: string;
+    /** `user` when saved on request, `auto` when picked out of a
+        conversation in the background. */
+    source: string;
+}
+
+export interface MemorySettings {
+    inject: boolean;
+    autoExtract: boolean;
+    /** `auto`, `off`, or a provider id. */
+    embeddings: string;
+    /** What is actually in use, e.g. `gemini:gemini-embedding-001`. */
+    embeddingsActive: string | null;
+    embeddingProviders: string[];
+}
+
+export interface ConversationView {
+    id: number;
+    title: string;
+    /** Unix seconds. */
+    updatedAt: number;
+    messageCount: number;
+    current: boolean;
+}
+
+export interface LearnedEvent {
+    facts: string[];
 }
 
 export interface Automation {
@@ -341,6 +367,18 @@ export const api = {
     answerApproval: (decision: "allow" | "always" | "deny") =>
         invoke<void>("answer_approval", { decision }),
     clear: () => invoke<void>("clear_conversation"),
+    listConversations: (query?: string) =>
+        invoke<ConversationView[]>("list_conversations", { query: query ?? null }),
+    /** Returns the id of the conversation now current. */
+    newConversation: () => invoke<number>("new_conversation"),
+    openConversation: (id: number) =>
+        invoke<StoredLine[]>("open_conversation", { id }),
+    renameConversation: (id: number, title: string) =>
+        invoke<void>("rename_conversation", { id, title }),
+    /** Returns the id of the conversation now current. */
+    deleteConversation: (id: number) =>
+        invoke<number>("delete_conversation", { id }),
+    memorySettings: () => invoke<MemorySettings>("get_memory_settings"),
     /** Drops the oldest half of the conversation. Returns how many went. */
     forgetOldest: () => invoke<number>("forget_oldest"),
 

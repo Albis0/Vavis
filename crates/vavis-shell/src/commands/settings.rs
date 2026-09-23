@@ -41,6 +41,20 @@ pub fn set_setting(state: State<AppState>, field: String, value: String) -> Resu
         // them. Empty is valid: custom then refuses until set, local goes
         // back to Ollama's default port.
         "customUrl" => core.config.llm.custom_url = value.trim().to_string(),
+        "memoryInject" => core.config.memory.inject = value == "true",
+        "memoryAutoExtract" => core.config.memory.auto_extract = value == "true",
+        "memoryEmbeddings" => {
+            let v = value.trim().to_ascii_lowercase();
+            let known = v == "auto"
+                || v == "off"
+                || vavis_brain::embeddings::PROVIDERS
+                    .iter()
+                    .any(|p| p.key_name() == v);
+            if !known {
+                return Err(format!("unknown embedding provider: {value}"));
+            }
+            core.config.memory.embeddings = v;
+        }
         "localUrl" => core.config.llm.local_url = value.trim().to_string(),
         // Full authority: every approval off, every budget off. The warning
         // belongs in the interface, once, at the moment it is switched on --

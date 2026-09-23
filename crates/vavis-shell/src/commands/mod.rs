@@ -10,6 +10,7 @@
 pub mod canvas;
 pub mod chat;
 pub mod connection;
+pub mod conversations;
 pub mod council;
 pub mod errors;
 pub mod llm;

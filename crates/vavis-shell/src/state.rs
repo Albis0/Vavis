@@ -24,6 +24,10 @@ pub struct AppState {
     /// started it and must still append the reply.
     pub history: Arc<Mutex<Vec<Message>>>,
 
+    /// The conversation being shown and added to. `history` is its tail as
+    /// the model sees it.
+    pub conversation: Arc<Mutex<i64>>,
+
     /// True while a request is in flight. Guards against double submits;
     /// the interface also disables its input, but a slow click could
     /// otherwise slip through.
@@ -51,7 +55,13 @@ impl AppState {
     pub fn new(core: CoreApp) -> anyhow::Result<Self> {
         let keys = KeyStore::load(core.paths.root());
 
-        let store = Arc::new(Mutex::new(Store::open(&core.paths)?));
+        let store = Store::open(&core.paths)?;
+        // Reopen where the user left off; a first run starts a fresh one.
+        let conversation = match store.latest_conversation()? {
+            Some(id) => id,
+            None => store.create_conversation("")?,
+        };
+        let store = Arc::new(Mutex::new(store));
         // Memory and automation tools reach the database through these —
         // one store, one source of truth.
         vavis_tools::builtin::memory::attach_store(store.clone());
@@ -97,6 +107,7 @@ impl AppState {
             agent: Arc::new(Mutex::new(Agent::new(registry))),
             client: Arc::new(BrainClient::new()),
             history: Arc::new(Mutex::new(Vec::new())),
+            conversation: Arc::new(Mutex::new(conversation)),
             busy: Arc::new(AtomicBool::new(false)),
             approval_tx,
             approval_rx: Arc::new(Mutex::new(approval_rx)),

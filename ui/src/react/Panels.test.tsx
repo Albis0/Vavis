@@ -45,8 +45,8 @@ describe("Panels", () => {
 
     it("lists facts once loaded", async () => {
         vi.mocked(api.listFacts).mockResolvedValue([
-            { id: 1, text: "Prefers metric units" },
-            { id: 2, text: "Lives in Istanbul" },
+            { id: 1, text: "Prefers metric units", source: "user" },
+            { id: 2, text: "Lives in Istanbul", source: "auto" },
         ]);
         chat.panel = "memory";
 
@@ -58,7 +58,7 @@ describe("Panels", () => {
 
     it("filters the list by the query once there are enough rows for a filter field", async () => {
         vi.mocked(api.listFacts).mockResolvedValue(
-            Array.from({ length: 9 }, (_, i) => ({ id: i, text: `fact number ${i}` })),
+            Array.from({ length: 9 }, (_, i) => ({ id: i, text: `fact number ${i}`, source: "user" })),
         );
         chat.panel = "memory";
         const user = userEvent.setup();

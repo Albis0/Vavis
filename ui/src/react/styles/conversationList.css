@@ -1,0 +1,91 @@
+/* ── ConversationList.tsx ─────────────────────────────────────────────── */
+/* A drawer over the feed rather than a column beside it: the panel is
+   already the narrowest thing on screen, and splitting it would leave two
+   columns too thin to read. */
+
+.convs {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+}
+
+.convs .convs-head {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-1);
+    padding: var(--sp-2);
+    border-bottom: 1px solid var(--line);
+}
+.convs .convs-head input {
+    flex: 1;
+    min-width: 0;
+}
+
+.convs .convs-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--sp-2);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.convs .convs-empty {
+    color: var(--text-faint);
+    font-size: var(--text-sm);
+    padding: var(--sp-4);
+    text-align: center;
+}
+
+.convs .conv-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-1);
+    border-radius: var(--r-sm);
+}
+.convs .conv-row:hover {
+    background: var(--surface-raised);
+}
+.convs .conv-row.current {
+    background: var(--accent-muted);
+}
+
+.convs .conv-open {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-2);
+    padding: var(--sp-2);
+    text-align: left;
+}
+.convs .conv-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text);
+}
+.convs .conv-meta {
+    flex: 0 0 auto;
+    font-size: var(--text-xs);
+    color: var(--text-faint);
+}
+.convs .conv-rename {
+    flex: 1;
+    margin: var(--sp-1);
+}
+
+/* Present but quiet until the row is pointed at: a column of bins down the
+   edge of every list reads as an invitation to delete. */
+.convs .conv-delete {
+    opacity: 0;
+}
+.convs .conv-row:hover .conv-delete,
+.convs .conv-delete:focus-visible {
+    opacity: 1;
+}

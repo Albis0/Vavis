@@ -16,9 +16,16 @@ pub struct StoredLine {
 /// budget before the user typed a word.
 #[tauri::command]
 pub fn load_history(state: State<AppState>) -> Vec<StoredLine> {
+    let conversation = *AppState::lock(&state.conversation);
+    restore(&state, conversation)
+}
+
+/// Loads a conversation's tail into the model's history and returns it for
+/// the interface to draw.
+pub(super) fn restore(state: &AppState, conversation: i64) -> Vec<StoredLine> {
     const RESTORE: usize = 20;
 
-    let stored = AppState::lock(&state.store).recent_messages(RESTORE);
+    let stored = AppState::lock(&state.store).messages_in(conversation, RESTORE);
     let Ok(messages) = stored else {
         return Vec::new();
     };
@@ -91,7 +98,8 @@ pub fn send_message(
         return Err("a reply is already in progress".into());
     }
 
-    let (chain, router_model, full_authority, identity, history) = {
+    let conversation = *AppState::lock(&state.conversation);
+    let (chain, router_model, full_authority, mut identity, history, plan) = {
         let core = AppState::lock(&state.core);
         let keys = AppState::lock(&state.keys);
 
@@ -120,6 +128,12 @@ pub fn send_message(
         let identity = Identity {
             name: core.config.general.assistant_name.clone(),
             language: core.config.general.language.clone(),
+            memory: String::new(),
+        };
+        let plan = MemoryPlan {
+            inject: core.config.memory.inject,
+            extract: core.config.memory.auto_extract,
+            embed: crate::recall::embed_config(&core.config, &keys),
         };
 
         let mut history = AppState::lock(&state.history);
@@ -131,6 +145,7 @@ pub fn send_message(
             core.config.security.full_authority,
             identity,
             history.clone(),
+            plan,
         )
     };
 
@@ -153,7 +168,7 @@ pub fn send_message(
 
     // Persist the user's turn before the request goes out — if the app
     // dies mid-reply the question is still on record.
-    if let Err(e) = AppState::lock(&state.store).add_message("user", &text) {
+    if let Err(e) = AppState::lock(&state.store).add_message_to(conversation, "user", &text) {
         tracing::warn!(%e, "could not persist message");
     }
 
@@ -164,6 +179,7 @@ pub fn send_message(
     let voice = state.voice.clone();
     let store = state.store.clone();
     let history_handle = state.history.clone();
+    let current = state.conversation.clone();
 
     std::thread::spawn(move || {
         let runtime = match tokio::runtime::Builder::new_current_thread()
@@ -185,6 +201,18 @@ pub fn send_message(
             }
         };
 
+        // What the assistant knows that bears on this message goes into
+        // the prompt. Looked up once here, not per provider: the answer
+        // does not depend on who is asked.
+        if plan.inject {
+            identity.memory = runtime.block_on(crate::recall::relevant_block(
+                &client,
+                &store,
+                plan.embed.as_ref(),
+                &text,
+            ));
+        }
+
         let turn = Turn {
             app: &app,
             client: &client,
@@ -198,13 +226,22 @@ pub fn send_message(
         let result =
             runtime.block_on(turn.run_with_failover(&chain, &router_model, history, &text));
 
+        let mut learn_from: Option<String> = None;
         match result {
             Ok(reply) => {
                 if !reply.trim().is_empty() {
-                    AppState::lock(&history_handle).push(Message::assistant(reply.clone()));
-                    if let Err(e) = AppState::lock(&store).add_message("assistant", &reply) {
+                    // The reply belongs to the conversation it was asked in.
+                    // Switching is refused while a reply runs, so this only
+                    // guards against that rule changing.
+                    if *AppState::lock(&current) == conversation {
+                        AppState::lock(&history_handle).push(Message::assistant(reply.clone()));
+                    }
+                    if let Err(e) =
+                        AppState::lock(&store).add_message_to(conversation, "assistant", &reply)
+                    {
                         tracing::warn!(%e, "could not persist reply");
                     }
+                    learn_from = Some(reply.clone());
                     // Most of the answer has already been spoken as it
                     // streamed; this is the last, unfinished sentence.
                     AppState::lock(&voice).finish_stream();
@@ -227,9 +264,36 @@ pub fn send_message(
         }
 
         busy.store(false, Ordering::SeqCst);
+
+        // After the turn, and after the user has their input back: nothing
+        // below is worth making them wait for.
+        if let Some(embed) = plan.embed.as_ref() {
+            runtime.block_on(crate::recall::backfill(&client, &store, embed));
+        }
+        if let (true, Some(reply), Some(primary)) = (plan.extract, learn_from, chain.first()) {
+            if crate::recall::worth_extracting(&text) {
+                let learned = runtime.block_on(crate::recall::extract(
+                    &client,
+                    primary,
+                    &store,
+                    plan.embed.as_ref(),
+                    &text,
+                    &reply,
+                ));
+                if !learned.is_empty() {
+                    let _ = app.emit("memory:learned", LearnedPayload { facts: learned });
+                }
+            }
+        }
     });
 
     Ok(())
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct LearnedPayload {
+    facts: Vec<String>,
 }
 
 // Every payload below carries this, including the ones whose fields are all
@@ -371,16 +435,24 @@ impl From<String> for TurnError {
 struct Identity {
     name: String,
     language: String,
+    /// What the assistant remembers that bears on this message, already
+    /// formatted for the prompt. Empty when nothing does.
+    memory: String,
 }
 
 impl Identity {
     fn system_for(&self, provider: Provider) -> Message {
-        Message::system(vavis_brain::system_prompt_for(
-            provider,
-            &self.name,
-            &self.language,
-        ))
+        let mut prompt = vavis_brain::system_prompt_for(provider, &self.name, &self.language);
+        prompt.push_str(&self.memory);
+        Message::system(prompt)
     }
+}
+
+/// Memory settings for one turn, read once at send time.
+struct MemoryPlan {
+    inject: bool,
+    extract: bool,
+    embed: Option<vavis_brain::embeddings::EmbedConfig>,
 }
 
 /// Drops the older half of a request's history in place, returning how many
@@ -951,9 +1023,13 @@ pub fn answer_approval(state: State<AppState>, decision: String) {
 /// something with "remember this" must not lose it to a clear.
 #[tauri::command]
 pub fn clear_conversation(state: State<AppState>) -> Result<(), String> {
+    if state.busy.load(Ordering::SeqCst) {
+        return Err("a reply is in progress".into());
+    }
+    let conversation = *AppState::lock(&state.conversation);
     AppState::lock(&state.history).clear();
     AppState::lock(&state.store)
-        .clear_messages()
+        .clear_conversation(conversation)
         .map_err(|e| e.to_string())
 }
 

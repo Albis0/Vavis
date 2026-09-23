@@ -332,8 +332,9 @@ pub fn council_keep(state: State<AppState>, text: String) -> Result<(), String> 
     }
 
     AppState::lock(&state.history).push(Message::assistant(text.clone()));
+    let conversation = *AppState::lock(&state.conversation);
     AppState::lock(&state.store)
-        .add_message("assistant", &text)
+        .add_message_to(conversation, "assistant", &text)
         .map_err(|e| e.to_string())?;
     Ok(())
 }
