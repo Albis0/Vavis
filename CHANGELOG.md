@@ -61,6 +61,12 @@ Bir düzeltmenin hangi dosyaya dokunduğu git geçmişinde zaten var.
   İndirilmiş bir deponun `.claude/settings.json` dosyasındaki hook'lar, Claude
   Code'a ilk soru sorulduğunda onaysız çalışıyordu. Artık Claude Code yalnızca
   senin kendi ayarlarını okuyor, projenin ayarlarını ve CLAUDE.md'sini değil.
+- Kod turunda Claude Code'un dosya okuma araçları bilgisayardaki **her
+  dosyayı** onaysız okuyabiliyordu (SSH anahtarları dahil). Artık yalnızca
+  açık proje klasörünün içini okuyabiliyor.
+- Kod araçları, proje içindeki bir kısayol (symlink) üzerinden proje dışına
+  yeni dosya yazabiliyordu; aramada kendine dönen bir kısayol sonsuz döngüye
+  sokuyordu. İkisi de kapandı.
 - Telefondan: Vavis botu bir gruba eklenirse cevaplar ve onay soruları gruba
   gidiyordu; artık yalnızca botla özel sohbet geçerli.
 

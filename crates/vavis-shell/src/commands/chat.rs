@@ -1142,7 +1142,8 @@ fn code_brief(project: Option<&std::path::Path>, claude: bool) -> String {
     };
     let reading = if claude {
         "Okumak ve aramak için kendi Read, Glob ve Grep araçlarını kullan (proje \
-         klasöründesin); değiştirmek ve çalıştırmak için mcp__vavis__ws_edit, \
+         klasöründesin; bu araçlar yalnızca proje içini okur, dışarısı için izin \
+         verilemez); değiştirmek ve çalıştırmak için mcp__vavis__ws_edit, \
          ws_write ve ws_run."
     } else {
         "Araçların: ws_list, ws_read, ws_search (bakmak), ws_edit, ws_write \
