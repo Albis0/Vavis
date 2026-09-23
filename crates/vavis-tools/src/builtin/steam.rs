@@ -222,7 +222,7 @@ fn launch(appid: u32) -> Result<(), String> {
     {
         // `cmd /C start` steam: protokolünü kayıtlı uygulamaya yönlendirir.
         // İlk boş argüman `start`ın pencere başlığı beklentisi için.
-        Command::new("cmd")
+        vavis_core::process::hidden(&mut Command::new("cmd"))
             .args(["/C", "start", "", &url])
             .spawn()
             .map(|_| ())

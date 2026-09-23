@@ -546,7 +546,7 @@ fn speak_platform(text: &str, config: &TtsConfig) -> Result<()> {
         config.volume.min(100),
     );
 
-    let output = Command::new("powershell")
+    let child = vavis_core::process::hidden(&mut Command::new("powershell"))
         .args([
             "-NoProfile",
             "-NonInteractive",
@@ -555,38 +555,76 @@ fn speak_platform(text: &str, config: &TtsConfig) -> Result<()> {
             "-Command",
             &script,
         ])
-        .output()
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
         .map_err(|e| TtsError::Engine(e.to_string()))?;
 
-    if output.status.success() {
+    // Held where `stop_platform_speech` can reach it: stopping means ending
+    // this one process, and nothing else.
+    *speaking_child() = Some(child);
+    let (status, err) = loop {
+        {
+            let mut slot = speaking_child();
+            match slot.as_mut() {
+                // Stopped from outside: the slot was emptied and the process
+                // killed. Not an error -- the user asked for silence.
+                None => return Ok(()),
+                Some(child) => match child.try_wait() {
+                    Ok(Some(status)) => {
+                        let mut child = slot.take().expect("just matched");
+                        let mut err = String::new();
+                        if let Some(mut stderr) = child.stderr.take() {
+                            use std::io::Read;
+                            let _ = stderr.read_to_string(&mut err);
+                        }
+                        // Already exited, so this returns at once; it is
+                        // what releases the process handle.
+                        let _ = child.wait();
+                        break (status, err);
+                    }
+                    Ok(None) => {}
+                    Err(e) => {
+                        slot.take();
+                        return Err(TtsError::Engine(e.to_string()));
+                    }
+                },
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(30));
+    };
+
+    if status.success() {
         Ok(())
     } else {
-        Err(TtsError::Speak(
-            String::from_utf8_lossy(&output.stderr).trim().to_string(),
-        ))
+        Err(TtsError::Speak(err.trim().to_string()))
     }
+}
+
+/// The PowerShell process speaking right now, if any.
+#[cfg(windows)]
+fn speaking_child() -> std::sync::MutexGuard<'static, Option<std::process::Child>> {
+    use std::sync::{Mutex, OnceLock};
+    static CHILD: OnceLock<Mutex<Option<std::process::Child>>> = OnceLock::new();
+    CHILD
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
 }
 
 /// Çalan konuşmayı öldür.
 ///
-/// SAPI'yi dışarıdan durdurmanın güvenilir yolu, seslendiren süreci
-/// sonlandırmak. Kendi başlattığımız süreçleri hedefliyoruz.
+/// Only the process this module started. The old version killed every
+/// PowerShell process with no window title that had started in the last
+/// five minutes -- which on a machine running scheduled scripts, a build,
+/// or anything else headless, meant killing the user's work to stop a
+/// sentence.
 #[cfg(windows)]
 fn stop_platform_speech() {
-    use std::process::Command;
-    // Sadece bizim başlattığımız gizli powershell süreçleri — kullanıcının
-    // kendi açtığı konsolu kapatmamak için pencere başlığına bakılıyor.
-    let _ = Command::new("powershell")
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            "Get-Process powershell -ErrorAction SilentlyContinue | \
-             Where-Object { $_.MainWindowTitle -eq '' -and \
-             $_.StartTime -gt (Get-Date).AddMinutes(-5) } | \
-             Stop-Process -Force -ErrorAction SilentlyContinue",
-        ])
-        .output();
+    if let Some(mut child) = speaking_child().take() {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
 }
 
 /// Sistemde bu dilde bir ses yüklü mü.
@@ -625,7 +663,7 @@ fn query_voice_language(language: &str) -> bool {
          Where-Object {{ $_.VoiceInfo.Culture.TwoLetterISOLanguageName -eq '{language}' }}).Count"
     );
 
-    let Ok(output) = Command::new("powershell")
+    let Ok(output) = vavis_core::process::hidden(&mut Command::new("powershell"))
         .args(["-NoProfile", "-NonInteractive", "-Command", &script])
         .output()
     else {
@@ -654,7 +692,7 @@ fn list_voices_platform() -> Vec<String> {
                   (New-Object System.Speech.Synthesis.SpeechSynthesizer)\
                   .GetInstalledVoices() | ForEach-Object { $_.VoiceInfo.Name }";
 
-    let Ok(output) = Command::new("powershell")
+    let Ok(output) = vavis_core::process::hidden(&mut Command::new("powershell"))
         .args(["-NoProfile", "-NonInteractive", "-Command", script])
         .output()
     else {

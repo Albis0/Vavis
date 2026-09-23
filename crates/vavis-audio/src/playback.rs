@@ -81,7 +81,7 @@ fn play_file(path: &std::path::Path, cancel: &AtomicBool) -> Result<()> {
         path.display()
     );
 
-    let mut child = Command::new("powershell")
+    let mut child = vavis_core::process::hidden(&mut Command::new("powershell"))
         .args([
             "-NoProfile",
             "-NonInteractive",

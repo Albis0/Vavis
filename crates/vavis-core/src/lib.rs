@@ -14,6 +14,7 @@ pub mod i18n;
 pub mod logging;
 pub mod memory;
 pub mod paths;
+pub mod process;
 pub mod scheduler;
 pub mod search;
 pub mod store;
