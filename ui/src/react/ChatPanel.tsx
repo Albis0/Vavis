@@ -21,6 +21,7 @@ import {
     type KeyboardEvent,
     type PointerEvent as ReactPointerEvent,
 } from "react";
+import ConversationList from "./ConversationList";
 import Icon from "./Icon";
 import Message from "./Message";
 import { chat, chatSignal } from "./store/chat";
@@ -51,11 +52,16 @@ function ChatPanel({ onClose }: Props, ref: ForwardedRef<ChatPanelHandle>) {
     const [width, setWidth] = useState(DEFAULT_WIDTH);
     const [dragging, setDragging] = useState(false);
     const [atBottom, setAtBottom] = useState(true);
+    const [listOpen, setListOpen] = useState(false);
 
     /** Matches `App`'s switch, read from the same store rather than passed
         down: both are answering "is there anything to read yet", and two
         copies of that question can disagree. */
     const conversing = state.view === "chat" && state.messages.length > 0;
+
+    /** Whether the chosen provider can answer. Not "is any key stored":
+        Claude Code and local servers need none. */
+    const ready = status?.providers?.find((p) => p.id === status.provider)?.usable ?? false;
 
     const feedRef = useRef<HTMLDivElement | null>(null);
     const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -262,8 +268,16 @@ function ChatPanel({ onClose }: Props, ref: ForwardedRef<ChatPanelHandle>) {
                 <div className="chat-header-actions">
                     <button
                         className="icon-btn"
+                        title="Conversations"
+                        aria-pressed={listOpen}
+                        onClick={() => setListOpen((open) => !open)}
+                    >
+                        <Icon name="clock" size={16} />
+                    </button>
+                    <button
+                        className="icon-btn"
                         title="New conversation (Ctrl+L)"
-                        onClick={() => chat.clear()}
+                        onClick={() => void chat.newConversation()}
                     >
                         <Icon name="plus" size={16} />
                     </button>
@@ -273,16 +287,18 @@ function ChatPanel({ onClose }: Props, ref: ForwardedRef<ChatPanelHandle>) {
                 </div>
             </header>
 
+            {listOpen && <ConversationList onClose={() => setListOpen(false)} />}
+
             <div className="feed" ref={feedRef} onScroll={trackScroll}>
                 {state.messages.length === 0 ? (
                     <div className="chat-empty">
                         <p className="empty-title">
-                            {status?.keys.length ? "What can I do?" : "Add a key to start"}
+                            {ready ? "What can I do?" : "Pick a provider to start"}
                         </p>
                         <p className="empty-sub">
-                            {status?.keys.length
+                            {ready
                                 ? "Ask a question, or tell me to do something on this machine."
-                                : "Open settings and add an API key for any provider."}
+                                : "Open settings: Claude Code uses your Claude plan with no key, and several providers have free tiers."}
                         </p>
                     </div>
                 ) : null}

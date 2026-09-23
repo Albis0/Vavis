@@ -550,6 +550,15 @@ impl BrainClient {
         })
     }
 
+    /// Embeds texts for semantic memory. See [`crate::embeddings`].
+    pub async fn embed(
+        &self,
+        cfg: &crate::embeddings::EmbedConfig,
+        texts: &[String],
+    ) -> Result<Vec<Vec<f32>>> {
+        crate::embeddings::embed(&self.http, cfg, texts).await
+    }
+
     /// Canlı model listesi. Sağlayıcı gürültüsü süzülür.
     pub async fn list_models(&self, provider: Provider, api_key: &str) -> Result<Vec<String>> {
         self.list_models_at(provider, api_key, None).await

@@ -8,6 +8,39 @@ use super::*;
 pub struct FactView {
     pub id: i64,
     pub text: String,
+    /// `user` or `auto` -- see `vavis_core::Fact::source`.
+    pub source: String,
+}
+
+/// Memory settings, for the memory pane.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemorySettings {
+    pub inject: bool,
+    pub auto_extract: bool,
+    /// `auto`, `off`, or a provider id.
+    pub embeddings: String,
+    /// The embedding provider actually in use, when there is one: what
+    /// `auto` resolved to, or the chosen one if it is set up.
+    pub embeddings_active: Option<String>,
+    /// Providers that can serve embeddings, for the picker.
+    pub embedding_providers: Vec<String>,
+}
+
+#[tauri::command]
+pub fn get_memory_settings(state: State<AppState>) -> MemorySettings {
+    let core = AppState::lock(&state.core);
+    let keys = AppState::lock(&state.keys);
+    MemorySettings {
+        inject: core.config.memory.inject,
+        auto_extract: core.config.memory.auto_extract,
+        embeddings: core.config.memory.embeddings.clone(),
+        embeddings_active: crate::recall::embed_config(&core.config, &keys).map(|e| e.id()),
+        embedding_providers: vavis_brain::embeddings::PROVIDERS
+            .iter()
+            .map(|p| p.key_name().to_string())
+            .collect(),
+    }
 }
 
 #[tauri::command]
@@ -19,6 +52,7 @@ pub fn list_facts(state: State<AppState>) -> Vec<FactView> {
         .map(|f| FactView {
             id: f.id,
             text: f.text,
+            source: f.source,
         })
         .collect()
 }

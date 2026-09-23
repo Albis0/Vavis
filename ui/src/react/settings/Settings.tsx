@@ -30,6 +30,7 @@ import {
     type VirusTotalSettings,
     type ConnectionTest,
     type Fact,
+    type MemorySettings,
     type McpServerInfo,
     type SearchSettings,
     type SpotifySettings,
@@ -162,6 +163,7 @@ export default function Settings() {
     const [steam, setSteam] = useState<SteamSettings | null>(null);
     const [mcp, setMcp] = useState<McpServerInfo[]>([]);
     const [facts, setFacts] = useState<Fact[]>([]);
+    const [memory, setMemory] = useState<MemorySettings | null>(null);
     const [tools, setTools] = useState<Tool[]>([]);
     const [models, setModels] = useState<string[]>([]);
     const [loadingModels, setLoadingModels] = useState(false);
@@ -199,6 +201,7 @@ export default function Settings() {
                 toolsResult,
                 voiceResult,
                 virustotalResult,
+                memoryResult,
             ] = await Promise.all([
                 api.searchSettings(),
                 api.canvasSettings(),
@@ -210,6 +213,7 @@ export default function Settings() {
                 api.listTools(),
                 api.voiceSettings(),
                 api.virusTotalSettings(),
+                api.memorySettings(),
             ]);
             setSearch(searchResult);
             setCanvas(canvasResult);
@@ -219,6 +223,7 @@ export default function Settings() {
             setSteam(steamResult);
             setMcp(mcpResult);
             setFacts(factsResult);
+            setMemory(memoryResult);
             setTools(toolsResult);
             setVoice(voiceResult);
             setSpotifyIdDraft(spotifyResult?.clientId ?? "");
@@ -549,6 +554,11 @@ export default function Settings() {
                     {active === "memory" && (
                         <MemoryPane
                             facts={facts}
+                            settings={memory}
+                            onchange={async (field, value) => {
+                                await updateSetting(field, value);
+                                setMemory(await api.memorySettings());
+                            }}
                             onforget={(id) =>
                                 run(async () => {
                                     await api.forgetFact(id);

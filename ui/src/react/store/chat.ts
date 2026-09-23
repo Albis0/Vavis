@@ -23,7 +23,9 @@ import {
     type AutomationEvent,
     type DeltaEvent,
     type DoneEvent,
+    type ConversationView,
     type ErrorEvent,
+    type LearnedEvent,
     type NoticeEvent,
     type Status,
     type ToolDoneEvent,
@@ -374,32 +376,95 @@ export class ChatStore {
         await this.refresh();
     }
 
+    /** Conversations for the list, newest first. */
+    conversations: ConversationView[] = [];
+
+    async loadConversations(query?: string) {
+        try {
+            this.conversations = await api.listConversations(query);
+        } catch (e) {
+            toast.failure("Could not load conversations.", e);
+        }
+    }
+
+    /** Puts a conversation's messages on screen, replacing what was there. */
+    private show(lines: { role: string; content: string }[]) {
+        this.messages = [];
+        this.codeContext = false;
+        for (const line of lines) {
+            this.add(line.role === "user" ? "user" : "assistant", line.content);
+        }
+        this.history = lines
+            .filter((line) => line.role === "user")
+            .map((line) => line.content)
+            .slice(-HISTORY_LIMIT);
+        this.historyAt = null;
+    }
+
     /**
-     * Clears the conversation, having asked first.
-     *
-     * Ctrl+L is one keystroke from Ctrl+K and there is no undo, so the raw
-     * `clear` above is no longer wired to anything the user can hit by
-     * accident. Both entry points — the shortcut and the button in settings —
-     * come through here.
+     * Starts a new conversation. The current one is kept in the list, so
+     * nothing is lost and nothing needs confirming -- which is why this
+     * replaced the old "discard everything?" dialog on Ctrl+L.
      */
-    async clearWithConfirm() {
+    async newConversation() {
+        try {
+            await api.newConversation();
+            this.show([]);
+            await this.refresh();
+            await this.loadConversations();
+        } catch (e) {
+            toast.failure("Could not start a new conversation.", e);
+        }
+    }
+
+    async openConversation(id: number) {
+        try {
+            this.show(await api.openConversation(id));
+            await this.refresh();
+            await this.loadConversations();
+        } catch (e) {
+            toast.failure("Could not open that conversation.", e);
+        }
+    }
+
+    async renameConversation(id: number, title: string) {
+        try {
+            await api.renameConversation(id, title);
+            await this.loadConversations();
+        } catch (e) {
+            toast.failure("Could not rename it.", e);
+        }
+    }
+
+    /** Deletes a conversation, having asked: this one cannot be undone. */
+    async deleteConversation(id: number) {
+        const target = this.conversations.find((c) => c.id === id);
         const confirmed = await ask({
-            title: "Start a new conversation?",
-            body:
-                this.messages.length > 0
-                    ? "This conversation is discarded and cannot be brought back. Remembered facts are kept."
-                    : "Remembered facts are kept.",
-            confirmLabel: "New conversation",
+            title: "Delete this conversation?",
+            body: `“${target?.title || "Untitled"}” and its messages are removed for good. Remembered facts are kept.`,
+            confirmLabel: "Delete",
             cancelLabel: "Keep it",
             danger: true,
         });
         if (!confirmed) return;
-
         try {
-            await this.clear();
+            const wasCurrent = target?.current ?? false;
+            const now = await api.deleteConversation(id);
+            if (wasCurrent) this.show(await api.openConversation(now));
+            await this.refresh();
+            await this.loadConversations();
         } catch (e) {
-            toast.failure("Could not clear the conversation.", e);
+            toast.failure("Could not delete it.", e);
         }
+    }
+
+    /**
+     * Ctrl+L and the settings button. Kept under its old name so both entry
+     * points keep working; it now starts a new conversation instead of
+     * discarding the current one, so there is nothing left to confirm.
+     */
+    async clearWithConfirm() {
+        await this.newConversation();
     }
 
     async answerApproval(decision: "allow" | "always" | "deny") {
@@ -451,10 +516,14 @@ export class ChatStore {
 
         await this.refresh();
 
-        if (!this.status?.keys.length) {
+        // Claude Code and local servers need no key, so "no keys stored"
+        // says nothing; what matters is whether the chosen provider can
+        // answer.
+        const chosen = this.status?.providers?.find((p) => p.id === this.status?.provider);
+        if (chosen && !chosen.usable) {
             this.add(
                 "system",
-                "No API key yet. Open settings, or type /key groq <your-key>.",
+                `${chosen.id} is not set up yet. Open settings (Ctrl+,) — Claude Code uses your Claude plan with no key, and Gemini, Groq, Cerebras, OpenRouter and GitHub all have free tiers.`,
             );
         }
 
@@ -539,6 +608,14 @@ export class ChatStore {
                         void this.refresh();
                         break;
                 }
+            }),
+
+            // Something picked out of the conversation and remembered. Said
+            // quietly, but said: memory the user cannot see forming is
+            // memory they cannot correct.
+            on<LearnedEvent>("memory:learned", (p) => {
+                const list = p.facts.join(" · ");
+                toast.info(`Remembered: ${list}`);
             }),
 
             on<AutomationEvent>("automation", (p) => {

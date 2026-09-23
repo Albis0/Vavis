@@ -11,6 +11,7 @@ pub mod budget;
 pub mod builtin;
 pub mod claude_code;
 pub mod client;
+pub mod embeddings;
 pub mod gemini;
 pub mod keys;
 pub mod message;

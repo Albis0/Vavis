@@ -9,7 +9,7 @@ use crate::paths::Paths;
 use rusqlite::Connection;
 
 /// Kodun beklediği şema sürümü. Yeni göç eklendikçe artar.
-pub const SCHEMA_VERSION: i64 = 4;
+pub const SCHEMA_VERSION: i64 = 5;
 
 /// Kalıcı bir olgu (kullanıcı hakkında hatırlanan bilgi).
 #[derive(Debug, Clone, PartialEq)]
@@ -17,6 +17,11 @@ pub struct Fact {
     pub id: i64,
     pub text: String,
     pub created_at: i64,
+    /// Where it came from: `user` when the user (or the model at their
+    /// request) saved it, `auto` when it was picked out of a conversation
+    /// in the background. Shown in settings, so an unwanted inference is
+    /// easy to spot and remove.
+    pub source: String,
 }
 
 /// Kayıtlı bir sohbet mesajı.
@@ -102,6 +107,10 @@ impl Store {
         // v4 — generated-media index (files stay on disk).
         self.migrate_gallery()?;
 
+        // v5 — conversations, and what semantic memory needs on facts.
+        self.migrate_conversations()?;
+        self.migrate_fact_memory()?;
+
         self.conn.execute("DELETE FROM schema_version", [])?;
         self.conn.execute(
             "INSERT INTO schema_version (version) VALUES (?1)",
@@ -114,20 +123,28 @@ impl Store {
 
     /// Yeni bir olgu kaydeder, id'sini döner.
     pub fn add_fact(&self, text: &str) -> Result<i64> {
-        self.conn
-            .execute("INSERT INTO facts (text) VALUES (?1)", [text])?;
+        self.add_fact_from(text, "user")
+    }
+
+    /// As [`Self::add_fact`], naming where the fact came from.
+    pub fn add_fact_from(&self, text: &str, source: &str) -> Result<i64> {
+        self.conn.execute(
+            "INSERT INTO facts (text, source) VALUES (?1, ?2)",
+            [text, source],
+        )?;
         Ok(self.conn.last_insert_rowid())
     }
 
     pub fn all_facts(&self) -> Result<Vec<Fact>> {
         let mut stmt = self
             .conn
-            .prepare("SELECT id, text, created_at FROM facts ORDER BY id")?;
+            .prepare("SELECT id, text, created_at, source FROM facts ORDER BY id")?;
         let rows = stmt.query_map([], |r| {
             Ok(Fact {
                 id: r.get(0)?,
                 text: r.get(1)?,
                 created_at: r.get(2)?,
+                source: r.get(3)?,
             })
         })?;
         Ok(rows.filter_map(std::result::Result::ok).collect())
@@ -214,6 +231,59 @@ mod tests {
         let store = Store::open_in_memory().unwrap();
         assert_eq!(store.schema_version().unwrap(), SCHEMA_VERSION);
         assert_eq!(store.message_count().unwrap(), 0);
+    }
+
+    #[test]
+    fn a_v4_database_gains_conversations_without_losing_messages() {
+        let tmp = tempfile::tempdir().unwrap();
+        let paths = Paths::with_root(tmp.path());
+        paths.ensure().unwrap();
+        {
+            // The shape a v4 build left behind.
+            let conn = Connection::open(paths.database_file()).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE schema_version (version INTEGER NOT NULL);
+                 INSERT INTO schema_version VALUES (4);
+                 CREATE TABLE messages (
+                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                     role TEXT NOT NULL, content TEXT NOT NULL,
+                     created_at INTEGER NOT NULL DEFAULT (unixepoch()));
+                 INSERT INTO messages (role, content) VALUES ('user', 'selam');
+                 INSERT INTO messages (role, content) VALUES ('assistant', 'merhaba');
+                 CREATE TABLE facts (
+                     id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL,
+                     created_at INTEGER NOT NULL DEFAULT (unixepoch()));
+                 INSERT INTO facts (text) VALUES ('kahveyi sade içer');",
+            )
+            .unwrap();
+        }
+
+        let store = Store::open(&paths).unwrap();
+        assert_eq!(store.schema_version().unwrap(), SCHEMA_VERSION);
+        let convs = store.list_conversations(10).unwrap();
+        assert_eq!(convs.len(), 1, "old messages land in one conversation");
+        let msgs = store.messages_in(convs[0].id, 10).unwrap();
+        assert_eq!(msgs.len(), 2);
+        assert_eq!(msgs[0].content, "selam");
+        let facts = store.all_facts().unwrap();
+        assert_eq!(facts[0].source, "user");
+    }
+
+    #[test]
+    fn migrating_twice_changes_nothing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let paths = Paths::with_root(tmp.path());
+        {
+            let store = Store::open(&paths).unwrap();
+            let c = store.create_conversation("a").unwrap();
+            store.add_message_to(c, "user", "x").unwrap();
+        }
+        {
+            let store = Store::open(&paths).unwrap();
+            store.migrate_conversations().unwrap();
+            store.migrate_fact_memory().unwrap();
+            assert_eq!(store.list_conversations(10).unwrap().len(), 1);
+        }
     }
 
     #[test]

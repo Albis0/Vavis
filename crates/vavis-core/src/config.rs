@@ -27,6 +27,35 @@ pub struct Config {
     pub steam: Steam,
     pub spotify: Spotify,
     pub mcp: Mcp,
+    pub memory: Memory,
+}
+
+/// How the assistant remembers the user.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Memory {
+    /// Put the facts relevant to each message in front of the model, so it
+    /// uses what it knows without having to think of searching.
+    pub inject: bool,
+    /// After a message that says something about the user, pick out any
+    /// lasting facts in the background and remember them. One small extra
+    /// request, and only for messages that look like they carry something
+    /// (the user talking about themselves), not every turn.
+    pub auto_extract: bool,
+    /// Where meaning-based search gets its embeddings: `auto` for the first
+    /// provider with a key that serves them, `off` for word matching only,
+    /// or a provider name.
+    pub embeddings: String,
+}
+
+impl Default for Memory {
+    fn default() -> Self {
+        Self {
+            inject: true,
+            auto_extract: true,
+            embeddings: "auto".into(),
+        }
+    }
 }
 
 /// Güvenlik tercihleri.
