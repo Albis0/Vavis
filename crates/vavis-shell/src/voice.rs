@@ -129,10 +129,6 @@ impl VoiceState {
         self.wake.is_some()
     }
 
-    pub fn is_enrolling(&self) -> bool {
-        self.enrolling.is_some()
-    }
-
     /// Starts wake-word training: the next few things heard are recordings
     /// of the word, not requests. Opens the microphone if nothing had it.
     pub fn start_enrolment(&mut self) -> Result<(), String> {

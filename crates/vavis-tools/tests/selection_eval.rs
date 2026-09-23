@@ -53,6 +53,12 @@ const EXPECT_OFFERED: &[(&str, &str)] = &[
     // Görü
     ("ekranımda ne var", "take_screenshot"),
     ("ekran görüntüsü al", "take_screenshot"),
+    // Görü — kontrollere adıyla ulaşmak
+    ("kaydet düğmesine bas", "click_element"),
+    ("bu penceredeki butonları listele", "list_ui_elements"),
+    ("arama kutusuna vavis yaz ve doldur", "set_element_text"),
+    ("sayfayı aşağı kaydır", "scroll"),
+    ("dosyayı klasöre sürükle", "drag"),
     // Cekirdek (alan tetiklendiginde birlikte gelir)
     ("cpu durumu ve saat", "get_current_time"),
     // Cekirdek TEK BASINA — bir zamanlar hicbiri sunulmuyordu ve model
@@ -171,6 +177,11 @@ fn average_offered_tool_count_stays_small() {
     let max = counts.iter().copied().max().unwrap_or(0);
 
     println!("average tools offered: {avg:.1} · most: {max}");
+    if std::env::var_os("VAVIS_EVAL_DETAIL").is_some() {
+        for ((msg, _), n) in EXPECT_OFFERED.iter().zip(&counts) {
+            println!("{n:>3}  {msg}");
+        }
+    }
     assert!(
         avg <= 8.0,
         "ortalama {avg:.1} tool sunuluyor — model şaşırabilir"
