@@ -187,6 +187,12 @@ fn handle(app: &tauri::AppHandle, bot: &Bot, runtime: &tokio::runtime::Runtime, 
             name,
             ..
         } => {
+            // Only the private chat with the bot counts. Added to a group,
+            // the owner's messages there would get answers -- and approval
+            // questions -- that everyone in the group can read.
+            if chat_id != user_id {
+                return;
+            }
             if owner_id == 0 || user_id != owner_id {
                 // Only a pairing attempt gets an answer; everyone else gets
                 // silence, which gives away nothing.
