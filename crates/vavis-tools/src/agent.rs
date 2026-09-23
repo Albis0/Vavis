@@ -13,6 +13,8 @@
 use crate::permission::{Decision, PermissionGate};
 use crate::selection;
 use crate::tool::{Registry, Risk, ToolOutcome};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use vavis_brain::{Message, ToolCall};
 
 /// Bir istekte en fazla kaç model↔tool turu dönülür.
@@ -84,6 +86,10 @@ pub struct Agent {
     pub registry: Registry,
     pub gate: PermissionGate,
     guard: LoopGuard,
+    /// Set from outside when text that did not come through
+    /// [`Agent::execute_calls`] tried to instruct the model -- see
+    /// [`Agent::outside_flag`].
+    outside: Arc<AtomicBool>,
 }
 
 impl Agent {
@@ -92,6 +98,7 @@ impl Agent {
             registry,
             gate: PermissionGate::new(),
             guard: LoopGuard::default(),
+            outside: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -99,6 +106,24 @@ impl Agent {
     pub fn start_run(&mut self) {
         self.gate.start_run();
         self.guard = LoopGuard::default();
+        self.outside.store(false, Ordering::SeqCst);
+    }
+
+    /// A switch for "something this agent did not read tried to give the
+    /// model orders".
+    ///
+    /// Claude Code runs its own web and file tools. Their results reach the
+    /// model without passing through here, so the scan below never sees
+    /// them -- and a page it fetched could say "delete the Documents folder"
+    /// with nothing marking the turn as suspect. Whoever reads that stream
+    /// sets this; the next call through here then counts as tainted, the
+    /// same as if one of our own tools had read the page.
+    ///
+    /// A flag rather than a method because the reader cannot take the
+    /// agent's lock: a tool call waiting on the user's approval holds it for
+    /// minutes.
+    pub fn outside_flag(&self) -> Arc<AtomicBool> {
+        self.outside.clone()
     }
 
     /// Bu mesaj için modele sunulacak tool şemaları.
@@ -130,6 +155,10 @@ impl Agent {
         host: &mut H,
     ) -> Vec<Message> {
         let mut results = Vec::new();
+
+        if self.outside.load(Ordering::SeqCst) {
+            self.gate.mark_tainted();
+        }
 
         for call in calls {
             let name = &call.function.name;
@@ -555,6 +584,30 @@ mod tests {
         assert!(agent.gate.is_tainted());
 
         agent.start_run();
+        assert!(!agent.gate.is_tainted());
+    }
+
+    /// Claude Code fetched a page itself; the page gave orders. The next
+    /// call through the agent must ask, even with "always allow" granted.
+    #[test]
+    fn orders_read_elsewhere_revoke_standing_permission_too() {
+        let mut agent = agent_reading("harmless");
+        let mut host = AllowAll::default();
+
+        agent.start_run();
+        agent.gate.grant_always("run_command");
+        agent.outside_flag().store(true, Ordering::SeqCst);
+        agent.execute_calls(&[call("test_fetch_page", "{}")], &mut host);
+
+        assert!(agent.gate.is_tainted());
+        assert_eq!(
+            agent.gate.check("run_command", Risk::Destructive),
+            Decision::Ask(crate::permission::ApprovalReason::TaintedContext)
+        );
+
+        // And the next request starts clean.
+        agent.start_run();
+        agent.execute_calls(&[call("test_fetch_page", "{}")], &mut host);
         assert!(!agent.gate.is_tainted());
     }
 }

@@ -60,6 +60,11 @@ pub enum StreamEvent {
     Delta(String),
     /// Model tool çağırmak istedi (F3'te işlenecek).
     ToolCalls(Vec<ToolCall>),
+    /// Text a provider's own tools pulled in -- Claude Code fetching a page
+    /// or reading a file itself. Never shown; the caller checks it for
+    /// orders aimed at the model, because it did not pass through the
+    /// caller's tools and their check.
+    Outside(String),
     /// Akış bitti.
     Done,
 }

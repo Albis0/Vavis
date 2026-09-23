@@ -906,6 +906,7 @@ impl Turn<'_> {
         // `request_tools` handling further down. The starting set is what the
         // router (or the keyword table) chose from the message alone.
         let mut offered: Vec<String> = picked.clone();
+        let outside = AppState::lock(agent).outside_flag();
         let mut tools = {
             let names: Vec<&str> = picked.iter().map(String::as_str).collect();
             let mut guard = AppState::lock(agent);
@@ -957,7 +958,24 @@ impl Turn<'_> {
                     let emit = emit.clone();
                     let voice = voice.clone();
                     let streamed = streamed.clone();
+                    let outside = outside.clone();
                     move |event| {
+                        // Claude Code's own web and file tools: what they
+                        // read skipped the scan our tools run, so it is
+                        // scanned here, and a hit makes the rest of the turn
+                        // ask before anything destructive -- see
+                        // `Agent::outside_flag`.
+                        if let StreamEvent::Outside(text) = &event {
+                            let hits = vavis_tools::untrusted::scan(text);
+                            if !hits.is_empty() {
+                                tracing::warn!(
+                                    ?hits,
+                                    "Claude Code read something that tries to instruct the model"
+                                );
+                                outside.store(true, Ordering::SeqCst);
+                            }
+                            return;
+                        }
                         if let StreamEvent::Delta(text) = event {
                             streamed.store(true, Ordering::SeqCst);
                             if quiet {
