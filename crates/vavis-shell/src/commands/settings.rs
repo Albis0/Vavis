@@ -41,6 +41,14 @@ pub fn set_setting(state: State<AppState>, field: String, value: String) -> Resu
         // them. Empty is valid: custom then refuses until set, local goes
         // back to Ollama's default port.
         "customUrl" => core.config.llm.custom_url = value.trim().to_string(),
+        "wakeSensitivity" => {
+            let n: u8 = value
+                .trim()
+                .parse()
+                .map_err(|_| format!("not a number: {value}"))?;
+            core.config.voice.wake_sensitivity = n.clamp(1, 10);
+            AppState::lock(&state.voice).set_wake_sensitivity(n);
+        }
         "memoryInject" => core.config.memory.inject = value == "true",
         "memoryAutoExtract" => core.config.memory.auto_extract = value == "true",
         "memoryEmbeddings" => {

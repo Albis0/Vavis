@@ -60,6 +60,9 @@ pub struct VoiceSettings {
     /// language. The interface names it rather than showing a blank
     /// "default" the user cannot interpret.
     pub default_edge_voice: String,
+    /// A wake word has been trained on this machine.
+    pub wake_trained: bool,
+    pub wake_sensitivity: u8,
 }
 
 #[derive(Debug, Serialize)]
@@ -119,7 +122,27 @@ pub fn get_voice_settings(state: State<AppState>) -> VoiceSettings {
         kokoro_default_url: vavis_audio::kokoro::DEFAULT_URL.to_string(),
         default_edge_voice: vavis_audio::edge_tts::default_voice(&core.config.general.language)
             .to_string(),
+        wake_trained: AppState::lock(&state.voice).wake_trained(),
+        wake_sensitivity: v.wake_sensitivity,
     }
+}
+
+/// Starts wake-word training. Progress arrives as `voice` events of kind
+/// `enrol` and `enrolDone`.
+#[tauri::command]
+pub fn start_wake_training(state: State<AppState>) -> Result<(), String> {
+    AppState::lock(&state.voice).start_enrolment()
+}
+
+#[tauri::command]
+pub fn cancel_wake_training(state: State<AppState>) {
+    AppState::lock(&state.voice).cancel_enrolment();
+}
+
+/// Forgets the trained wake word.
+#[tauri::command]
+pub fn forget_wake_word(state: State<AppState>) -> Result<(), String> {
+    AppState::lock(&state.voice).forget_wake_model()
 }
 
 /// Speaks a sample line with the current settings.

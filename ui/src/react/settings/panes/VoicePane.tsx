@@ -10,9 +10,11 @@
  * would store and test half of one.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, type Status, type VoiceSettings } from "../../../lib/api";
-import { chat } from "../../store/chat";
+import { chat, chatSignal } from "../../store/chat";
+import { toast } from "../../store/toast";
+import { useStore } from "../../store/useStore";
 import Field from "../Field";
 import Section from "../Section";
 
@@ -21,9 +23,35 @@ interface Props {
     voice: VoiceSettings | null;
     onupdate: (field: string, value: string) => void;
     onsavekey: (key: string) => void;
+    /** Re-reads voice settings, after training changes what is stored. */
+    onreload: () => Promise<void>;
 }
 
-export default function VoicePane({ status, voice, onupdate, onsavekey }: Props) {
+export default function VoicePane({ status, voice, onupdate, onsavekey, onreload }: Props) {
+    const store = useStore(chatSignal, chat);
+    const training = store.enrol !== null;
+    const [starting, setStarting] = useState(false);
+
+    // Training finishes on the voice thread; re-read what is stored once it
+    // reports back, so "trained" appears without reopening settings.
+    const result = store.enrolResult;
+    useEffect(() => {
+        if (result) void onreload();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [result]);
+
+    async function train() {
+        setStarting(true);
+        try {
+            chat.enrolResult = null;
+            await api.startWakeTraining();
+            chat.enrol = { count: 0, needed: 3 };
+        } catch (e) {
+            toast.failure("Could not start training.", e);
+        } finally {
+            setStarting(false);
+        }
+    }
     const [keyDraft, setKeyDraft] = useState("");
 
     function commitKey() {
@@ -132,6 +160,81 @@ export default function VoicePane({ status, voice, onupdate, onsavekey }: Props)
                     another provider is answering.
                 </p>
             </Section>
+
+            {voice && (
+                <Section
+                    title="Wake word"
+                    blurb="Teach this computer to recognise you saying the assistant's name. After that, wake-word mode decides on this machine whether it was addressed, and only what follows the name is sent for transcription — nothing else you say in the room leaves the computer."
+                >
+                    <div className="stat-row">
+                        <span className="label">Status</span>
+                        <span className="value">
+                            {training
+                                ? `listening — ${store.enrol?.count ?? 0} of ${store.enrol?.needed ?? 3}`
+                                : voice.wakeTrained
+                                  ? "trained on this computer"
+                                  : "not trained — every utterance is transcribed to find the name"}
+                        </span>
+                    </div>
+
+                    {training ? (
+                        <>
+                            <p className="hint">
+                                Say “{status?.assistantName || "Vavis"}” on its own, with a short pause
+                                after each — three times.
+                            </p>
+                            <div className="actions">
+                                <button
+                                    onClick={async () => {
+                                        await api.cancelWakeTraining();
+                                        chat.enrol = null;
+                                    }}
+                                >
+                                    cancel
+                                </button>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="actions">
+                            <button onClick={train} disabled={starting}>
+                                {voice.wakeTrained ? "train again" : "train"}
+                            </button>
+                            {voice.wakeTrained && (
+                                <button
+                                    className="danger"
+                                    onClick={async () => {
+                                        try {
+                                            await api.forgetWakeWord();
+                                            await onreload();
+                                        } catch (e) {
+                                            toast.failure("Could not forget it.", e);
+                                        }
+                                    }}
+                                >
+                                    forget
+                                </button>
+                            )}
+                        </div>
+                    )}
+
+                    {voice.wakeTrained && (
+                        <Field label="Sensitivity" fallback="">
+                            <input
+                                type="range"
+                                min={1}
+                                max={10}
+                                value={voice.wakeSensitivity}
+                                onChange={(e) => onupdate("wakeSensitivity", e.target.value)}
+                                aria-label="Wake word sensitivity"
+                            />
+                        </Field>
+                    )}
+                    <p className="blurb">
+                        Higher wakes more easily, and more often by mistake. Tuned to the voice that
+                        trained it: someone else saying the name may not wake it.
+                    </p>
+                </Section>
+            )}
 
             {voice && (
                 <>

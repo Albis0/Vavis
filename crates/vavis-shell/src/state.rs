@@ -99,6 +99,10 @@ impl AppState {
         // spoken -- otherwise the first reply of every session would come
         // out in the default voice regardless of what the user chose.
         voice.set_tts_config(tts_config_from(&core.config, &keys));
+        // A wake word trained in an earlier session is recognised from the
+        // first utterance of this one.
+        voice.attach_wake_model(core.paths.root().join("wake.json"));
+        voice.set_wake_sensitivity(core.config.voice.wake_sensitivity);
 
         Ok(Self {
             core: Mutex::new(core),

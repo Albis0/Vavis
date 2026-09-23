@@ -549,6 +549,7 @@ export default function Settings() {
                             voice={voice}
                             onupdate={updateVoice}
                             onsavekey={saveVoiceKey}
+                            onreload={async () => setVoice(await api.voiceSettings())}
                         />
                     )}
                     {active === "memory" && (
