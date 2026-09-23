@@ -98,6 +98,12 @@ export const GROUPS: Group[] = [
         title: "Connections",
         categories: [
             {
+                id: "phone",
+                label: "Phone",
+                icon: "✆",
+                keywords: "telegram bot phone mobile remote pair notify message away",
+            },
+            {
                 id: "obsidian",
                 label: "Obsidian",
                 icon: "❒",

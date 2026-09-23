@@ -28,6 +28,19 @@ pub struct Config {
     pub spotify: Spotify,
     pub mcp: Mcp,
     pub memory: Memory,
+    pub telegram: Telegram,
+}
+
+/// Reaching Vavis from the phone through a Telegram bot. The bot token is
+/// in the encrypted key store, not here.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Telegram {
+    pub enabled: bool,
+    /// The one Telegram account the bot answers. 0 until paired.
+    pub owner_id: i64,
+    /// The account's display name at pairing time, to show in settings.
+    pub owner_name: String,
 }
 
 /// How the assistant remembers the user.

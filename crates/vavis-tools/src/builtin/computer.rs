@@ -14,6 +14,11 @@
 //! Koordinatlar ekran sınırları içinde olmalı; metin uzunluğu sınırlı.
 //! Sonsuz döngüye giren bir model klavyeyi kilitleyemesin.
 
+// The pointer and keyboard helpers are only called from the Windows
+// implementations below; elsewhere the platform stubs refuse before
+// reaching them, and a build off Windows should not drown in warnings.
+#![cfg_attr(not(windows), allow(dead_code))]
+
 use crate::tool::{arg_num, arg_str, Domain, Param, Risk, Tool, ToolOutcome};
 use serde_json::Value;
 

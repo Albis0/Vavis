@@ -11,6 +11,7 @@
 mod commands;
 mod council;
 mod recall;
+mod remote;
 mod state;
 mod update;
 mod voice;
@@ -140,6 +141,11 @@ fn main() {
             commands::speech::start_live,
             commands::speech::stop_live,
             commands::speech::list_live_models,
+            commands::phone::get_phone_settings,
+            commands::phone::set_telegram_token,
+            commands::phone::telegram_pairing_code,
+            commands::phone::telegram_unpair,
+            commands::phone::set_telegram_enabled,
             commands::updates::check_update,
             commands::updates::open_release_page,
             commands::updates::app_version,
@@ -149,6 +155,8 @@ fn main() {
             allow_media_in_webview(app.handle(), &media_dir);
             wire_spotify_token_persistence(app.handle().clone());
             start_ticker(app.handle().clone());
+            // The phone bot, if one was set up in an earlier session.
+            remote::restart(app.handle());
             Ok(())
         })
         .run(tauri::generate_context!())

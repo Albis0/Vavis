@@ -58,6 +58,7 @@ pub fn register_all(registry: &mut Registry) {
     registry.register(Box::new(computer::PressKey));
     // Döngünün "kontrol et" adımı: tıkla → bekle → gerekiyorsa bak.
     registry.register(Box::new(computer::WaitForScreen));
+    registry.register(Box::new(crate::telegram::SendToPhone));
     registry.register(Box::new(uia::ListElements));
     registry.register(Box::new(uia::ClickElement));
     registry.register(Box::new(uia::SetElementText));
