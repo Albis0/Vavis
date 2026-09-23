@@ -85,11 +85,17 @@ impl PermissionGate {
 
     /// Bu tool çalıştırılabilir mi?
     pub fn check(&self, tool_name: &str, risk: Risk) -> Decision {
-        // Tam yetki her şeyin önünde: bütçe de, şüphe de, risk seviyesi de
-        // kullanıcının bilerek kapattığı korumalar. Yarısını açık bırakmak
-        // anahtarı yalancı yapardı.
+        // One guard outlives full authority: a page that tried to give the
+        // model orders. Full authority says "I trust what I ask the assistant
+        // to do" -- it cannot mean "I trust whatever a web page tells it to
+        // do", because the user never sees that page. With the guard off, one
+        // poisoned search result could run a command with nobody asked.
         if self.full_authority {
-            return Decision::Allow;
+            return if self.tainted && risk == Risk::Destructive {
+                Decision::Ask(ApprovalReason::TaintedContext)
+            } else {
+                Decision::Allow
+            };
         }
 
         match risk {
@@ -282,22 +288,23 @@ mod tests {
         }
     }
 
-    /// Şüpheli sayfa da susturuluyor.
-    ///
-    /// Bilerek: bu koruma kullanıcının kendi izninin arkasından iş çevrilmesini
-    /// engellemek için var, ve tam yetki tam olarak "arkamdan iş çevrilmesin"
-    /// korumasını kapatma tercihidir. Sessizce açık bırakmak, kapattığını
-    /// sanan kullanıcıya yalan söylemek olurdu.
+    /// Full authority trusts the user's requests, not a web page's. After
+    /// content that tried to instruct the model, destructive work asks even
+    /// with full authority on -- the settings screen says so where the
+    /// switch is.
     #[test]
-    fn full_authority_also_silences_the_injection_guard() {
+    fn full_authority_does_not_silence_the_injection_guard() {
         let mut gate = PermissionGate::new();
         gate.set_full_authority(true);
         gate.mark_tainted();
 
         assert_eq!(
             gate.check("run_command", Risk::Destructive),
-            Decision::Allow
+            Decision::Ask(ApprovalReason::TaintedContext)
         );
+        // Looking and moderate changes still go through.
+        assert_eq!(gate.check("read_file", Risk::Safe), Decision::Allow);
+        assert_eq!(gate.check("set_volume", Risk::Moderate), Decision::Allow);
     }
 
     #[test]
