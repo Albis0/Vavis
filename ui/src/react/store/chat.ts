@@ -630,7 +630,14 @@ export class ChatStore {
             on<VoiceEvent>("voice", (event) => {
                 switch (event.kind) {
                     case "heard":
-                        void this.send(event.text);
+                        // Said while a reply was running: queued like an
+                        // automation, not dropped the way send() would.
+                        if (this.status?.busy) {
+                            this.queued = [...this.queued, event.text];
+                            this.add("system", `Heard “${event.text}” — queued until the reply finishes.`);
+                        } else {
+                            void this.send(event.text);
+                        }
                         break;
                     case "woke":
                         this.add("system", "Listening…");

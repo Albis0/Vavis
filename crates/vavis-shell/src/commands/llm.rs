@@ -207,10 +207,16 @@ pub fn set_key(state: State<AppState>, provider: String, key: String) -> Result<
     let mut keys = AppState::lock(&state.keys);
     keys.set(provider.key_name(), key);
 
-    // Speech recognition runs on Groq too — keep it in step.
+    // Speech recognition runs on Groq, or Gemini without it — keep both in
+    // step.
     if provider == Provider::Groq {
         if let Some(k) = keys.get("groq") {
             AppState::lock(&state.voice).set_api_key(k.to_string());
+        }
+    }
+    if provider == Provider::Gemini {
+        if let Some(k) = keys.get("gemini") {
+            AppState::lock(&state.voice).set_gemini_key(k.to_string());
         }
     }
 

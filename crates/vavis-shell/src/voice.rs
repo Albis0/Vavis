@@ -75,6 +75,9 @@ pub struct VoiceState {
     tx: Sender<VoiceEvent>,
     rx: Receiver<VoiceEvent>,
     api_key: String,
+    /// Transcription falls back to Gemini with this when there is no Groq
+    /// key.
+    gemini_key: String,
     language: String,
     wake_word: String,
     /// Text streamed in this turn that has not been spoken yet.
@@ -125,6 +128,7 @@ impl VoiceState {
             tx,
             rx,
             api_key,
+            gemini_key: String::new(),
             language,
             wake_word,
             pending: std::sync::Mutex::new(String::new()),
@@ -360,6 +364,10 @@ impl VoiceState {
         self.api_key = key;
     }
 
+    pub fn set_gemini_key(&mut self, key: String) {
+        self.gemini_key = key;
+    }
+
     pub fn set_language(&mut self, language: String) {
         self.language = language;
     }
@@ -378,8 +386,8 @@ impl VoiceState {
         }
 
         if mode.is_listening() {
-            if self.api_key.trim().is_empty() {
-                return Err("speech recognition needs a Groq key".into());
+            if self.api_key.trim().is_empty() && self.gemini_key.trim().is_empty() {
+                return Err("speech recognition needs a Groq or Gemini key".into());
             }
             if self.mic.is_none() {
                 match Microphone::start() {
@@ -621,6 +629,7 @@ impl VoiceState {
         let stt = self.stt.clone();
         let tx = self.tx.clone();
         let key = self.api_key.clone();
+        let gemini_key = self.gemini_key.clone();
         let language = self.language.clone();
         let wake_word = self.wake_word.clone();
         let mode = self.mode;
@@ -647,7 +656,15 @@ impl VoiceState {
         }
 
         self.runtime.spawn(async move {
-            let text = match stt.transcribe(&utterance, &key, &language).await {
+            // Whisper on Groq when there is a key -- fast and made for it --
+            // otherwise Gemini.
+            let heard = if key.trim().is_empty() {
+                stt.transcribe_gemini(&utterance, &gemini_key, &language)
+                    .await
+            } else {
+                stt.transcribe(&utterance, &key, &language).await
+            };
+            let text = match heard {
                 Ok(t) => t,
                 Err(e) => {
                     let _ = tx.send(VoiceEvent::Notice {

@@ -158,8 +158,8 @@ export default function VoicePane({ status, voice, onupdate, onsavekey, onreload
                 </div>
 
                 <p className="blurb">
-                    Speech recognition runs through Groq, so it needs the Groq key even when
-                    another provider is answering.
+                    Speech recognition uses Whisper on Groq when a Groq key is stored — fast and free —
+                    and falls back to Gemini otherwise, so either free key is enough.
                 </p>
             </Section>
 
