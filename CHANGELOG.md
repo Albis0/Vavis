@@ -54,7 +54,8 @@ Bir düzeltmenin hangi dosyaya dokunduğu git geçmişinde zaten var.
   artık sıraya alınıyor.
 - Paneldeki "+" düğmesi sohbeti onaysız siliyordu.
 - Tam yetki açıkken, okunan bir sayfanın verdiği komut sorulmadan
-  çalışabiliyordu.
+  çalışabiliyordu. Claude Code'un kendi okuduğu sayfa ve dosyalar da artık
+  bu kontrolden geçiyor.
 - PowerShell çıktısındaki Türkçe karakterler bozuk geliyordu.
 
 ## 0.7.4 — 2026-09-07
