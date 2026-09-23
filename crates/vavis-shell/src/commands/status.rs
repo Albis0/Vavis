@@ -117,7 +117,18 @@ pub fn get_status(state: State<AppState>) -> Status {
             })
             .collect(),
         keys: keys.configured().iter().map(|s| s.to_string()).collect(),
-        tool_count: AppState::lock(&state.agent).registry.len(),
+        // Never waits on the agent: it is held for as long as an approval
+        // question stays unanswered, and this runs on the interface thread
+        // once a second -- waiting here froze the window, so the approval
+        // could never be clicked. The last count seen is good enough.
+        tool_count: match state.agent.try_lock() {
+            Ok(agent) => {
+                let n = agent.registry.len();
+                state.tool_count.store(n, Ordering::Relaxed);
+                n
+            }
+            Err(_) => state.tool_count.load(Ordering::Relaxed),
+        },
         history_len: AppState::lock(&state.history).len(),
         fact_count: facts,
         automation_count: automations,

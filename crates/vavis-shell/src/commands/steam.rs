@@ -29,7 +29,7 @@ pub fn get_steam_settings(state: State<AppState>) -> SteamSettings {
 /// The check matters more than it looks: a private profile answers HTTP 200
 /// with an empty list, so without it every later question would come back
 /// "you own no games" and the user would have no idea why.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_steam(state: State<AppState>, steam_id: String, key: String) -> Result<String, String> {
     let id = steam_id.trim().to_string();
     if !id.is_empty() && (id.len() != 17 || !id.chars().all(|c| c.is_ascii_digit())) {

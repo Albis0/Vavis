@@ -38,9 +38,20 @@ impl ConnectionTest {
 /// Nothing here spends meaningful money. Image generation is deliberately
 /// absent — a test that costs a few cents per press is not a test, and
 /// pretending a key check is a connection test would be worse.
+///
+/// Async so the window stays responsive while it waits: a sync command runs
+/// on the interface thread, and a test that takes seconds froze the whole
+/// window for those seconds.
 #[tauri::command]
-pub fn test_connection(state: State<AppState>, target: String) -> ConnectionTest {
-    match target.as_str() {
+pub async fn test_connection(
+    state: State<'_, AppState>,
+    target: String,
+) -> Result<ConnectionTest, String> {
+    Ok(test(&state, &target).await)
+}
+
+async fn test(state: &AppState, target: &str) -> ConnectionTest {
+    match target {
         "obsidian" => match vavis_tools::obsidian::current() {
             Some(vault) => match vault.scan() {
                 Ok(notes) => {
@@ -114,20 +125,13 @@ pub fn test_connection(state: State<AppState>, target: String) -> ConnectionTest
             }
 
             let client = state.client.clone();
-            let runtime = match tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-            {
-                Ok(r) => r,
-                Err(e) => return ConnectionTest::bad(e.to_string()),
-            };
 
             // Claude Code has no model list to ask for: being installed says
             // nothing about being logged in, and only a real answer proves
             // both. One word from the smallest model costs next to nothing
             // against a subscription.
             if parsed == Provider::ClaudeCode {
-                return runtime.block_on(async {
+                return async {
                     let version = match vavis_brain::claude_code::version().await {
                         Ok(v) => v,
                         Err(e) => return ConnectionTest::bad(super::friendly_error(&e)),
@@ -147,10 +151,11 @@ pub fn test_connection(state: State<AppState>, target: String) -> ConnectionTest
                         )),
                         Err(e) => ConnectionTest::bad(super::friendly_error(&e)),
                     }
-                });
+                }
+                .await;
             }
 
-            match runtime.block_on(client.list_models_at(parsed, &key, url.as_deref())) {
+            match client.list_models_at(parsed, &key, url.as_deref()).await {
                 Ok(models) => ConnectionTest::ok(format!("{} models available", models.len())),
                 Err(e) => ConnectionTest::bad(super::friendly_error(&e)),
             }

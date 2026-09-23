@@ -49,6 +49,10 @@ pub struct AppState {
     /// the app -- its token is what the CLI was told, so it cannot change
     /// mid-session.
     pub claude_bridge: Mutex<Option<Arc<vavis_tools::mcp::bridge::Bridge>>>,
+
+    /// The registry's size as last seen, for the status poll when the agent
+    /// is busy (see `get_status`).
+    pub tool_count: std::sync::atomic::AtomicUsize,
 }
 
 impl AppState {
@@ -118,6 +122,7 @@ impl AppState {
             voice: Arc::new(Mutex::new(voice)),
             started: std::time::Instant::now(),
             claude_bridge: Mutex::new(None),
+            tool_count: std::sync::atomic::AtomicUsize::new(0),
         })
     }
 
@@ -149,7 +154,20 @@ impl AppState {
     pub fn release(&self) {
         self.busy.store(false, Ordering::SeqCst);
     }
+}
 
+/// Clears the busy flag when dropped -- including when the turn holding it
+/// panics. Without it, one panicking tool left every later message refused
+/// with "a reply is already in progress" until the app was restarted.
+pub struct BusyGuard(pub Arc<AtomicBool>);
+
+impl Drop for BusyGuard {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
+}
+
+impl AppState {
     /// Locks a mutex, recovering from poisoning.
     ///
     /// A panic in one command must not permanently disable the assistant;

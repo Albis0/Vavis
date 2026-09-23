@@ -23,6 +23,7 @@ pub mod canvas;
 pub mod mcp;
 pub mod obsidian;
 pub mod permission;
+pub mod process;
 pub mod router;
 pub mod selection;
 pub mod spotify;

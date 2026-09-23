@@ -22,7 +22,7 @@
 use crate::tool::{arg_num, arg_str, Domain, Param, Risk, Tool, ToolOutcome};
 use crate::workspace;
 use serde_json::Value;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// Most lines one `ws_read` returns.
 const MAX_READ_LINES: usize = 600;
@@ -409,106 +409,32 @@ pub fn run_in(
     command: &str,
     timeout: Duration,
 ) -> Result<(i32, String), String> {
-    use std::io::Read;
-    use std::process::{Command, Stdio};
-
     let mut cmd = if cfg!(windows) {
-        let mut c = Command::new("cmd");
+        let mut c = std::process::Command::new("cmd");
         c.args(["/C", command]);
         c
     } else {
-        let mut c = Command::new("sh");
+        let mut c = std::process::Command::new("sh");
         c.args(["-c", command]);
         c
     };
-    vavis_core::process::hidden(&mut cmd);
-    let mut child = cmd
-        .current_dir(dir)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("başlatılamadı: {e}"))?;
-
-    // Drained on threads so a chatty command cannot fill a pipe and stall,
-    // into buffers read at the end rather than joined: a grandchild that
-    // outlives the killed shell holds the pipe open, and whatever was
-    // printed before the kill is exactly what is worth showing.
-    let drain = |mut pipe: Box<dyn Read + Send>| {
-        let buf = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-        let sink = buf.clone();
-        let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let finished = done.clone();
-        std::thread::spawn(move || {
-            let mut chunk = [0u8; 8192];
-            while let Ok(n) = pipe.read(&mut chunk) {
-                if n == 0 {
-                    break;
-                }
-                sink.lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .extend_from_slice(&chunk[..n]);
-            }
-            finished.store(true, std::sync::atomic::Ordering::SeqCst);
-        });
-        (buf, done)
-    };
-    let (out_buf, out_done) = drain(Box::new(child.stdout.take().expect("piped")));
-    let (err_buf, err_done) = drain(Box::new(child.stderr.take().expect("piped")));
-
-    let deadline = Instant::now() + timeout;
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break Some(status),
-            Ok(None) if Instant::now() >= deadline => {
-                kill_tree(&mut child);
-                break None;
-            }
-            Ok(None) => std::thread::sleep(Duration::from_millis(50)),
-            Err(e) => return Err(e.to_string()),
-        }
-    };
-    // Let the readers catch the last of it; not forever.
-    let grace = Instant::now() + Duration::from_secs(if status.is_some() { 5 } else { 1 });
-    while !(out_done.load(std::sync::atomic::Ordering::SeqCst)
-        && err_done.load(std::sync::atomic::Ordering::SeqCst))
-        && Instant::now() < grace
-    {
-        std::thread::sleep(Duration::from_millis(20));
-    }
-    let take = |b: &std::sync::Arc<std::sync::Mutex<Vec<u8>>>| {
-        String::from_utf8_lossy(&b.lock().unwrap_or_else(|e| e.into_inner())).into_owned()
-    };
-    let mut output = take(&out_buf);
-    let stderr = take(&err_buf);
-    if !stderr.trim().is_empty() {
+    cmd.current_dir(dir);
+    let run = crate::process::run(cmd, timeout)?;
+    let mut output = run.stdout;
+    if !run.stderr.trim().is_empty() {
         if !output.is_empty() && !output.ends_with('\n') {
             output.push('\n');
         }
-        output.push_str(&stderr);
+        output.push_str(&run.stderr);
     }
-    match status {
-        Some(s) => Ok((s.code().unwrap_or(-1), output)),
+    match run.code {
+        Some(code) => Ok((code, output)),
         None => Err(format!(
             "{:.0} saniyede bitmedi, durduruldu. Son çıktı:\n{}",
             timeout.as_secs_f32().max(1.0),
             tail(&output, 2_000)
         )),
     }
-}
-
-/// Ends a command and, on Windows, everything it started: `cmd /C cargo
-/// test` is three processes deep, and killing only `cmd` leaves the test
-/// binary running.
-fn kill_tree(child: &mut std::process::Child) {
-    #[cfg(windows)]
-    {
-        let _ = vavis_core::process::hidden(&mut std::process::Command::new("taskkill"))
-            .args(["/T", "/F", "/PID", &child.id().to_string()])
-            .output();
-    }
-    let _ = child.kill();
-    let _ = child.wait();
 }
 
 #[cfg(test)]

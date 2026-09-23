@@ -113,7 +113,7 @@ pub struct ToolView {
     pub risk: String,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_tools(state: State<AppState>) -> Vec<ToolView> {
     AppState::lock(&state.agent)
         .registry
