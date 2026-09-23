@@ -26,7 +26,7 @@ pub fn get_virustotal_settings(state: State<AppState>) -> VirusTotalSettings {
 /// The check is worth the one request: a key pasted with a stray character
 /// looks identical to a good one until the first scan fails, and by then the
 /// user is somewhere else and no longer connects the two.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_virustotal_key(state: State<AppState>, key: String) -> Result<String, String> {
     let key = key.trim().to_string();
 

@@ -36,21 +36,18 @@ pub fn get_phone_settings(state: State<AppState>) -> PhoneSettings {
 /// Stores the bot token after checking it with Telegram, and starts the bot.
 /// Returns the bot's @username.
 #[tauri::command]
-pub fn set_telegram_token(
+pub async fn set_telegram_token(
     app: tauri::AppHandle,
-    state: State<AppState>,
+    state: State<'_, AppState>,
     token: String,
 ) -> Result<String, String> {
     let token = token.trim().to_string();
     if token.is_empty() {
         return Err("paste the token @BotFather gave you".into());
     }
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|e| e.to_string())?;
-    let name = runtime
-        .block_on(vavis_tools::telegram::Bot::new(token.clone()).username())
+    let name = vavis_tools::telegram::Bot::new(token.clone())
+        .username()
+        .await
         .map_err(|e| format!("Telegram did not accept the token: {e}"))?;
 
     {

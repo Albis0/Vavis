@@ -24,7 +24,7 @@ pub struct McpServerInfo {
 }
 
 /// Configured servers and their current state.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_mcp_servers(state: State<AppState>) -> Vec<McpServerInfo> {
     let connected = vavis_tools::mcp::connected_ids();
     let core = AppState::lock(&state.core);

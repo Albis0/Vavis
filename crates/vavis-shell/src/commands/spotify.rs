@@ -45,7 +45,7 @@ pub struct NowPlayingInfo {
 /// must never wait on the network, while this can. The tool layer caches the
 /// answer for a few seconds and the interface counts the progress bar
 /// forward locally, so Spotify is not asked on every tick.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn spotify_now_playing() -> Option<NowPlayingInfo> {
     match vavis_tools::spotify::now_playing() {
         Ok(Some(np)) => Some(NowPlayingInfo {
@@ -68,7 +68,7 @@ pub fn spotify_now_playing() -> Option<NowPlayingInfo> {
 /// window's content-security policy allows no remote images, and re-fetching
 /// the same cover on every poll would be wasteful. Fetching once here and
 /// keeping the bytes means the art survives restarts too.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn spotify_album_art(state: State<AppState>, url: String) -> Result<String, String> {
     if !url.starts_with("https://") {
         return Err("only https artwork is fetched".into());
@@ -137,7 +137,7 @@ fn base64(bytes: &[u8]) -> String {
 ///
 /// Direct rather than routed through the model: pressing pause is not a
 /// request for the assistant to think about.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn spotify_control(action: String) -> Result<(), String> {
     let mapped = match action.as_str() {
         "play" | "pause" | "next" | "previous" => action.as_str(),
@@ -174,7 +174,7 @@ pub fn set_spotify_client_id(state: State<AppState>, client_id: String) -> Resul
 /// Returns as soon as the browser is opened; the rest happens on a worker
 /// thread and lands as a `spotify:auth` event. Blocking a command for the
 /// ninety seconds someone might spend logging in would freeze the interface.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn connect_spotify(app: tauri::AppHandle, state: State<AppState>) -> Result<(), String> {
     let configured = AppState::lock(&state.core).config.spotify.client_id.clone();
     // Empty is the ordinary case and means the built-in application, so there

@@ -216,7 +216,7 @@ const NOT_LIVE: [&str; 4] = [
 
 /// Starts a live, spoken conversation (Gemini Live). Progress arrives as
 /// `voice` events: `live` when it starts and ends, `liveTurn` per exchange.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn start_live(app: tauri::AppHandle, state: State<AppState>) -> Result<(), String> {
     let config = {
         let core = AppState::lock(&state.core);

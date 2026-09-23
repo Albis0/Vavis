@@ -293,8 +293,27 @@ fn set_system_volume(_level: u8) -> ToolOutcome {
 /// PowerShell komutu çalıştırır ve çıktısını döner.
 #[cfg(windows)]
 pub(crate) fn run_powershell(script: &str) -> std::io::Result<String> {
+    run_powershell_within(script, POWERSHELL_TIMEOUT)
+}
+
+#[cfg_attr(not(windows), allow(dead_code))]
+/// How long one PowerShell run may take. Generous -- a UI Automation walk
+/// of a browser window takes seconds -- but finite: a command that stops
+/// to wait for input used to hold the agent forever.
+const POWERSHELL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+
+/// As [`run_powershell`], with a chosen time limit.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn run_powershell_within(
+    script: &str,
+    timeout: std::time::Duration,
+) -> std::io::Result<String> {
     use std::process::Command;
 
+    // UTF-8 out: Windows PowerShell writes in the console's OEM code page
+    // by default, which turns every "ş", "ğ" and "ı" in a window title,
+    // file name or command output into mojibake on the way back.
+    let script = format!("[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; {script}");
     let mut cmd = Command::new("powershell");
     cmd.args([
         "-NoProfile",
@@ -302,21 +321,24 @@ pub(crate) fn run_powershell(script: &str) -> std::io::Result<String> {
         "-ExecutionPolicy",
         "Bypass",
         "-Command",
-        script,
+        &script,
     ]);
-    // No console window flashing up on every click and keystroke.
-    vavis_core::process::hidden(&mut cmd);
-    let output = cmd.output()?;
+    let run = crate::process::run(cmd, timeout).map_err(std::io::Error::other)?;
 
-    if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
-    } else {
-        let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        Err(std::io::Error::other(if err.is_empty() {
-            "komut başarısız".to_string()
-        } else {
-            err
-        }))
+    match run.code {
+        Some(0) => Ok(run.stdout.trim().to_string()),
+        Some(_) => {
+            let err = run.stderr.trim().to_string();
+            Err(std::io::Error::other(if err.is_empty() {
+                "komut başarısız".to_string()
+            } else {
+                err
+            }))
+        }
+        None => Err(std::io::Error::other(format!(
+            "{} saniyede bitmedi, durduruldu",
+            timeout.as_secs()
+        ))),
     }
 }
 

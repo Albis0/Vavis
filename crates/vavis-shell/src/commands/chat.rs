@@ -170,6 +170,8 @@ pub fn send_message(
     let current = state.conversation.clone();
 
     std::thread::spawn(move || {
+        // Released however this thread ends, panics included.
+        let guard = crate::state::BusyGuard(busy.clone());
         let runtime = match tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -184,7 +186,6 @@ pub fn send_message(
                         too_long: false,
                     },
                 );
-                busy.store(false, Ordering::SeqCst);
                 return;
             }
         };
@@ -253,7 +254,7 @@ pub fn send_message(
             }
         }
 
-        busy.store(false, Ordering::SeqCst);
+        drop(guard);
 
         // After the turn, and after the user has their input back: nothing
         // below is worth making them wait for.
@@ -297,6 +298,7 @@ pub(crate) fn run_remote(
     if !state.try_claim() {
         return Err("busy".into());
     }
+    let _guard = crate::state::BusyGuard(state.busy.clone());
     let prepared = (|| {
         let core = AppState::lock(&state.core);
         let keys = AppState::lock(&state.keys);
@@ -315,13 +317,7 @@ pub(crate) fn run_remote(
         let inject = core.config.memory.inject;
         Ok::<_, String>((chain, identity, embed, inject))
     })();
-    let (chain, mut identity, embed, inject) = match prepared {
-        Ok(p) => p,
-        Err(e) => {
-            state.release();
-            return Err(e);
-        }
-    };
+    let (chain, mut identity, embed, inject) = prepared?;
 
     let bridge = if chain
         .iter()
@@ -384,7 +380,6 @@ pub(crate) fn run_remote(
             }
         }
     }
-    state.release();
     result
 }
 
@@ -1145,6 +1140,9 @@ fn code_brief(project: Option<&std::path::Path>, claude: bool) -> String {
     )
 }
 
+/// How long an approval question in the window waits for an answer.
+const APPROVAL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15 * 60);
+
 /// Asks for approval somewhere other than the window: the phone.
 pub(crate) type Asker =
     std::sync::Arc<dyn Fn(&str, &str, ApprovalReason) -> Approval + Send + Sync>;
@@ -1186,6 +1184,12 @@ impl AgentHost for EventHost {
         if let Some(asker) = remote_asker() {
             return asker(tool, args, reason);
         }
+        // An answer already waiting belongs to no question: a double click,
+        // or a reply to one that timed out. Left in the channel, it would
+        // answer *this* question before the user had even seen it.
+        if let Ok(rx) = self.approval_rx.lock() {
+            while rx.try_recv().is_ok() {}
+        }
         let _ = self.app.emit(
             "chat:approval",
             ApprovalPayload {
@@ -1204,7 +1208,9 @@ impl AgentHost for EventHost {
         let Ok(rx) = self.approval_rx.lock() else {
             return Approval::Deny;
         };
-        rx.recv().unwrap_or(Approval::Deny)
+        // Bounded: a question nobody answers (the window was reloaded, the
+        // user walked away) must not hold the agent forever. Silence is a no.
+        rx.recv_timeout(APPROVAL_TIMEOUT).unwrap_or(Approval::Deny)
     }
 
     fn on_tool_start(&mut self, tool: &str, args: &str) {
