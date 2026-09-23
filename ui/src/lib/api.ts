@@ -211,6 +211,10 @@ export type UpdateCheck =
 
 /** Everything the speech section of settings needs. */
 export interface VoiceSettings {
+    /** A wake word has been trained on this machine. */
+    wakeTrained: boolean;
+    /** 1 (strict) to 10 (lenient). */
+    wakeSensitivity: number;
     engines: VoiceEngineInfo[];
     engine: string;
     rate: number;
@@ -379,6 +383,9 @@ export const api = {
     deleteConversation: (id: number) =>
         invoke<number>("delete_conversation", { id }),
     memorySettings: () => invoke<MemorySettings>("get_memory_settings"),
+    startWakeTraining: () => invoke<void>("start_wake_training"),
+    cancelWakeTraining: () => invoke<void>("cancel_wake_training"),
+    forgetWakeWord: () => invoke<void>("forget_wake_word"),
     /** Drops the oldest half of the conversation. Returns how many went. */
     forgetOldest: () => invoke<number>("forget_oldest"),
 
@@ -661,7 +668,9 @@ export type VoiceEvent =
     | { kind: "heard"; text: string }
     | { kind: "woke" }
     | { kind: "notice"; text: string }
-    | { kind: "speaking"; active: boolean };
+    | { kind: "speaking"; active: boolean }
+    | { kind: "enrol"; count: number; needed: number }
+    | { kind: "enrolDone"; ok: boolean; message: string };
 
 /**
  * Subscribes to a backend event.

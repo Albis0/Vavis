@@ -134,6 +134,10 @@ export class ChatStore {
     runningArgs = "";
     /** Microphone level, 0.0–1.0. Polled faster than the rest of the status. */
     micLevel = 0;
+    /** Wake-word training in progress: recordings taken so far. */
+    enrol: { count: number; needed: number } | null = null;
+    /** How the last training ended, for the voice settings to show. */
+    enrolResult: { ok: boolean; message: string } | null = null;
 
     /**
      * What the user has sent, newest last — the shell history behind ↑/↓.
@@ -606,6 +610,15 @@ export class ChatStore {
                         break;
                     case "speaking":
                         void this.refresh();
+                        break;
+                    case "enrol":
+                        this.enrol = { count: event.count, needed: event.needed };
+                        break;
+                    case "enrolDone":
+                        this.enrol = null;
+                        this.enrolResult = { ok: event.ok, message: event.message };
+                        if (event.ok) toast.success(event.message);
+                        else toast.failure("Wake word training failed.", event.message);
                         break;
                 }
             }),

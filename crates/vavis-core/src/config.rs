@@ -109,6 +109,9 @@ pub struct Voice {
     ///
     /// Kapatınca seçilen motor neyse o kalıyor.
     pub match_provider: bool,
+    /// How readily the on-device wake word fires, 1 (strict) to 10
+    /// (lenient). Only used once the wake word has been trained.
+    pub wake_sensitivity: u8,
 }
 
 impl Default for Voice {
@@ -137,6 +140,7 @@ impl Default for Voice {
             // devreye giriyor, yani kimseyi habersiz ücretli bir motora
             // taşımıyor.
             match_provider: true,
+            wake_sensitivity: 5,
         }
     }
 }

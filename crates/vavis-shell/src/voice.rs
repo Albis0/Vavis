@@ -12,11 +12,17 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use vavis_audio::{
     contains_wake_word, split_sentences, strip_wake_word, Microphone, SpeechQueue, SttClient,
-    TtsConfig, TtsEngine, VoiceMode,
+    TtsConfig, TtsEngine, VoiceMode, WakeModel,
 };
+
+/// After the wake word alone, the next thing said is taken as the request
+/// without saying the name again -- "Vavis." … "open Spotify." -- for this
+/// long.
+const FOLLOW_UP: Duration = Duration::from_secs(8);
 
 /// Something the voice layer wants the interface to know.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -30,6 +36,10 @@ pub enum VoiceEvent {
     Notice { text: String },
     /// Speaking started or stopped — drives the core animation.
     Speaking { active: bool },
+    /// Wake-word training: `count` of `needed` recordings taken.
+    Enrol { count: usize, needed: usize },
+    /// Wake-word training finished, or failed and needs starting over.
+    EnrolDone { ok: bool, message: String },
 }
 
 pub struct VoiceState {
@@ -55,6 +65,18 @@ pub struct VoiceState {
     /// `Mutex` because the stream callback runs on the request thread while
     /// the interface reads state from its own.
     pending: std::sync::Mutex<String>,
+
+    /// The trained wake word, when there is one. With it, wake-word mode
+    /// decides on this machine whether it was addressed; without it, every
+    /// utterance still has to be transcribed to find out.
+    wake: Option<Arc<WakeModel>>,
+    wake_sensitivity: u8,
+    /// Where the model is saved, so training survives a restart.
+    wake_path: Option<std::path::PathBuf>,
+    /// Recordings collected while training, `None` when not training.
+    enrolling: Option<Vec<Vec<f32>>>,
+    /// Until when the next utterance counts as addressed without the name.
+    awake_until: Arc<Mutex<Option<Instant>>>,
 }
 
 impl VoiceState {
@@ -81,6 +103,112 @@ impl VoiceState {
             language,
             wake_word,
             pending: std::sync::Mutex::new(String::new()),
+            wake: None,
+            wake_sensitivity: 5,
+            wake_path: None,
+            enrolling: None,
+            awake_until: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    /// Loads a trained wake word from `path`, and saves future training there.
+    pub fn attach_wake_model(&mut self, path: std::path::PathBuf) {
+        self.wake = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|json| serde_json::from_str::<WakeModel>(&json).ok())
+            .filter(WakeModel::is_current)
+            .map(Arc::new);
+        self.wake_path = Some(path);
+    }
+
+    pub fn set_wake_sensitivity(&mut self, sensitivity: u8) {
+        self.wake_sensitivity = sensitivity.clamp(1, 10);
+    }
+
+    pub fn wake_trained(&self) -> bool {
+        self.wake.is_some()
+    }
+
+    pub fn is_enrolling(&self) -> bool {
+        self.enrolling.is_some()
+    }
+
+    /// Starts wake-word training: the next few things heard are recordings
+    /// of the word, not requests. Opens the microphone if nothing had it.
+    pub fn start_enrolment(&mut self) -> Result<(), String> {
+        if self.mic.is_none() {
+            self.mic = Some(Microphone::start().map_err(|e| format!("microphone: {e}"))?);
+        }
+        self.stop_speaking();
+        self.enrolling = Some(Vec::new());
+        Ok(())
+    }
+
+    pub fn cancel_enrolment(&mut self) {
+        self.enrolling = None;
+        if !self.mode.is_listening() {
+            self.mic = None;
+        }
+    }
+
+    /// Forgets the trained wake word; wake mode goes back to transcribing.
+    pub fn forget_wake_model(&mut self) -> Result<(), String> {
+        self.wake = None;
+        if let Some(path) = &self.wake_path {
+            match std::fs::remove_file(path) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(e.to_string()),
+            }
+        }
+        Ok(())
+    }
+
+    /// Takes one training recording.
+    fn enrol(&mut self, utterance: vavis_audio::Utterance) {
+        let Some(samples) = self.enrolling.as_mut() else {
+            return;
+        };
+        if utterance.duration_ms() > vavis_audio::wake::MAX_SAMPLE_MS {
+            let _ = self.tx.send(VoiceEvent::Notice {
+                text: "Too long — say only the wake word.".into(),
+            });
+            return;
+        }
+        samples.push(utterance.samples);
+        let count = samples.len();
+        let needed = vavis_audio::wake::ENROL_SAMPLES;
+        let _ = self.tx.send(VoiceEvent::Enrol { count, needed });
+        if count < needed {
+            return;
+        }
+
+        let recordings = self.enrolling.take().unwrap_or_default();
+        let outcome = WakeModel::enrol(&recordings).and_then(|model| {
+            if let Some(path) = &self.wake_path {
+                let json = serde_json::to_string(&model).map_err(|e| e.to_string())?;
+                std::fs::write(path, json).map_err(|e| format!("could not save: {e}"))?;
+            }
+            Ok(model)
+        });
+        let event = match outcome {
+            Ok(model) => {
+                self.wake = Some(Arc::new(model));
+                VoiceEvent::EnrolDone {
+                    ok: true,
+                    message: "Wake word learned. It is now recognised on this computer — \
+                              only what follows it is sent for transcription."
+                        .into(),
+                }
+            }
+            Err(e) => VoiceEvent::EnrolDone {
+                ok: false,
+                message: e,
+            },
+        };
+        let _ = self.tx.send(event);
+        if !self.mode.is_listening() {
+            self.mic = None;
         }
     }
 
@@ -323,19 +451,32 @@ impl VoiceState {
     ///
     /// Called on a timer by the shell; returns whatever has accumulated.
     pub fn poll(&mut self) -> Vec<VoiceEvent> {
-        if let Some(mic) = &self.mic {
-            // Mute the microphone while speaking, or the assistant hears
-            // itself and answers its own voice.
-            let should_mute = self.is_speaking();
-            if mic.is_muted() != should_mute {
-                mic.set_muted(should_mute);
+        let heard = match &self.mic {
+            Some(mic) => {
+                // Mute the microphone while speaking, or the assistant hears
+                // itself and answers its own voice.
+                let should_mute = self.is_speaking();
+                if mic.is_muted() != should_mute {
+                    mic.set_muted(should_mute);
+                }
+                mic.poll()
             }
-
-            for utterance in mic.poll() {
+            None => Vec::new(),
+        };
+        for utterance in heard {
+            if self.enrolling.is_some() {
+                self.enrol(utterance);
+            } else if self.mode.is_listening() {
                 self.transcribe(utterance);
             }
         }
         self.rx.try_iter().collect()
+    }
+
+    /// Whether the follow-up window after a bare wake word is still open.
+    fn awake(&self) -> bool {
+        let guard = self.awake_until.lock().unwrap_or_else(|e| e.into_inner());
+        guard.is_some_and(|until| Instant::now() < until)
     }
 
     fn transcribe(&self, utterance: vavis_audio::Utterance) {
@@ -345,6 +486,27 @@ impl VoiceState {
         let language = self.language.clone();
         let wake_word = self.wake_word.clone();
         let mode = self.mode;
+        let awake_until = self.awake_until.clone();
+        let follow_up = self.awake();
+
+        // The local gate. With a trained wake word, an utterance that does
+        // not start with it is dropped here and never leaves the machine --
+        // unless it is the follow-up to a bare wake word a moment ago.
+        let mut heard_locally = false;
+        if let (VoiceMode::WakeWord, Some(model)) = (mode, &self.wake) {
+            if model.detect(&utterance.samples, self.wake_sensitivity) {
+                if model.is_word_alone(&utterance.samples) {
+                    // Nothing to transcribe: the name alone is a summons.
+                    *awake_until.lock().unwrap_or_else(|e| e.into_inner()) =
+                        Some(Instant::now() + FOLLOW_UP);
+                    let _ = tx.send(VoiceEvent::Woke);
+                    return;
+                }
+                heard_locally = true;
+            } else if !follow_up {
+                return;
+            }
+        }
 
         self.runtime.spawn(async move {
             let text = match stt.transcribe(&utterance, &key, &language).await {
@@ -363,13 +525,25 @@ impl VoiceState {
 
             let event = match mode {
                 VoiceMode::WakeWord => {
-                    if !contains_wake_word(&text, &wake_word) {
+                    let named = contains_wake_word(&text, &wake_word);
+                    let request = if named {
+                        strip_wake_word(&text, &wake_word)
+                    } else if heard_locally {
+                        // The local detector heard the name but the
+                        // recogniser spelled it as something else ("Davis").
+                        // It was the first word either way.
+                        drop_first_word(&text)
+                    } else if follow_up {
+                        text.trim().to_string()
+                    } else {
                         return; // not addressed to us
-                    }
-                    let request = strip_wake_word(&text, &wake_word);
+                    };
+                    let mut awake = awake_until.lock().unwrap_or_else(|e| e.into_inner());
                     if request.is_empty() {
+                        *awake = Some(Instant::now() + FOLLOW_UP);
                         VoiceEvent::Woke
                     } else {
+                        *awake = None;
                         VoiceEvent::Heard { text: request }
                     }
                 }
@@ -379,6 +553,18 @@ impl VoiceState {
 
             let _ = tx.send(event);
         });
+    }
+}
+
+/// Everything after the first word, trimmed of the punctuation a recogniser
+/// puts after a name ("Davis, open Spotify" → "open Spotify").
+fn drop_first_word(text: &str) -> String {
+    let text = text.trim();
+    match text.split_once(char::is_whitespace) {
+        Some((_, rest)) => rest
+            .trim_start_matches(|c: char| c.is_ascii_punctuation() || c.is_whitespace())
+            .to_string(),
+        None => String::new(),
     }
 }
 
@@ -408,6 +594,33 @@ mod tests {
         let mut v = state();
         v.mode = VoiceMode::Continuous;
         v
+    }
+
+    #[test]
+    fn a_misheard_name_is_still_dropped_from_the_request() {
+        assert_eq!(drop_first_word("Davis, open Spotify"), "open Spotify");
+        assert_eq!(drop_first_word("Davis"), "");
+        assert_eq!(drop_first_word("  Vavis   hava nasıl  "), "hava nasıl");
+    }
+
+    #[test]
+    fn a_missing_model_file_means_no_wake_model() {
+        let mut v = state();
+        let dir = tempfile::tempdir().unwrap();
+        v.attach_wake_model(dir.path().join("wake.json"));
+        assert!(!v.wake_trained());
+        // Forgetting what is not there is not an error.
+        v.forget_wake_model().unwrap();
+    }
+
+    #[test]
+    fn a_corrupt_model_file_is_ignored() {
+        let mut v = state();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("wake.json");
+        std::fs::write(&path, "{not json").unwrap();
+        v.attach_wake_model(path);
+        assert!(!v.wake_trained());
     }
 
     #[test]

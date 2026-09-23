@@ -26,12 +26,14 @@ pub mod queue;
 pub mod speakable;
 pub mod stt;
 pub mod tts;
+pub mod wake;
 
 pub use capture::{Microphone, Utterance, VoiceDetector, SAMPLE_RATE};
 pub use queue::{split_sentences, SpeechQueue};
 pub use speakable::to_speech;
 pub use stt::{contains_wake_word, strip_wake_word, SttClient};
 pub use tts::{TtsConfig, TtsEngine, TtsEngineKind};
+pub use wake::WakeModel;
 
 /// Ses modu.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
