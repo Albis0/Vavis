@@ -259,8 +259,9 @@ export class ChatStore {
         this.input = "";
 
         // Read and cleared together: the flag marks one handed-over turn,
-        // not every turn after it.
-        const code = this.codeContext;
+        // not every turn after it. Anything typed while the code screen is
+        // showing is code work too -- that is what the screen is for.
+        const code = this.codeContext || this.view === "code";
         this.codeContext = false;
 
         try {

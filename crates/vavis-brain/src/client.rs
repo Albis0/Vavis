@@ -88,6 +88,10 @@ pub struct ChatConfig {
     /// provider reads it: every other provider takes tool schemas in the
     /// request body instead.
     pub tool_bridge: Option<crate::claude_code::ToolBridge>,
+    /// The project a code turn works in. For Claude Code it is where the
+    /// CLI runs, and its read-only file tools are switched on, confined to
+    /// it; other providers reach the project through Vavis's `ws_*` tools.
+    pub workdir: Option<std::path::PathBuf>,
 }
 
 impl ChatConfig {
@@ -99,6 +103,7 @@ impl ChatConfig {
             temperature: 0.7,
             url_override: None,
             tool_bridge: None,
+            workdir: None,
         }
     }
 

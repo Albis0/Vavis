@@ -6,6 +6,7 @@
 
 pub mod automation;
 pub mod canvas;
+pub mod code;
 pub mod computer;
 pub mod control;
 pub mod core;
@@ -59,6 +60,12 @@ pub fn register_all(registry: &mut Registry) {
     // Döngünün "kontrol et" adımı: tıkla → bekle → gerekiyorsa bak.
     registry.register(Box::new(computer::WaitForScreen));
     registry.register(Box::new(crate::telegram::SendToPhone));
+    registry.register(Box::new(code::WsList));
+    registry.register(Box::new(code::WsRead));
+    registry.register(Box::new(code::WsSearch));
+    registry.register(Box::new(code::WsEdit));
+    registry.register(Box::new(code::WsWrite));
+    registry.register(Box::new(code::WsRun));
     registry.register(Box::new(uia::ListElements));
     registry.register(Box::new(uia::ClickElement));
     registry.register(Box::new(uia::SetElementText));
