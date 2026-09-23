@@ -17,6 +17,7 @@ pub mod request_tools;
 pub mod spotify;
 pub mod steam;
 pub mod system;
+pub mod uia;
 pub mod virustotal;
 pub mod vision;
 pub mod web;
@@ -57,6 +58,11 @@ pub fn register_all(registry: &mut Registry) {
     registry.register(Box::new(computer::PressKey));
     // Döngünün "kontrol et" adımı: tıkla → bekle → gerekiyorsa bak.
     registry.register(Box::new(computer::WaitForScreen));
+    registry.register(Box::new(uia::ListElements));
+    registry.register(Box::new(uia::ClickElement));
+    registry.register(Box::new(uia::SetElementText));
+    registry.register(Box::new(uia::Scroll));
+    registry.register(Box::new(uia::Drag));
 
     // Web.
     registry.register(Box::new(web::WebSearch));

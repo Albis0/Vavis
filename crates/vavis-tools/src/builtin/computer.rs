@@ -49,9 +49,10 @@ impl Tool for Click {
     }
 
     fn description(&self) -> &'static str {
-        "Clicks at the given screen coordinate. The order is: take_screenshot to \
-         look → click → wait_for_screen to confirm. Do not move to the next step \
-         before confirming."
+        "Clicks at the given screen coordinate. For anything with a label — a \
+         button, menu, tab, link — list_ui_elements and click_element are faster \
+         and exact; use this for what has no name. The order is: take_screenshot \
+         to look → click → wait_for_screen to confirm."
     }
 
     fn domain(&self) -> Domain {
@@ -409,6 +410,52 @@ impl Tool for ScreenSize {
     }
 }
 
+/// A left click at a point, for tools that found the point some other way
+/// (UI Automation reports a control's centre).
+pub(crate) fn click_at(x: i32, y: i32) -> ToolOutcome {
+    let (w, h) = screen_size();
+    if x < 0 || y < 0 || x > w || y > h {
+        return ToolOutcome::err(format!("koordinat ekran dışında ({x},{y}) — ekran {w}x{h}"));
+    }
+    click_platform(x, y, MouseButton::Left, false)
+}
+
+/// Types into whatever has focus, as `type_text` does.
+pub(crate) fn type_text(text: &str) -> ToolOutcome {
+    if text.chars().count() > MAX_TYPE_CHARS {
+        return ToolOutcome::err(format!(
+            "metin çok uzun (en fazla {MAX_TYPE_CHARS} karakter)"
+        ));
+    }
+    type_platform(text)
+}
+
+/// Mouse-wheel notches, optionally after moving to a point.
+pub(crate) fn scroll(
+    direction: super::uia::ScrollDir,
+    notches: i32,
+    at: Option<(i32, i32)>,
+) -> ToolOutcome {
+    if let Some((x, y)) = at {
+        let (w, h) = screen_size();
+        if x < 0 || y < 0 || x > w || y > h {
+            return ToolOutcome::err(format!("koordinat ekran dışında ({x},{y}) — ekran {w}x{h}"));
+        }
+    }
+    scroll_platform(direction, notches, at)
+}
+
+/// Press at `from`, travel, release at `to`.
+pub(crate) fn drag(from: (i32, i32), to: (i32, i32)) -> ToolOutcome {
+    let (w, h) = screen_size();
+    for (x, y) in [from, to] {
+        if x < 0 || y < 0 || x > w || y > h {
+            return ToolOutcome::err(format!("koordinat ekran dışında ({x},{y}) — ekran {w}x{h}"));
+        }
+    }
+    drag_platform(from, to)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MouseButton {
     Left,
@@ -618,6 +665,100 @@ fn click_platform(x: i32, y: i32, button: MouseButton, double: bool) -> ToolOutc
 
 #[cfg(not(windows))]
 fn click_platform(_x: i32, _y: i32, _b: MouseButton, _d: bool) -> ToolOutcome {
+    ToolOutcome::err("fare kontrolü bu platformda desteklenmiyor")
+}
+
+#[cfg(windows)]
+fn scroll_platform(
+    direction: super::uia::ScrollDir,
+    notches: i32,
+    at: Option<(i32, i32)>,
+) -> ToolOutcome {
+    use super::uia::ScrollDir;
+
+    #[link(name = "user32")]
+    extern "system" {
+        fn SetCursorPos(x: i32, y: i32) -> i32;
+        fn mouse_event(flags: u32, dx: u32, dy: u32, data: u32, extra: usize);
+    }
+    const MOUSEEVENTF_WHEEL: u32 = 0x0800;
+    const MOUSEEVENTF_HWHEEL: u32 = 0x1000;
+    /// One notch, as Windows counts it.
+    const WHEEL_DELTA: i32 = 120;
+
+    let (flag, sign) = match direction {
+        ScrollDir::Up => (MOUSEEVENTF_WHEEL, 1),
+        ScrollDir::Down => (MOUSEEVENTF_WHEEL, -1),
+        ScrollDir::Right => (MOUSEEVENTF_HWHEEL, 1),
+        ScrollDir::Left => (MOUSEEVENTF_HWHEEL, -1),
+    };
+
+    // SAFETY: coordinates were checked against the screen; these are the
+    // same documented calls the click tool uses.
+    unsafe {
+        if let Some((x, y)) = at {
+            SetCursorPos(x, y);
+            std::thread::sleep(std::time::Duration::from_millis(40));
+        }
+        // One notch at a time with a pause: a single large delta is often
+        // collapsed into one step by the receiving application.
+        for _ in 0..notches {
+            mouse_event(flag, 0, 0, (sign * WHEEL_DELTA) as u32, 0);
+            std::thread::sleep(std::time::Duration::from_millis(30));
+        }
+    }
+    let way = match direction {
+        ScrollDir::Up => "yukarı",
+        ScrollDir::Down => "aşağı",
+        ScrollDir::Left => "sola",
+        ScrollDir::Right => "sağa",
+    };
+    ToolOutcome::ok(format!("{notches} çentik {way} kaydırıldı"))
+}
+
+#[cfg(not(windows))]
+fn scroll_platform(
+    _direction: super::uia::ScrollDir,
+    _notches: i32,
+    _at: Option<(i32, i32)>,
+) -> ToolOutcome {
+    ToolOutcome::err("fare kontrolü bu platformda desteklenmiyor")
+}
+
+#[cfg(windows)]
+fn drag_platform(from: (i32, i32), to: (i32, i32)) -> ToolOutcome {
+    #[link(name = "user32")]
+    extern "system" {
+        fn SetCursorPos(x: i32, y: i32) -> i32;
+        fn mouse_event(flags: u32, dx: u32, dy: u32, data: u32, extra: usize);
+    }
+    const MOUSEEVENTF_LEFTDOWN: u32 = 0x0002;
+    const MOUSEEVENTF_LEFTUP: u32 = 0x0004;
+
+    // SAFETY: both points were checked against the screen.
+    unsafe {
+        SetCursorPos(from.0, from.1);
+        std::thread::sleep(std::time::Duration::from_millis(60));
+        mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
+        // A drag that jumps straight to its end is read as a click by most
+        // software: the drag threshold is never crossed while the button is
+        // down. The eased path crosses it the way a hand does.
+        std::thread::sleep(std::time::Duration::from_millis(80));
+        for (x, y) in ease_path(from, to, MOVE_STEPS * 2) {
+            SetCursorPos(x, y);
+            std::thread::sleep(std::time::Duration::from_millis(MOVE_STEP_MS * 2));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(80));
+        mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
+    }
+    ToolOutcome::ok(format!(
+        "({},{}) noktasından ({},{}) noktasına sürüklendi",
+        from.0, from.1, to.0, to.1
+    ))
+}
+
+#[cfg(not(windows))]
+fn drag_platform(_from: (i32, i32), _to: (i32, i32)) -> ToolOutcome {
     ToolOutcome::err("fare kontrolü bu platformda desteklenmiyor")
 }
 

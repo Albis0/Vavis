@@ -211,6 +211,25 @@ const DOMAIN_KEYWORDS: &[DomainKeywords] = &[
             "ekranda",
             "ekranima",
             "ekranıma",
+            // Controls by name (UI Automation) and the pointer actions.
+            // Nouns and gestures specific to on-screen work, so "kaydet"
+            // alone stays a weak verb and does not pull these in.
+            "düğme",
+            "dugme",
+            "buton",
+            "button",
+            "pencere",
+            "window",
+            "kutusu",
+            "kaydır",
+            "kaydir",
+            "scroll",
+            "sürükle",
+            "surukle",
+            "drag",
+            "tıkla",
+            "tikla",
+            "click",
         ],
     },
     DomainKeywords {
@@ -745,12 +764,12 @@ pub fn select_named<'a>(registry: &'a Registry, message: &str, budget: usize) ->
 
     // 1) Eşleşen alanların tool'ları (en alakalı olan önce).
     for domain in &domains {
-        for tool in registry.in_domain(*domain) {
+        for name in domain_tools(registry, *domain, message) {
             if names.len() >= budget {
                 break;
             }
-            if !names.contains(&tool.name()) {
-                names.push(tool.name());
+            if !names.contains(&name) {
+                names.push(name);
             }
         }
     }
@@ -769,6 +788,44 @@ pub fn select_named<'a>(registry: &'a Registry, message: &str, budget: usize) ->
     names
 }
 
+/// Most tools one built-in domain contributes to a request.
+///
+/// The screen domain grew to eleven tools once controls could be reached by
+/// name, and offering all eleven for "kaydet düğmesine bas" is exactly the
+/// crowding the budget exists to prevent. Past this size a domain offers
+/// the tools whose own keywords the message mentions first, then the rest
+/// in registration order, up to the cap. MCP domains are left alone: their
+/// tools carry no keywords to rank by, and the budget already bounds them.
+const DOMAIN_CAP: usize = 6;
+
+/// A domain's tools for one message, best first.
+fn domain_tools<'a>(registry: &'a Registry, domain: Domain, message: &str) -> Vec<&'a str> {
+    let tools: Vec<&dyn crate::tool::Tool> = registry.in_domain(domain).collect();
+    if tools.len() <= DOMAIN_CAP || matches!(domain, Domain::Mcp(_)) {
+        return tools.iter().map(|t| t.name()).collect();
+    }
+    let words = tokenize(message);
+    let mentioned = |t: &&dyn crate::tool::Tool| {
+        t.keywords().iter().any(|k| {
+            let k = normalize(k);
+            // Keywords may be phrases ("aşağı in"); those match as text,
+            // single words by the same suffix rule the domains use.
+            if k.contains(' ') {
+                normalize(message).contains(&k)
+            } else {
+                words.iter().any(|w| matches_with_suffix(w, &k))
+            }
+        })
+    };
+    let (hit, miss): (Vec<&dyn crate::tool::Tool>, Vec<&dyn crate::tool::Tool>) =
+        tools.into_iter().partition(|t| mentioned(t));
+    hit.into_iter()
+        .chain(miss)
+        .take(DOMAIN_CAP)
+        .map(|t| t.name())
+        .collect()
+}
+
 /// Seçilen tool'ların yaklaşık token maliyeti — bağlam bütçesi için.
 pub fn schema_tokens(schemas: &[Value]) -> usize {
     schemas
@@ -781,6 +838,16 @@ pub fn schema_tokens(schemas: &[Value]) -> usize {
 mod tests {
     use super::*;
     use crate::tool::{Tool, ToolOutcome};
+
+    #[test]
+    fn a_large_domain_offers_what_the_message_names_first() {
+        let reg = crate::default_registry();
+        let offered = domain_tools(&reg, Domain::Vision, "sayfayı aşağı kaydır");
+        assert!(offered.len() <= DOMAIN_CAP);
+        assert_eq!(offered[0], "scroll", "{offered:?}");
+        let offered = domain_tools(&reg, Domain::Vision, "dosyayı sürükle");
+        assert_eq!(offered[0], "drag", "{offered:?}");
+    }
 
     struct Fake(&'static str, Domain);
     impl Tool for Fake {
