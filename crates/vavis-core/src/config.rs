@@ -302,7 +302,8 @@ pub struct CustomSearch {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Llm {
-    /// "groq" | "openai" | "gemini" | "mistral" | "deepseek" | "xai" | "local"
+    /// A provider key name: "claude-code", "gemini", "groq", "openrouter", …
+    /// (see `vavis_brain::Provider::key_name`).
     pub provider: String,
     /// Boş bırakılırsa sağlayıcının varsayılan modeli kullanılır.
     pub model: String,
@@ -333,6 +334,27 @@ pub struct Llm {
     /// boş bırakılırsa o sağlayıcının varsayılanı kullanılır.
     #[serde(default)]
     pub code_model: String,
+
+    /// Providers to try, in order, when the chosen one cannot answer: its
+    /// quota is spent, it is down, or the key was rejected.
+    ///
+    /// Free tiers run out mid-conversation -- Gemini's per-day limit, Groq's
+    /// per-minute one. With a chain the turn moves on to the next provider
+    /// that has a key and says so, rather than ending in an error the user
+    /// can do nothing about until tomorrow. Each fallback answers on its own
+    /// default model. Empty, the default, means no failover.
+    #[serde(default)]
+    pub fallback: Vec<String>,
+
+    /// The endpoint for the `custom` provider: any OpenAI-compatible server.
+    /// Either the base (`http://host/v1`) or the full chat URL.
+    #[serde(default)]
+    pub custom_url: String,
+
+    /// Where the `local` provider listens, when it is not Ollama's default.
+    /// LM Studio is `http://127.0.0.1:1234/v1`.
+    #[serde(default)]
+    pub local_url: String,
 }
 
 impl Default for Llm {
@@ -348,6 +370,9 @@ impl Default for Llm {
             // doldurur.
             code_provider: String::new(),
             code_model: String::new(),
+            fallback: Vec::new(),
+            custom_url: String::new(),
+            local_url: String::new(),
         }
     }
 }
@@ -357,7 +382,7 @@ impl Default for Llm {
 pub struct General {
     /// Asistanın kendine verdiği ad. TTS bunu okuyacağı için telaffuza uygun.
     pub assistant_name: String,
-    /// Arayüz dili: "tr" | "en"
+    /// Arayüz dili: "tr" | "en" | "de" | "fr" | "es"
     pub language: String,
 }
 

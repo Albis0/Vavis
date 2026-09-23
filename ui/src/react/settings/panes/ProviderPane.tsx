@@ -33,7 +33,20 @@ interface Props {
     onfetchcodemodels: () => void;
     ontest: (id: string) => void;
     onchange: (key: string, value: string) => void;
+    onsetfallback: (providers: string[]) => void;
 }
+
+/** One line under a card, for the providers that need more explaining
+    than a model name. */
+const NOTES: Record<string, string> = {
+    "claude-code":
+        "Your Claude Pro or Max plan, through the Claude Code CLI — no API key. Install it from claude.com/code and run `claude` once in a terminal to sign in. Vavis's tools reach it over a private local connection, and every destructive one still asks you first.",
+    openrouter: "Models ending in :free cost nothing; they are listed first.",
+    github: "Create a token at github.com/settings/tokens with the models: read permission.",
+    cerebras: "Free key at cloud.cerebras.ai.",
+    custom: "Any OpenAI-compatible server. Set its URL below.",
+    local: "Ollama by default. Set a URL below for LM Studio or another port.",
+};
 
 export default function ProviderPane({
     status,
@@ -57,9 +70,15 @@ export default function ProviderPane({
     onfetchcodemodels,
     ontest,
     onchange,
+    onsetfallback,
 }: Props) {
     const codeProvider = status?.codeProvider ?? "";
     const codeOn = codeProvider !== "";
+    const fallback = status?.fallback ?? [];
+    const providers = status?.providers ?? [];
+    const addable = providers.filter(
+        (p) => p.id !== status?.provider && !fallback.includes(p.id),
+    );
     return (
         <>
             <h2>Model & keys</h2>
@@ -69,9 +88,9 @@ export default function ProviderPane({
                 blurb="Keys are encrypted with Windows DPAPI, never written to the settings file, and never shown again once saved."
             >
                 <div className="cards">
-                    {(status?.providers ?? []).map((p) => {
+                    {providers.map((p) => {
                         const selected = p.id === status?.provider;
-                        const blocked = p.needsKey && !p.hasKey;
+                        const blocked = !p.usable;
                         return (
                             // A div, not a button: the card holds a key field and its own
                             // buttons, and nesting those inside a button is invalid and
@@ -93,9 +112,23 @@ export default function ProviderPane({
 
                                     <span className="card-spacer"></span>
 
-                                    {!p.needsKey ? (
+                                    {p.freeTier && (
+                                        <span className="tag" data-tone="good">
+                                            free
+                                        </span>
+                                    )}
+
+                                    {p.id === "claude-code" ? (
+                                        <span className="tag key-tag" data-tone="neutral">
+                                            your plan
+                                        </span>
+                                    ) : !p.takesKey ? (
                                         <span className="tag key-tag" data-tone="neutral">
                                             no key needed
+                                        </span>
+                                    ) : !p.needsKey && !p.hasKey ? (
+                                        <span className="tag key-tag" data-tone="neutral">
+                                            key optional
                                         </span>
                                     ) : p.hasKey ? (
                                         <span className="tag key-tag" data-tone="good">
@@ -117,7 +150,7 @@ export default function ProviderPane({
                                             onClick={() => onpickprovider(p.id)}
                                             title={
                                                 blocked
-                                                    ? "can be selected, but will not answer until a key is stored"
+                                                    ? "can be selected, but will not answer until it is set up"
                                                     : `default model: ${p.defaultModel}`
                                             }
                                         >
@@ -125,6 +158,8 @@ export default function ProviderPane({
                                         </button>
                                     )}
                                 </div>
+
+                                {NOTES[p.id] && <p className="hint small">{NOTES[p.id]}</p>}
 
                                 {tests[p.id] && (
                                     <p className={tests[p.id].ok ? "result" : "result bad"}>
@@ -158,7 +193,7 @@ export default function ProviderPane({
                                 )}
 
                                 <div className="card-actions">
-                                    {p.needsKey && (
+                                    {p.takesKey && (
                                         <button className="tiny" onClick={() => onopenkey(p.id)}>
                                             {keyOpen === p.id
                                                 ? "cancel"
@@ -171,7 +206,7 @@ export default function ProviderPane({
                                         className="tiny"
                                         disabled={blocked || testing !== null}
                                         onClick={() => ontest(p.id)}
-                                        title={blocked ? "store a key first" : "make a real request"}
+                                        title={blocked ? "finish setting it up first" : "make a real request"}
                                     >
                                         {testing === p.id ? "testing…" : "test"}
                                     </button>
@@ -204,6 +239,92 @@ export default function ProviderPane({
             </Section>
 
             <Section
+                title="Endpoints"
+                blurb="For the two providers that live wherever you put them. Paste either the base (http://host/v1) or the full chat URL."
+            >
+                <Field label="Custom endpoint" fallback="not set — the custom provider stays off">
+                    <input
+                        type="text"
+                        placeholder="e.g. https://my-proxy.example/v1"
+                        defaultValue={status?.customUrl ?? ""}
+                        key={`custom-${status?.customUrl ?? ""}`}
+                        onBlur={(e) => onchange("customUrl", e.target.value)}
+                    />
+                </Field>
+                <Field label="Local server" fallback="Ollama — http://127.0.0.1:11434/v1">
+                    <input
+                        type="text"
+                        placeholder="e.g. http://127.0.0.1:1234/v1 for LM Studio"
+                        defaultValue={status?.localUrl ?? ""}
+                        key={`local-${status?.localUrl ?? ""}`}
+                        onBlur={(e) => onchange("localUrl", e.target.value)}
+                    />
+                </Field>
+            </Section>
+
+            <Section
+                title="Fallback"
+                blurb="When the provider above cannot answer — its free quota is spent, it is down, its key was refused — the message goes to the next one here that is set up, on its default model. You are told each time it happens. Only the first request of a message moves on: once anything has been shown or done, a failure stays a failure, so nothing runs twice."
+            >
+                {fallback.length === 0 ? (
+                    <p className="hint small">Off — a failure ends the message.</p>
+                ) : (
+                    <ol className="fallback-list">
+                        {fallback.map((id, i) => {
+                            const info = providers.find((p) => p.id === id);
+                            return (
+                                <li key={id}>
+                                    <span className="card-name">{id}</span>
+                                    {info && !info.usable && (
+                                        <span className="tag" data-tone="warn">
+                                            skipped — not set up
+                                        </span>
+                                    )}
+                                    <span className="card-spacer"></span>
+                                    <button
+                                        className="tiny"
+                                        disabled={i === 0}
+                                        title="try earlier"
+                                        onClick={() => {
+                                            const next = [...fallback];
+                                            [next[i - 1], next[i]] = [next[i], next[i - 1]];
+                                            onsetfallback(next);
+                                        }}
+                                    >
+                                        ↑
+                                    </button>
+                                    <button
+                                        className="tiny"
+                                        onClick={() => onsetfallback(fallback.filter((f) => f !== id))}
+                                    >
+                                        remove
+                                    </button>
+                                </li>
+                            );
+                        })}
+                    </ol>
+                )}
+                {addable.length > 0 && (
+                    <Field label="Add" fallback="">
+                        <select
+                            value=""
+                            onChange={(e) => {
+                                if (e.target.value) onsetfallback([...fallback, e.target.value]);
+                            }}
+                        >
+                            <option value="">choose a provider…</option>
+                            {addable.map((p) => (
+                                <option value={p.id} key={p.id}>
+                                    {p.id}
+                                    {p.usable ? "" : " — not set up yet"}
+                                </option>
+                            ))}
+                        </select>
+                    </Field>
+                )}
+            </Section>
+
+            <Section
                 title="Code model"
                 blurb="Code work can go to a different provider than chat. Chat wants an answer before the thought is gone; code wants the answer to be right and will wait — one model rarely does both well. Off by default, in which case code uses the model above."
             >
@@ -213,10 +334,10 @@ export default function ProviderPane({
                         onChange={(e) => onpickcodeprovider(e.target.value)}
                     >
                         <option value="">same as chat</option>
-                        {(status?.providers ?? []).map((p) => (
+                        {providers.map((p) => (
                             <option value={p.id} key={p.id}>
                                 {p.id}
-                                {p.needsKey && !p.hasKey ? " — no key yet" : ""}
+                                {p.usable ? "" : " — not set up yet"}
                             </option>
                         ))}
                     </select>

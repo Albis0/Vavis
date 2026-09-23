@@ -349,6 +349,13 @@ export default function Settings() {
         });
     }
 
+    async function setFallback(providers: string[]) {
+        await run(async () => {
+            await api.setFallback(providers);
+            await chat.refresh();
+        });
+    }
+
     async function fetchModels() {
         setLoadingModels(true);
         await run(async () => {
@@ -528,6 +535,7 @@ export default function Settings() {
                             onfetchcodemodels={fetchCodeModels}
                             ontest={test}
                             onchange={updateSetting}
+                            onsetfallback={setFallback}
                         />
                     )}
                     {active === "voice" && (

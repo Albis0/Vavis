@@ -65,6 +65,7 @@ fn main() {
             commands::llm::set_provider,
             commands::llm::set_model,
             commands::llm::list_models,
+            commands::llm::set_fallback,
             commands::llm::set_code_provider,
             commands::llm::set_code_model,
             commands::llm::list_code_models,

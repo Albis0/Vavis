@@ -155,6 +155,19 @@ pub(super) fn error_is_too_long(err: &vavis_brain::BrainError) -> bool {
     )
 }
 
+/// A unix timestamp as a local wall-clock time, with the date when it is
+/// not today.
+fn local_time(unix: i64) -> Option<String> {
+    use chrono::TimeZone;
+    let when = chrono::Local.timestamp_opt(unix, 0).single()?;
+    let today = chrono::Local::now().date_naive();
+    Some(if when.date_naive() == today {
+        when.format("%H:%M").to_string()
+    } else {
+        when.format("%d.%m %H:%M").to_string()
+    })
+}
+
 /// Turns a provider error into something the user can act on.
 pub(super) fn friendly_error(err: &vavis_brain::BrainError) -> String {
     use vavis_brain::BrainError as E;
@@ -209,6 +222,18 @@ pub(super) fn friendly_error(err: &vavis_brain::BrainError) -> String {
         E::Network(e) if e.is_connect() => "Could not connect — check your network.".into(),
         E::Network(e) => format!("Network error: {e}"),
         E::Parse(e) => format!("Could not read the response: {e}"),
+        E::Config(e) => format!("Setup incomplete: {e}."),
+        E::CliMissing => "Claude Code is not installed. Install it from claude.com/code, \
+                          run `claude` once in a terminal to log in, then try again."
+            .into(),
+        E::CliLogin(_) => "Claude Code is not logged in — run `claude` in a terminal \
+                           once and sign in with your Claude account."
+            .into(),
+        E::UsageLimit { resets_at } => match resets_at.and_then(local_time) {
+            Some(when) => format!("Your Claude plan's limit is used up — it resets at {when}."),
+            None => "Your Claude plan's limit is used up for now.".into(),
+        },
+        E::Cli(e) => format!("Claude Code: {e}"),
     }
 }
 

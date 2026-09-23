@@ -760,6 +760,19 @@ input[type="number"] {
 .card-spacer {
     flex: 1 1 var(--sp-2);
 }
+/* The failover chain: a numbered list, because the order is the setting. */
+.fallback-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    margin: 0 0 var(--sp-2);
+    padding-left: var(--sp-4);
+}
+.fallback-list li {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+}
 .card-name {
     font-size: var(--text-md);
     font-weight: 600;

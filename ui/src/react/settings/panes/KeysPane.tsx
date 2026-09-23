@@ -48,17 +48,24 @@ interface Props {
     reload: () => Promise<void>;
 }
 
-/** Chat providers, as the model screen names them. `local` is absent: it
-    talks to a server on this machine and has nothing to authenticate. */
+/** Chat providers, as the model screen names them. `local` and
+    `claude-code` are absent: one talks to a server on this machine, the
+    other to a CLI that holds its own login. Neither has a key to store. */
 const CHAT: Provider[] = [
+    { id: "gemini", label: "gemini (google)", note: "free tier" },
     { id: "groq", note: "fast, generous free tier" },
+    { id: "cerebras", note: "free tier, about a million tokens a day" },
+    { id: "openrouter", note: "one key for hundreds of models, many free" },
+    { id: "github", label: "github models", note: "free with a GitHub token (models: read)" },
+    { id: "mistral", note: "free experiment plan" },
+    { id: "nvidia", note: "free credits" },
     { id: "openai", note: "also used by image generation" },
-    { id: "anthropic", label: "anthropic (claude)", note: "" },
-    { id: "gemini", label: "gemini (google)", note: "" },
-    { id: "mistral", note: "" },
+    { id: "anthropic", label: "anthropic (claude api)", note: "pay per token — Claude Code uses your plan instead" },
     { id: "deepseek", note: "" },
     { id: "xai", label: "xai (grok)", note: "" },
-    { id: "nvidia", note: "" },
+    // Labelled for the same reason as the search and canvas `custom` rows
+    // below: three rows with one bare name cannot be told apart.
+    { id: "custom", label: "custom (chat)", note: "optional — only if your endpoint wants one" },
 ];
 
 /** Search providers. `duckduckgo` is absent from the keyed list for a

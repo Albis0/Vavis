@@ -91,38 +91,64 @@ pub fn send_message(
         return Err("a reply is already in progress".into());
     }
 
-    let (cfg, router_model, full_authority, system, history) = {
+    let (chain, router_model, full_authority, identity, history) = {
         let core = AppState::lock(&state.core);
         let keys = AppState::lock(&state.keys);
 
-        let (provider, model) = llm_for(&core.config, code, |p| keys.get(p.key_name()).is_some());
-        let key = keys
-            .get(provider.key_name())
-            .unwrap_or_default()
-            .to_string();
+        let (provider, model) = llm_for(&core.config, code, |p| is_usable(&core.config, &keys, p));
+        let first = chat_config(&core.config, &keys, provider, model);
+        let fallbacks = fallbacks_for(&core.config, &keys, provider);
 
-        if provider.needs_key() && key.is_empty() {
+        // The chosen provider cannot answer, but a fallback can: start
+        // there rather than refusing the message outright.
+        let mut chain = Vec::new();
+        if is_usable(&core.config, &keys, provider) {
+            chain.push(first);
+        }
+        chain.extend(fallbacks);
+        if chain.is_empty() {
             state.release();
-            return Err(format!("no API key for {provider}"));
+            return Err(if provider == vavis_brain::Provider::Custom {
+                "the custom provider has no URL — set one in settings".to_string()
+            } else {
+                format!("no API key for {provider}")
+            });
         }
 
-        // The system prompt is rebuilt each turn so a settings change
-        // takes effect on the very next message.
-        let system = Message::system(system_prompt(
-            &core.config.general.assistant_name,
-            &core.config.general.language,
-        ));
+        // Rebuilt each turn so a settings change takes effect on the very
+        // next message.
+        let identity = Identity {
+            name: core.config.general.assistant_name.clone(),
+            language: core.config.general.language.clone(),
+        };
 
         let mut history = AppState::lock(&state.history);
         history.push(Message::user(text.clone()));
 
         (
-            ChatConfig::new(provider, model, key),
+            chain,
             core.config.llm.router_model.clone(),
             core.config.security.full_authority,
-            system,
+            identity,
             history.clone(),
         )
+    };
+
+    // Claude Code reaches Vavis's tools over MCP; the server that serves
+    // them starts the first time it is needed and stays up after.
+    let bridge = if chain
+        .iter()
+        .any(|c| c.provider == vavis_brain::Provider::ClaudeCode)
+    {
+        match state.claude_bridge(&app) {
+            Ok(b) => Some(b),
+            Err(e) => {
+                tracing::warn!(%e, "could not start the tool bridge; Claude Code runs without tools");
+                None
+            }
+        }
+    } else {
+        None
     };
 
     // Persist the user's turn before the request goes out — if the app
@@ -159,19 +185,18 @@ pub fn send_message(
             }
         };
 
-        let result = runtime.block_on(run_turn(
-            &app,
-            &client,
-            &agent,
-            &voice,
-            &approval_rx,
-            &cfg,
-            &router_model,
+        let turn = Turn {
+            app: &app,
+            client: &client,
+            agent: &agent,
+            voice: &voice,
+            approval_rx: &approval_rx,
             full_authority,
-            system,
-            history,
-            &text,
-        ));
+            identity: &identity,
+            bridge: bridge.as_deref(),
+        };
+        let result =
+            runtime.block_on(turn.run_with_failover(&chain, &router_model, history, &text));
 
         match result {
             Ok(reply) => {
@@ -186,7 +211,9 @@ pub fn send_message(
                 }
                 let _ = app.emit("chat:done", DonePayload { text: reply });
             }
-            Err(TurnError { message, too_long }) => {
+            Err(TurnError {
+                message, too_long, ..
+            }) => {
                 // Drop the unanswered user turn: leaving it would produce
                 // two user messages in a row on the next request.
                 let mut h = AppState::lock(&history_handle);
@@ -309,6 +336,12 @@ struct ApprovalPayload {
 struct TurnError {
     message: String,
     too_long: bool,
+    /// Another provider could take this turn over from the start: the
+    /// failure came on the very first request, before anything was shown or
+    /// any tool ran. Past that point a retry elsewhere would repeat work the
+    /// user already watched happen -- a file written twice, a message sent
+    /// twice -- so the error stands.
+    elsewhere: bool,
 }
 
 impl From<&vavis_brain::BrainError> for TurnError {
@@ -316,6 +349,7 @@ impl From<&vavis_brain::BrainError> for TurnError {
         Self {
             message: friendly_error(err),
             too_long: error_is_too_long(err),
+            elsewhere: false,
         }
     }
 }
@@ -327,7 +361,25 @@ impl From<String> for TurnError {
         Self {
             message,
             too_long: false,
+            elsewhere: false,
         }
+    }
+}
+
+/// Who the assistant is: rebuilt into a system prompt for whichever
+/// provider ends up answering, since the prompt differs between them.
+struct Identity {
+    name: String,
+    language: String,
+}
+
+impl Identity {
+    fn system_for(&self, provider: Provider) -> Message {
+        Message::system(vavis_brain::system_prompt_for(
+            provider,
+            &self.name,
+            &self.language,
+        ))
     }
 }
 
@@ -465,234 +517,367 @@ async fn route_tools(
     }
 }
 
-/// One full turn: model → tools → model → … → reply.
-#[allow(clippy::too_many_arguments)]
-async fn run_turn(
-    app: &tauri::AppHandle,
-    client: &vavis_brain::BrainClient,
-    agent: &std::sync::Arc<std::sync::Mutex<vavis_tools::Agent>>,
+/// Tool runs since the app started, across every turn and path. A turn
+/// compares it before and after to know whether anything has actually
+/// happened on the machine -- the bridge runs tools on its own threads, so
+/// counting them where they start is the one place that sees them all.
+static TOOL_RUNS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Everything a turn needs that does not change between providers.
+struct Turn<'a> {
+    app: &'a tauri::AppHandle,
+    client: &'a vavis_brain::BrainClient,
+    agent: &'a std::sync::Arc<std::sync::Mutex<vavis_tools::Agent>>,
     // Speech starts on the first finished sentence rather than on the whole
     // answer, so the voice keeps up with the text instead of trailing it.
-    voice: &std::sync::Arc<std::sync::Mutex<crate::voice::VoiceState>>,
-    approval_rx: &std::sync::Arc<std::sync::Mutex<std::sync::mpsc::Receiver<Approval>>>,
-    cfg: &ChatConfig,
-    router_model: &str,
+    voice: &'a std::sync::Arc<std::sync::Mutex<crate::voice::VoiceState>>,
+    approval_rx: &'a std::sync::Arc<std::sync::Mutex<std::sync::mpsc::Receiver<Approval>>>,
     full_authority: bool,
-    system: Message,
-    history: Vec<Message>,
-    user_message: &str,
-) -> Result<String, TurnError> {
-    // How many tools this model can choose between well -- a small model
-    // loses its way among thirty schemas where a large one does not. A
-    // ceiling, not a target: domain matching still decides what is relevant.
-    let budget = vavis_brain::ModelCaps::for_model(&cfg.model).tool_budget;
+    identity: &'a Identity,
+    /// Where Claude Code finds Vavis's tools. `None` for every other
+    /// provider, and for Claude Code if the server could not start.
+    bridge: Option<&'a vavis_tools::mcp::bridge::Bridge>,
+}
 
-    // A cheap model picks what is needed; the expensive one does the work.
-    // Configured off, in which case this is keyword matching as before.
-    let picked = route_tools(client, cfg, router_model, agent, user_message, budget).await;
-
-    // Mutable because the model can ask for more mid-turn -- see the
-    // `request_tools` handling further down. The starting set is what the router
-    // (or the keyword table) chose from the message alone.
-    // Some models bring their own web search, run on the provider's servers.
-    // Offering ours alongside it opens two doors onto the same job, and the
-    // model cannot tell which one the user can actually see the results of.
-    // Theirs needs no key of ours, so it wins; ours is dropped for this turn.
-    let picked: Vec<String> = if vavis_brain::builtin::covers_web_search(cfg.provider, &cfg.model) {
-        picked.into_iter().filter(|n| n != "web_search").collect()
-    } else {
-        picked
-    };
-
-    let mut offered: Vec<String> = picked.clone();
-    let mut tools = {
-        let names: Vec<&str> = picked.iter().map(String::as_str).collect();
-        let mut guard = AppState::lock(agent);
-        guard.start_run();
-        // Read fresh each turn, so switching it in settings takes effect on
-        // the next message rather than the next launch.
-        guard.gate.set_full_authority(full_authority);
-        vavis_tools::builtin::request_tools::reset();
-        guard.schemas_for(&names)
-    };
-    tracing::info!(
-        count = tools.len(),
-        budget,
-        model = %cfg.model,
-        "tools offered for this request"
-    );
-
-    let mut messages = vec![system];
-    messages.extend(history);
-    let mut final_text = String::new();
-    // Whether history has already been cut back after a size refusal. Once
-    // only, so a provider that refuses for some other reason it happens to
-    // describe as "too long" cannot walk the conversation down to nothing.
-    let mut shrunk = false;
-    // How many times a rate limit has been waited out this turn. Separate from
-    // `shrunk` because the two failures are unrelated and a turn can hit both.
-    let mut rate_limit_waits = 0u8;
-
-    // A fresh turn: drop any half-sentence left buffered by an abandoned one.
-    AppState::lock(voice).begin_stream();
-
-    for step in 0..MAX_STEPS {
-        let emit = app.clone();
-
-        let response = match client
-            .chat_stream_with_tools(cfg, messages.clone(), &tools, {
-                let emit = emit.clone();
-                let voice = voice.clone();
-                move |event| {
-                    if let StreamEvent::Delta(text) = event {
-                        // Speak first, then paint: synthesis has to start as
-                        // early as possible, and emitting is the cheap half.
-                        AppState::lock(&voice).push_stream(&text);
-                        let _ = emit.emit("chat:delta", DeltaPayload { text });
-                    }
+impl Turn<'_> {
+    /// Runs the turn on the first provider in `chain`, moving to the next
+    /// when one cannot take it at all.
+    ///
+    /// Only a failure on the very first request moves on (see
+    /// [`TurnError::elsewhere`]). The user is told each time, because an
+    /// answer from a different model than the one they picked should never
+    /// arrive unannounced.
+    async fn run_with_failover(
+        &self,
+        chain: &[ChatConfig],
+        router_model: &str,
+        history: Vec<Message>,
+        user_message: &str,
+    ) -> Result<String, TurnError> {
+        let mut last = TurnError::from("no provider could answer".to_string());
+        for (i, cfg) in chain.iter().enumerate() {
+            // The router belongs to the provider it was set up for: its model
+            // name means nothing to the others.
+            let router = if i == 0 { router_model } else { "" };
+            match self.run(cfg, router, history.clone(), user_message).await {
+                Ok(text) => return Ok(text),
+                Err(e) if e.elsewhere && i + 1 < chain.len() => {
+                    let next = &chain[i + 1];
+                    tracing::warn!(
+                        from = %cfg.provider,
+                        to = %next.provider,
+                        reason = %e.message,
+                        "provider failed; moving to the next in the chain"
+                    );
+                    let _ = self.app.emit(
+                        "chat:notice",
+                        NoticePayload {
+                            text: format!(
+                                "{} could not answer ({}) — trying {}.",
+                                cfg.provider,
+                                e.message.trim_end_matches('.'),
+                                next.provider
+                            ),
+                        },
+                    );
+                    last = e;
                 }
-            })
-            .await
-        {
-            Ok(response) => response,
-
-            // The provider says the request is too big even though the budget
-            // module thought it would fit. That happens because the window is
-            // read from a table of model names, and the same name is served
-            // with different limits by different providers -- so the number
-            // can be wrong, and being wrong costs the user their turn.
-            //
-            // Rather than trust the table, shrink and ask again. Half the
-            // conversation goes, oldest first, and the question itself is
-            // never touched. One attempt only: if half was not enough, the
-            // size is coming from something a second halving will not fix,
-            // and the interface offers the same thing as a button by then.
-            Err(e) if error_is_too_long(&e) && !shrunk => {
-                shrunk = true;
-
-                let kept = drop_oldest_half(&mut messages);
-                if kept == 0 {
-                    return Err(TurnError::from(&e));
-                }
-
-                tracing::info!(
-                    dropped = kept,
-                    "provider refused for size; retrying with less history"
-                );
-                continue;
+                Err(e) => return Err(e),
             }
-
-            // The free tiers refuse on a per-minute budget, and a turn that
-            // calls two or three tools spends that budget in a few seconds.
-            // The provider names the wait it wants; honouring it turns a dead
-            // turn into a slow one.
-            //
-            // Bounded, and only when a wait was actually named: an unbounded
-            // retry against a daily quota would hang the turn until the user
-            // gave up, and the message they get instead ("try again in ...")
-            // is at least true.
-            Err(e) if rate_limit_waits < MAX_RATE_LIMIT_WAITS => {
-                let Some(secs) = wait_before_retry(&e) else {
-                    return Err(TurnError::from(&e));
-                };
-
-                rate_limit_waits += 1;
-                tracing::info!(secs, attempt = rate_limit_waits, "rate limited; waiting");
-
-                // Said out loud: several seconds of silence with no
-                // explanation reads as the app having hung.
-                let _ = app.emit(
-                    "chat:notice",
-                    NoticePayload {
-                        text: format!("Rate limited — waiting {secs}s."),
-                    },
-                );
-
-                tokio::time::sleep(std::time::Duration::from_secs(secs)).await;
-                continue;
-            }
-
-            Err(e) => return Err(TurnError::from(&e)),
-        };
-
-        if !response.text.is_empty() {
-            final_text = response.text.clone();
         }
-
-        if response.tool_calls.is_empty() {
-            return Ok(final_text);
-        }
-
-        // Echo the model's tool request back, so the provider can match
-        // results to calls on the next turn.
-        messages.push(Message {
-            role: vavis_brain::Role::Assistant,
-            content: response.text.clone(),
-            tool_call_id: None,
-            tool_calls: Some(response.tool_calls.clone()),
-            image: None,
-        });
-
-        let mut host = EventHost {
-            app: app.clone(),
-            approval_rx: approval_rx.clone(),
-        };
-
-        let results = {
-            let mut guard = AppState::lock(agent);
-            guard.execute_calls(&response.tool_calls, &mut host)
-        };
-        messages.extend(results);
-
-        // A screenshot tool puts its image in a side channel — tool
-        // results must be text, so it cannot ride along with them.
-        if let Some(image) = vavis_tools::builtin::vision::take_pending_image() {
-            messages.push(Message::user_with_image("(screenshot attached)", image));
-        }
-
-        // The model said it needs something it was not given. Neither the
-        // keyword table nor the router can see this coming: both read the
-        // user's message, and the need often only becomes clear once the
-        // model is halfway through the job.
-        //
-        // The new tools are *added*, so nothing it is already holding
-        // disappears mid-turn.
-        for need in vavis_tools::builtin::request_tools::take() {
-            let added = {
-                let guard = AppState::lock(agent);
-                let names = vavis_tools::selection::select_named(&guard.registry, &need, budget);
-                // The same exclusion as at the top of the turn: a tool the
-                // provider already runs server-side must not slip back in
-                // through a mid-turn request either.
-                let suppressed = vavis_brain::builtin::covers_web_search(cfg.provider, &cfg.model);
-                let fresh: Vec<&str> = names
-                    .into_iter()
-                    .filter(|n| !offered.iter().any(|had| had == n))
-                    .filter(|n| !(suppressed && *n == "web_search"))
-                    .collect();
-                let schemas = guard.schemas_for(&fresh);
-                let fresh: Vec<String> = fresh.into_iter().map(String::from).collect();
-                (fresh, schemas)
-            };
-
-            let (names, schemas) = added;
-            tracing::info!(need = %need, added = names.len(), "model asked for more tools");
-            offered.extend(names);
-            tools.extend(schemas);
-        }
-
-        if step == MAX_STEPS - 1 {
-            return Err(format!("no answer after {MAX_STEPS} steps").into());
-        }
+        Err(last)
     }
 
-    Ok(final_text)
+    /// One full turn on one provider: model → tools → model → … → reply.
+    async fn run(
+        &self,
+        cfg: &ChatConfig,
+        router_model: &str,
+        history: Vec<Message>,
+        user_message: &str,
+    ) -> Result<String, TurnError> {
+        let Turn {
+            app,
+            client,
+            agent,
+            voice,
+            approval_rx,
+            full_authority,
+            ..
+        } = *self;
+        let claude = cfg.provider == vavis_brain::Provider::ClaudeCode;
+
+        // Claude Code gets its tools over MCP, so the config has to say
+        // where; nothing else changes about the request.
+        let bridged;
+        let cfg = match (claude, self.bridge) {
+            (true, Some(bridge)) => {
+                let mut c = cfg.clone();
+                c.tool_bridge = Some(vavis_brain::claude_code::ToolBridge {
+                    url: bridge.url(),
+                    token: bridge.token().to_string(),
+                });
+                bridged = c;
+                &bridged
+            }
+            _ => cfg,
+        };
+        // Open only for this turn: a call arriving at any other time is
+        // refused before it reaches the agent.
+        let _open = self.bridge.filter(|_| claude).map(|b| b.open());
+
+        let tool_runs_before = TOOL_RUNS.load(Ordering::SeqCst);
+        let streamed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        // Nothing seen, nothing done: another provider may start over.
+        let untouched = |step: usize| {
+            step == 0
+                && !streamed.load(Ordering::SeqCst)
+                && TOOL_RUNS.load(Ordering::SeqCst) == tool_runs_before
+        };
+        let fail = |e: &vavis_brain::BrainError, step: usize| TurnError {
+            elsewhere: untouched(step) && !error_is_too_long(e),
+            ..TurnError::from(e)
+        };
+
+        // How many tools this model can choose between well -- a small model
+        // loses its way among thirty schemas where a large one does not. A
+        // ceiling, not a target: domain matching still decides what is relevant.
+        let budget = vavis_brain::ModelCaps::for_model(&cfg.model).tool_budget;
+
+        let picked: Vec<String> = if claude {
+            // Claude handles the whole catalogue well, and it runs its own
+            // loop -- there is no second step at which to hand it more. So it
+            // gets everything, minus what it already has in a better form:
+            // its own web search, and `request_tools`, which only makes sense
+            // for a model that was given a subset.
+            let guard = AppState::lock(agent);
+            guard
+                .registry
+                .iter()
+                .map(|t| t.name().to_string())
+                .filter(|n| n != "request_tools" && n != "web_search")
+                .collect()
+        } else {
+            // A cheap model picks what is needed; the expensive one does the
+            // work. Configured off, in which case this is keyword matching.
+            let picked = route_tools(client, cfg, router_model, agent, user_message, budget).await;
+
+            // Some models bring their own web search, run on the provider's
+            // servers. Offering ours alongside it opens two doors onto the
+            // same job, and the model cannot tell which one the user can
+            // actually see the results of. Theirs needs no key of ours, so it
+            // wins; ours is dropped for this turn.
+            if vavis_brain::builtin::covers_web_search(cfg.provider, &cfg.model) {
+                picked.into_iter().filter(|n| n != "web_search").collect()
+            } else {
+                picked
+            }
+        };
+
+        // Mutable because the model can ask for more mid-turn -- see the
+        // `request_tools` handling further down. The starting set is what the
+        // router (or the keyword table) chose from the message alone.
+        let mut offered: Vec<String> = picked.clone();
+        let mut tools = {
+            let names: Vec<&str> = picked.iter().map(String::as_str).collect();
+            let mut guard = AppState::lock(agent);
+            guard.start_run();
+            // Read fresh each turn, so switching it in settings takes effect
+            // on the next message rather than the next launch.
+            guard.gate.set_full_authority(full_authority);
+            vavis_tools::builtin::request_tools::reset();
+            guard.schemas_for(&names)
+        };
+        tracing::info!(
+            count = tools.len(),
+            budget,
+            model = %cfg.model,
+            provider = %cfg.provider,
+            "tools offered for this request"
+        );
+
+        let mut messages = vec![self.identity.system_for(cfg.provider)];
+        messages.extend(history);
+        let mut final_text = String::new();
+        // Whether history has already been cut back after a size refusal.
+        // Once only, so a provider that refuses for some other reason it
+        // happens to describe as "too long" cannot walk the conversation down
+        // to nothing.
+        let mut shrunk = false;
+        // How many times a rate limit has been waited out this turn. Separate
+        // from `shrunk` because the two failures are unrelated and a turn can
+        // hit both.
+        let mut rate_limit_waits = 0u8;
+
+        // A fresh turn: drop any half-sentence left buffered by an abandoned
+        // one.
+        AppState::lock(voice).begin_stream();
+
+        for step in 0..MAX_STEPS {
+            let emit = app.clone();
+
+            let response = match client
+                .chat_stream_with_tools(cfg, messages.clone(), &tools, {
+                    let emit = emit.clone();
+                    let voice = voice.clone();
+                    let streamed = streamed.clone();
+                    move |event| {
+                        if let StreamEvent::Delta(text) = event {
+                            streamed.store(true, Ordering::SeqCst);
+                            // Speak first, then paint: synthesis has to start
+                            // as early as possible, and emitting is the cheap
+                            // half.
+                            AppState::lock(&voice).push_stream(&text);
+                            let _ = emit.emit("chat:delta", DeltaPayload { text });
+                        }
+                    }
+                })
+                .await
+            {
+                Ok(response) => response,
+
+                // The provider says the request is too big even though the
+                // budget module thought it would fit. That happens because the
+                // window is read from a table of model names, and the same
+                // name is served with different limits by different providers
+                // -- so the number can be wrong, and being wrong costs the
+                // user their turn.
+                //
+                // Rather than trust the table, shrink and ask again. Half the
+                // conversation goes, oldest first, and the question itself is
+                // never touched. One attempt only: if half was not enough, the
+                // size is coming from something a second halving will not
+                // fix, and the interface offers the same thing as a button by
+                // then.
+                Err(e) if error_is_too_long(&e) && !shrunk => {
+                    shrunk = true;
+
+                    let kept = drop_oldest_half(&mut messages);
+                    if kept == 0 {
+                        return Err(fail(&e, step));
+                    }
+
+                    tracing::info!(
+                        dropped = kept,
+                        "provider refused for size; retrying with less history"
+                    );
+                    continue;
+                }
+
+                // The free tiers refuse on a per-minute budget, and a turn
+                // that calls two or three tools spends that budget in a few
+                // seconds. The provider names the wait it wants; honouring it
+                // turns a dead turn into a slow one.
+                //
+                // Bounded, and only when a wait was actually named: an
+                // unbounded retry against a daily quota would hang the turn
+                // until the user gave up, and the message they get instead
+                // ("try again in ...") is at least true.
+                Err(e) if rate_limit_waits < MAX_RATE_LIMIT_WAITS => {
+                    let Some(secs) = wait_before_retry(&e) else {
+                        return Err(fail(&e, step));
+                    };
+
+                    rate_limit_waits += 1;
+                    tracing::info!(secs, attempt = rate_limit_waits, "rate limited; waiting");
+
+                    // Said out loud: several seconds of silence with no
+                    // explanation reads as the app having hung.
+                    let _ = app.emit(
+                        "chat:notice",
+                        NoticePayload {
+                            text: format!("Rate limited — waiting {secs}s."),
+                        },
+                    );
+
+                    tokio::time::sleep(std::time::Duration::from_secs(secs)).await;
+                    continue;
+                }
+
+                Err(e) => return Err(fail(&e, step)),
+            };
+
+            if !response.text.is_empty() {
+                final_text = response.text.clone();
+            }
+
+            if response.tool_calls.is_empty() {
+                return Ok(final_text);
+            }
+
+            // Echo the model's tool request back, so the provider can match
+            // results to calls on the next turn.
+            messages.push(Message {
+                role: vavis_brain::Role::Assistant,
+                content: response.text.clone(),
+                tool_call_id: None,
+                tool_calls: Some(response.tool_calls.clone()),
+                image: None,
+            });
+
+            let mut host = EventHost {
+                app: app.clone(),
+                approval_rx: approval_rx.clone(),
+            };
+
+            let results = {
+                let mut guard = AppState::lock(agent);
+                guard.execute_calls(&response.tool_calls, &mut host)
+            };
+            messages.extend(results);
+
+            // A screenshot tool puts its image in a side channel — tool
+            // results must be text, so it cannot ride along with them.
+            if let Some(image) = vavis_tools::builtin::vision::take_pending_image() {
+                messages.push(Message::user_with_image("(screenshot attached)", image));
+            }
+
+            // The model said it needs something it was not given. Neither the
+            // keyword table nor the router can see this coming: both read the
+            // user's message, and the need often only becomes clear once the
+            // model is halfway through the job.
+            //
+            // The new tools are *added*, so nothing it is already holding
+            // disappears mid-turn.
+            for need in vavis_tools::builtin::request_tools::take() {
+                let added = {
+                    let guard = AppState::lock(agent);
+                    let names =
+                        vavis_tools::selection::select_named(&guard.registry, &need, budget);
+                    // The same exclusion as at the top of the turn: a tool the
+                    // provider already runs server-side must not slip back in
+                    // through a mid-turn request either.
+                    let suppressed =
+                        vavis_brain::builtin::covers_web_search(cfg.provider, &cfg.model);
+                    let fresh: Vec<&str> = names
+                        .into_iter()
+                        .filter(|n| !offered.iter().any(|had| had == n))
+                        .filter(|n| !(suppressed && *n == "web_search"))
+                        .collect();
+                    let schemas = guard.schemas_for(&fresh);
+                    let fresh: Vec<String> = fresh.into_iter().map(String::from).collect();
+                    (fresh, schemas)
+                };
+
+                let (names, schemas) = added;
+                tracing::info!(need = %need, added = names.len(), "model asked for more tools");
+                offered.extend(names);
+                tools.extend(schemas);
+            }
+
+            if step == MAX_STEPS - 1 {
+                return Err(format!("no answer after {MAX_STEPS} steps").into());
+            }
+        }
+
+        Ok(final_text)
+    }
 }
 
 /// Bridges the agent to the interface: emits events, waits for approvals.
-struct EventHost {
-    app: tauri::AppHandle,
-    approval_rx: std::sync::Arc<std::sync::Mutex<std::sync::mpsc::Receiver<Approval>>>,
+pub(crate) struct EventHost {
+    pub app: tauri::AppHandle,
+    pub approval_rx: std::sync::Arc<std::sync::Mutex<std::sync::mpsc::Receiver<Approval>>>,
 }
 
 impl AgentHost for EventHost {
@@ -719,6 +904,7 @@ impl AgentHost for EventHost {
     }
 
     fn on_tool_start(&mut self, tool: &str, args: &str) {
+        TOOL_RUNS.fetch_add(1, Ordering::SeqCst);
         let _ = self.app.emit(
             "chat:tool-start",
             ToolStartPayload {
@@ -812,6 +998,67 @@ fn how_many_to_forget(len: usize) -> usize {
         return 0;
     }
     len / KEEP_FRACTION
+}
+
+/// What Claude Code's tool calls run through.
+///
+/// The same `Agent::execute_calls` every other provider's calls go through,
+/// with the same host: the permission gate asks in the same place, the
+/// feed shows the call in the same way, the loop guard and the destructive
+/// budget count it the same. The only difference is who is asking.
+pub(crate) struct ToolBridgeHandler {
+    pub agent: std::sync::Arc<std::sync::Mutex<vavis_tools::Agent>>,
+    pub app: tauri::AppHandle,
+    pub approval_rx: std::sync::Arc<std::sync::Mutex<std::sync::mpsc::Receiver<Approval>>>,
+}
+
+impl vavis_tools::mcp::bridge::Handler for ToolBridgeHandler {
+    fn tools(&self) -> Vec<serde_json::Value> {
+        let guard = AppState::lock(&self.agent);
+        let names: Vec<&str> = guard
+            .registry
+            .iter()
+            .map(|t| t.name())
+            .filter(|n| *n != "request_tools" && *n != "web_search")
+            .collect();
+        guard.schemas_for(&names)
+    }
+
+    fn call(
+        &self,
+        id: &str,
+        name: &str,
+        arguments: serde_json::Value,
+    ) -> vavis_tools::mcp::bridge::CallResult {
+        let call = vavis_brain::ToolCall {
+            id: id.to_string(),
+            kind: "function".into(),
+            function: vavis_brain::FunctionCall {
+                name: name.to_string(),
+                arguments: arguments.to_string(),
+            },
+            provider_state: None,
+        };
+        let mut host = EventHost {
+            app: self.app.clone(),
+            approval_rx: self.approval_rx.clone(),
+        };
+        let results = {
+            let mut guard = AppState::lock(&self.agent);
+            guard.execute_calls(std::slice::from_ref(&call), &mut host)
+        };
+        let text = results
+            .into_iter()
+            .next()
+            .map(|m| m.content)
+            .unwrap_or_default();
+        vavis_tools::mcp::bridge::CallResult {
+            // The agent prefixes failures this way for every provider.
+            is_error: text.starts_with("HATA:") || text == "Kullanıcı bu işlemi reddetti.",
+            text,
+            image: vavis_tools::builtin::vision::take_pending_image(),
+        }
+    }
 }
 
 #[cfg(test)]

@@ -37,6 +37,11 @@ pub fn set_setting(state: State<AppState>, field: String, value: String) -> Resu
         // is the default -- so clearing the box is a supported answer, not
         // an error.
         "routerModel" => core.config.llm.router_model = value.trim().to_string(),
+        // Endpoints for the two providers that live wherever the user put
+        // them. Empty is valid: custom then refuses until set, local goes
+        // back to Ollama's default port.
+        "customUrl" => core.config.llm.custom_url = value.trim().to_string(),
+        "localUrl" => core.config.llm.local_url = value.trim().to_string(),
         // Full authority: every approval off, every budget off. The warning
         // belongs in the interface, once, at the moment it is switched on --
         // re-asking here on every turn is the thing being switched off.
