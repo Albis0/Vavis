@@ -881,6 +881,7 @@ impl Turn<'_> {
             guard
                 .registry
                 .iter()
+                .filter(|t| project.is_some() || t.domain() != vavis_tools::Domain::Code)
                 .map(|t| t.name().to_string())
                 .filter(|n| n != "request_tools" && n != "web_search")
                 .collect()
@@ -1334,10 +1335,15 @@ pub(crate) struct ToolBridgeHandler {
 
 impl vavis_tools::mcp::bridge::Handler for ToolBridgeHandler {
     fn tools(&self) -> Vec<serde_json::Value> {
+        // The project tools only while a project is open: without one every
+        // call would fail, and a list of tools that cannot work is noise the
+        // model has to read past.
+        let project = vavis_tools::workspace::current_root().is_some();
         let guard = AppState::lock(&self.agent);
         let names: Vec<&str> = guard
             .registry
             .iter()
+            .filter(|t| project || t.domain() != vavis_tools::Domain::Code)
             .map(|t| t.name())
             .filter(|n| *n != "request_tools" && *n != "web_search")
             .collect();

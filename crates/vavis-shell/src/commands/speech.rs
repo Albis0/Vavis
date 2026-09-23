@@ -264,9 +264,12 @@ pub fn start_live(app: tauri::AppHandle, state: State<AppState>) -> Result<(), S
 
         let tools = {
             let agent = AppState::lock(&state.agent);
+            // Nor the code screen's project tools: a spoken conversation is
+            // not where a codebase gets edited.
             let names: Vec<&str> = agent
                 .registry
                 .iter()
+                .filter(|t| t.domain() != vavis_tools::Domain::Code)
                 .map(|t| t.name())
                 .filter(|n| !NOT_LIVE.contains(n))
                 .collect();
