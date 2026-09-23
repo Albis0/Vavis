@@ -343,6 +343,15 @@ pub fn args_for(
         // The user's own MCP servers stay out of it: they were configured
         // for coding sessions and would bypass the gate.
         "--strict-mcp-config",
+        // The user's own settings only, never the folder's. A code turn runs
+        // inside whatever project was opened, and print mode skips the
+        // "do you trust this folder" question: a downloaded repository's
+        // `.claude/settings.json` hooks would run its commands on this
+        // machine, with no gate in the way, the moment it was asked
+        // anything. Its CLAUDE.md, instructions addressed to the model by
+        // whoever wrote the repository, stays out for the same reason.
+        "--setting-sources",
+        "user",
         "--tools",
     ]
     .iter()
@@ -1038,6 +1047,17 @@ mod tests {
             assert!(!tools.contains(dangerous), "{dangerous} is on: {tools}");
         }
         assert!(line.contains(&"--strict-mcp-config".to_string()));
+    }
+
+    #[test]
+    fn a_project_never_gets_to_configure_the_cli() {
+        // Checked by hand against Claude Code 2.1.281: without this, a
+        // folder's `.claude/settings.json` hooks ran on every `-p` call.
+        for code in [false, true] {
+            let line = arg_strings(&args_for("", Path::new("s"), Some(Path::new("m")), code));
+            let i = line.iter().position(|a| a == "--setting-sources").unwrap();
+            assert_eq!(line[i + 1], "user");
+        }
     }
 
     #[test]

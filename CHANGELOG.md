@@ -57,6 +57,12 @@ Bir düzeltmenin hangi dosyaya dokunduğu git geçmişinde zaten var.
   çalışabiliyordu. Claude Code'un kendi okuduğu sayfa ve dosyalar da artık
   bu kontrolden geçiyor.
 - PowerShell çıktısındaki Türkçe karakterler bozuk geliyordu.
+- **Kod ekranında açılan bir proje bilgisayarda komut çalıştırabiliyordu.**
+  İndirilmiş bir deponun `.claude/settings.json` dosyasındaki hook'lar, Claude
+  Code'a ilk soru sorulduğunda onaysız çalışıyordu. Artık Claude Code yalnızca
+  senin kendi ayarlarını okuyor, projenin ayarlarını ve CLAUDE.md'sini değil.
+- Telefondan: Vavis botu bir gruba eklenirse cevaplar ve onay soruları gruba
+  gidiyordu; artık yalnızca botla özel sohbet geçerli.
 
 ## 0.7.4 — 2026-09-07
 
