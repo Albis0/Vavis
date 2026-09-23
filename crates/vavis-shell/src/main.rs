@@ -1,7 +1,7 @@
 //! VAVIS — entry point.
 //!
 //! Wires the four logic crates to a Tauri window. The interface itself is
-//! Svelte, living in `ui/`; this file owns process startup, the command
+//! React, living in `ui/`; this file owns process startup, the command
 //! surface, and the background ticker.
 
 // No console window in release builds. Debug keeps one — that is where

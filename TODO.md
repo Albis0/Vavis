@@ -48,9 +48,9 @@ Status legend: `[x]` done and tested · `[~]` partly done · `[ ]` not started
         for the gap with a lit one beside it for the crown of the wire, and
         the core's light caught along the inner face of every one.
   - [x] command palette — every action in one searchable list, which is what
-        lets the stage stay empty. `ui/src/lib/CommandPalette.svelte`
+        lets the stage stay empty. `ui/src/react/CommandPalette.tsx`
   - [x] chat panel resizable by its left edge, width persisted, `Ctrl+B` to
-        hide. `ui/src/lib/ChatPanel.svelte`
+        hide. `ui/src/react/ChatPanel.tsx`
   - [x] light and dark themes, accent derived from one hue in `styles.css`.
         The reactor keeps a full palette for each and swaps it on the
         attribute change.
@@ -62,21 +62,26 @@ Status legend: `[x]` done and tested · `[~]` partly done · `[ ]` not started
         too heavy for that — and only while something is listening.
   - [x] tool calls collapsed to one line, expandable to show what the tool was
         called with and what it returned.
-  - [ ] conversation list — the note's "solda konuşma listesi". Needs sessions
-        in the database; the app has one conversation today. The left rail it
-        was meant for is gone, so it now belongs in the panel header or the
-        palette.
-- [~] **Code interface** — workspace backend done and tested (tree, read,
+  - [x] conversation list — a drawer from the clock in the chat panel's
+        header: search by title and content, open, rename, delete. Schema v5
+        gives messages a conversation; Ctrl+L starts a new one and keeps the
+        old. `crates/vavis-core/src/conversations.rs`,
+        `ui/src/react/ConversationList.tsx`
+- [x] **Code interface** — workspace backend done and tested (tree, read,
       write, search, path-escape refusal). View written.
-      `crates/vavis-shell/src/workspace.rs`, `ui/src/react/CodeView.tsx`
+      `crates/vavis-tools/src/workspace.rs`, `ui/src/react/CodeView.tsx`
   - [x] code work can go to its own provider and model, separate from chat.
         Optional and empty by default. A code provider with no key, a model
         the provider filter would not offer, or a name we no longer
         recognise all fall back to the chat model rather than failing the
         turn. The interface marks the handed-over turn, because only it
         knows which pane the message came from.
-  - [ ] the harness itself — a real edit/run/read loop rather than one
-        question and one answer. This is the large remaining piece.
+  - [x] the harness itself — ws_list/read/search/edit/write/run, a prompt
+        that knows the project, 40 steps. Exact-text edits that must match
+        once; commands time-limited with the process tree killed. With Claude
+        Code, the CLI runs in the project with read-only Read/Glob/Grep;
+        changes still go through the gate. Verified against the real CLI:
+        failing test → fix → re-run → pass. `crates/vavis-tools/src/builtin/code.rs`
 - [x] **Canvas interface** — image and video. Provider chain (OpenAI,
       Stability, Replicate, custom OpenAI-compatible endpoint) with the same
       failover shape as search. Every result keeps the seed the provider
@@ -84,17 +89,34 @@ Status legend: `[x]` done and tested · `[~]` partly done · `[ ]` not started
       upscale endpoint. Files on disk, index in SQLite, usage and clear in
       settings. One chat tool (`gorsel_uret`) writes into the same gallery.
       `crates/vavis-tools/src/canvas/`, `crates/vavis-core/src/gallery.rs`,
-      `ui/src/lib/CanvasView.svelte`
+      `ui/src/react/CanvasView.tsx`
 - [x] **Council interface** — several models on one question, genuinely
       parallel. Independent seats run together; seats marked "reads the
       others" run in a second wave with the first wave's answers. A failing
       seat is one failing panel. Cost is forecast before the run and totalled
       after. Nothing spawns itself.
-      `crates/vavis-shell/src/council.rs`, `ui/src/lib/CouncilView.svelte`
+      `crates/vavis-shell/src/council.rs`, `ui/src/react/CouncilView.tsx`
 - [x] **Settings layout** — categories left, content right, its own window
       rather than a rail panel. Search box, instant apply, masked keys, and a
       "test" on every provider and integration that makes a real request.
-      Five languages. `ui/src/lib/Settings.svelte`
+      Five languages. `ui/src/react/settings/Settings.tsx`
+
+- [x] **Claude Code provider** — the user's Claude plan through the CLI;
+      Vavis's tools over a token-guarded localhost MCP bridge.
+      `crates/vavis-brain/src/claude_code.rs`, `crates/vavis-tools/src/mcp/bridge.rs`
+- [x] **Free providers** — OpenRouter, Cerebras, GitHub Models, custom
+      endpoint, configurable local URL; failover chain.
+- [x] **Semantic memory** — facts injected per turn by relevance (embeddings
+      + BM25), learned from conversation, embeddings backfilled.
+      `crates/vavis-core/src/memory.rs`, `crates/vavis-shell/src/recall.rs`
+- [x] **On-device wake word** — MFCC + DTW against the user's own
+      recordings. `crates/vavis-audio/src/wake.rs`
+- [x] **Event automations** — file appears, app starts/stops, startup,
+      back after an absence. `crates/vavis-shell/src/watch.rs`
+- [x] **Live conversation** — Gemini Live over one WebSocket, barge-in,
+      tools. `crates/vavis-audio/src/live.rs`
+- [x] **Phone** — Telegram bot, one-time pairing, approvals as buttons.
+      `crates/vavis-shell/src/remote.rs`
 
 ## Heavy works
 
@@ -107,14 +129,16 @@ Status legend: `[x]` done and tested · `[~]` partly done · `[ ]` not started
         and answers in one sentence, so the model does not send a full
         screenshot after every click. A blinking caret does not count as
         movement — the signature is a coarse 32×18 brightness map.
-  - [ ] no drag or scroll yet; both would be new tools in an already
-        five-tool domain, so measure `selection_eval` before adding them
+  - [x] drag and scroll, plus controls by name through UI Automation
+        (list_ui_elements, click_element, set_element_text). Large domains now
+        rank by the tools the message names and cap at six; the eval stays at
+        100%. `crates/vavis-tools/src/builtin/uia.rs`
 
 ## Known constraints
 
-- Tool selection is capped at `MAX_TOOLS = 12`; an eval test holds the
-  average offered at or below 8.0. It is currently **7.9** — the canvas
-  domain was added without moving it. Check with
+- Tool selection is capped per model; an eval test holds the average offered
+  at or below 8.0. It is currently **7.7**, with large domains capped at six
+  (`DOMAIN_CAP`). Check with
   `cargo test -p vavis-tools --test selection_eval -- --nocapture` first.
 - Domain keywords are matched as substrings, so short ones are dangerous:
   `"md"` once matched "durumda" and "hakkımda" and pulled 9 unrelated tools
@@ -224,3 +248,13 @@ cargo test -p vavis-tools local_steam -- --ignored --nocapture
 cargo test -p vavis-tools --test mcp_e2e -- --ignored   # needs node
 cargo test -p vavis-tools live_screen -- --ignored --nocapture  # needs a desktop
 ```
+
+## Next
+
+- [ ] Echo cancellation for the live conversation. Today quiet input is held
+      back while the assistant speaks; real AEC (WebRTC's) would allow
+      interrupting it at normal volume on speakers.
+- [ ] A second live backend (OpenAI Realtime) for users with that key.
+- [ ] Code turns with Claude Code could stream the CLI's own tool use into
+      the feed (today only Vavis's ws_* calls appear there).
+- [ ] Wake word: enrolment that adapts over time from confirmed detections.

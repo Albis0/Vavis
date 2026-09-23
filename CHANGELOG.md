@@ -7,6 +7,56 @@ elle üç dosya düzenlemek, üçüncüsünün unutulması demek.
 Buradaki başlıklar yapılan işi değil, **kullanıcı için değişen şeyi** anlatıyor.
 Bir düzeltmenin hangi dosyaya dokunduğu git geçmişinde zaten var.
 
+## 0.8.0 — yayınlanmadı
+
+### Eklendi
+
+- **Claude Code sağlayıcısı.** Claude Pro/Max aboneliğinle, API anahtarı
+  olmadan. Vavis'in bütün araçları kullanılabiliyor ve her yıkıcı işlem yine
+  onayına geliyor. Kuruluysa ve seçili sağlayıcının anahtarı yoksa Vavis onu
+  kendisi seçiyor.
+- **Ücretsiz sağlayıcılar:** OpenRouter (`:free` modeller önde), Cerebras,
+  GitHub Models, kendi adresini girebileceğin özel bir uç nokta; yerel sunucu
+  adresi (LM Studio) artık ayarlanabiliyor.
+- **Yedek sağlayıcı zinciri.** Kota dolunca ya da anahtar reddedilince mesaj
+  sıradaki sağlayıcıya geçiyor ve bunu söylüyor.
+- **Birden çok sohbet.** Yeni sohbet eskisini silmiyor; listeden aranıp
+  açılıyor, yeniden adlandırılıyor, siliniyor.
+- **Seni tanıyan hafıza.** Kendinden bahsettiğinde kalıcı bilgileri kendisi
+  çıkarıyor, her mesajda ilgili olanları kullanıyor, anlama göre arıyor.
+- **Uyandırma kelimesi bu bilgisayarda.** Adını üç kez söyleyip eğitiyorsun;
+  adın geçmeyen hiçbir cümle buluta gönderilmiyor. "Vavis." dedikten sonra
+  birkaç saniye içinde söylediğin komut da alınıyor.
+- **Canlı sesli konuşma** (Gemini Live): yarım saniyede cevap, istediğin an
+  sözünü kesebiliyorsun, araçlar çalışıyor.
+- **Pencerelerdeki kontrollere adıyla ulaşma** (UI Automation), kaydırma,
+  sürükleme.
+- **Olaylara bağlı otomasyonlar:** klasöre dosya düşünce, program açılınca ya
+  da kapanınca, Vavis açılınca, uzun aradan dönünce.
+- **Telefon:** kendi Telegram botunla dışarıdan erişim, onaylar telefonda.
+- **Kod ajanı:** kod ekranında projeyi okuyor, düzenliyor, testleri
+  çalıştırıyor, hatayı düzeltiyor.
+- Ses tanıma Groq anahtarı olmadan da (Gemini ile) çalışıyor.
+
+### Düzeltildi
+
+- **Onay sorulduğu anda pencere donuyordu** — onay hiçbir zaman
+  tıklanamıyordu. Ağ isteği yapan ayar ekranları da pencereyi donduruyordu.
+- Takılan bir komut (girdi bekleyen PowerShell gibi) asistanı sonsuza kadar
+  kilitliyordu; artık süre sınırı var.
+- Her konuşmada, tıklamada, tuşta siyah bir konsol penceresi yanıp sönüyordu.
+- Sesi durdurmak bilgisayardaki başka PowerShell süreçlerini de öldürüyordu.
+- Bir turda en fazla 5 adım atılabiliyordu; bilgisayar kontrolü işleri
+  yarıda kalıyordu. Artık 15, kod turlarında 40.
+- OpenAI'ın GPT-5 ve o-serisi modelleri her istekte hata veriyordu.
+- Almanca, Fransızca, İspanyolca seçenlere Türkçe cevap veriliyordu.
+- Cevap yazılırken tetiklenen otomasyon ya da söylenen cümle kayboluyordu;
+  artık sıraya alınıyor.
+- Paneldeki "+" düğmesi sohbeti onaysız siliyordu.
+- Tam yetki açıkken, okunan bir sayfanın verdiği komut sorulmadan
+  çalışabiliyordu.
+- PowerShell çıktısındaki Türkçe karakterler bozuk geliyordu.
+
 ## 0.7.4 — 2026-09-07
 
 0.7.0 ile 0.7.3 arası atlandı. O numaralar bu deponun önceki adıyla (AEGIS)
