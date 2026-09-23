@@ -11,7 +11,7 @@ members = [
 # Bağımlılıklar burada tek yerde sabitlenir; crate'ler `workspace = true` ile alır.
 # Böylece sürüm çakışması olmaz ve derleme süresi düşer.
 [workspace.package]
-version = "0.7.4"
+version = "0.8.0"
 edition = "2021"
 rust-version = "1.85"
 license = "Apache-2.0"

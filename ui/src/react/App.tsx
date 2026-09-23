@@ -248,6 +248,14 @@ export default function App() {
                 run: () => void chat.clearWithConfirm(),
             },
             {
+                id: "voice.live",
+                label: status?.live ? "End live conversation" : "Start live conversation",
+                group: "Chat",
+                icon: status?.live ? "stop" : "mic",
+                keywords: "live talk realtime gemini speak interrupt conversation voice",
+                run: () => void chat.toggleLive(),
+            },
+            {
                 id: "voice.cycle",
                 label: `Voice: ${status?.voiceMode ?? "off"}`,
                 group: "Chat",
