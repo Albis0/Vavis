@@ -211,6 +211,7 @@ pub fn send_message(
             identity: &identity,
             bridge: bridge.as_deref(),
             quiet: false,
+            code,
         };
         let result =
             runtime.block_on(turn.run_with_failover(&chain, &router_model, history, &text));
@@ -364,6 +365,7 @@ pub(crate) fn run_remote(
             identity: &identity,
             bridge: bridge.as_deref(),
             quiet: true,
+            code: false,
         };
         runtime
             .block_on(turn.run_with_failover(&chain, "", past, text))
@@ -736,6 +738,9 @@ struct Turn<'a> {
     /// A turn asked from elsewhere (the phone): nothing is drawn in the
     /// window or spoken aloud, since nobody there asked.
     quiet: bool,
+    /// Code work from the code screen: the project tools, a prompt that
+    /// knows the project, and room for a real edit-run-fix loop.
+    code: bool,
 }
 
 impl Turn<'_> {
@@ -805,24 +810,37 @@ impl Turn<'_> {
             approval_rx,
             full_authority,
             quiet,
+            code,
             ..
         } = *self;
         let claude = cfg.provider == vavis_brain::Provider::ClaudeCode;
+        let project = if code {
+            vavis_tools::workspace::current_root()
+        } else {
+            None
+        };
+        let max_steps = if code {
+            vavis_tools::CODE_MAX_STEPS
+        } else {
+            MAX_STEPS
+        };
 
         // Claude Code gets its tools over MCP, so the config has to say
-        // where; nothing else changes about the request.
+        // where; a code turn also runs it inside the project.
         let bridged;
-        let cfg = match (claude, self.bridge) {
-            (true, Some(bridge)) => {
-                let mut c = cfg.clone();
+        let cfg = if claude && (self.bridge.is_some() || project.is_some()) {
+            let mut c = cfg.clone();
+            if let Some(bridge) = self.bridge {
                 c.tool_bridge = Some(vavis_brain::claude_code::ToolBridge {
                     url: bridge.url(),
                     token: bridge.token().to_string(),
                 });
-                bridged = c;
-                &bridged
             }
-            _ => cfg,
+            c.workdir = project.clone();
+            bridged = c;
+            &bridged
+        } else {
+            cfg
         };
         // Open only for this turn: a call arriving at any other time is
         // refused before it reaches the agent.
@@ -846,7 +864,19 @@ impl Turn<'_> {
         // ceiling, not a target: domain matching still decides what is relevant.
         let budget = vavis_brain::ModelCaps::for_model(&cfg.model).tool_budget;
 
-        let picked: Vec<String> = if claude {
+        let picked: Vec<String> = if code && !claude {
+            // The project's tools and the core ones, chosen by what the work
+            // is rather than by the words in the message: "why does this
+            // fail" names no tool, and needs all of them.
+            let guard = AppState::lock(agent);
+            guard
+                .registry
+                .in_domain(vavis_tools::Domain::Code)
+                .chain(guard.registry.in_domain(vavis_tools::Domain::Core))
+                .map(|t| t.name().to_string())
+                .filter(|n| n != "request_tools")
+                .collect()
+        } else if claude {
             // Claude handles the whole catalogue well, and it runs its own
             // loop -- there is no second step at which to hand it more. So it
             // gets everything, minus what it already has in a better form:
@@ -898,7 +928,13 @@ impl Turn<'_> {
             "tools offered for this request"
         );
 
-        let mut messages = vec![self.identity.system_for(cfg.provider)];
+        let mut system = self.identity.system_for(cfg.provider);
+        if code {
+            system
+                .content
+                .push_str(&code_brief(project.as_deref(), claude));
+        }
+        let mut messages = vec![system];
         messages.extend(history);
         let mut final_text = String::new();
         // Whether history has already been cut back after a size refusal.
@@ -917,7 +953,7 @@ impl Turn<'_> {
             AppState::lock(voice).begin_stream();
         }
 
-        for step in 0..MAX_STEPS {
+        for step in 0..max_steps {
             let emit = app.clone();
 
             let response = match client
@@ -1074,13 +1110,39 @@ impl Turn<'_> {
                 tools.extend(schemas);
             }
 
-            if step == MAX_STEPS - 1 {
-                return Err(format!("no answer after {MAX_STEPS} steps").into());
+            if step == max_steps - 1 {
+                return Err(format!("no answer after {max_steps} steps").into());
             }
         }
 
         Ok(final_text)
     }
+}
+
+/// What a code turn is told about its situation.
+fn code_brief(project: Option<&std::path::Path>, claude: bool) -> String {
+    let Some(root) = project else {
+        return "\n\n# Kod\n\nKod ekranında açık bir klasör yok. Proje üzerinde çalışmak \
+                için kullanıcıdan kod ekranından bir klasör açmasını iste."
+            .into();
+    };
+    let reading = if claude {
+        "Okumak ve aramak için kendi Read, Glob ve Grep araçlarını kullan (proje \
+         klasöründesin); değiştirmek ve çalıştırmak için mcp__vavis__ws_edit, \
+         ws_write ve ws_run."
+    } else {
+        "Araçların: ws_list, ws_read, ws_search (bakmak), ws_edit, ws_write \
+         (değiştirmek), ws_run (test, derleme, git)."
+    };
+    format!(
+        "\n\n# Kod\n\nKod ekranında açık proje: {}\n{reading}\n\n\
+         Çalışma şekli: önce ilgili dosyaları okuyup anla; değişikliği küçük ve \
+         odaklı tut, ws_edit ile birebir metin değiştirerek yap; sonra projenin \
+         kendi testini ya da derlemesini ws_run ile çalıştır ve hata varsa düzelt. \
+         Bitirince neyi neden değiştirdiğini kısaca özetle. Tahmin etme — \
+         emin değilsen oku.",
+        root.display()
+    )
 }
 
 /// Asks for approval somewhere other than the window: the phone.

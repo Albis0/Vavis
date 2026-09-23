@@ -48,6 +48,10 @@ pub enum Domain {
     Canvas,
     /// VirusTotal — dosya ve adres itibar sorgusu.
     Security,
+    /// The folder open in the code screen: read, search, edit, run. Never
+    /// matched by keyword -- a code turn is offered these directly, and an
+    /// ordinary chat turn never is.
+    Code,
     /// Bir MCP sunucusu. **Her sunucu kendi alanı**: üç sunucu bağlayan
     /// kullanıcı 60 tool'a ulaşabilir ve hepsini modele göndermek eski
     /// projedeki 353 tool felaketinin aynısı olur.
@@ -57,7 +61,7 @@ pub enum Domain {
 }
 
 impl Domain {
-    pub const ALL: [Domain; 14] = [
+    pub const ALL: [Domain; 15] = [
         Self::Core,
         Self::Files,
         Self::System,
@@ -72,6 +76,7 @@ impl Domain {
         Self::Spotify,
         Self::Canvas,
         Self::Security,
+        Self::Code,
     ];
 
     pub fn name(self) -> &'static str {
@@ -90,6 +95,7 @@ impl Domain {
             Self::Spotify => "spotify",
             Self::Canvas => "canvas",
             Self::Security => "security",
+            Self::Code => "code",
             Self::Mcp(id) => id,
         }
     }

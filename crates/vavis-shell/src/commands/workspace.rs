@@ -18,29 +18,29 @@ pub fn open_workspace(path: String) -> Result<String, String> {
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| path.to_string_lossy().to_string());
 
-    crate::workspace::set_root(Some(path));
+    vavis_tools::workspace::set_root(Some(path));
     Ok(name)
 }
 
 /// The folder currently open, if any.
 #[tauri::command]
 pub fn current_workspace() -> Option<String> {
-    crate::workspace::current_root().map(|p| p.to_string_lossy().to_string())
+    vavis_tools::workspace::current_root().map(|p| p.to_string_lossy().to_string())
 }
 
 #[tauri::command]
-pub fn list_workspace(path: String) -> Result<Vec<crate::workspace::Entry>, String> {
-    crate::workspace::list(&path)
+pub fn list_workspace(path: String) -> Result<Vec<vavis_tools::workspace::Entry>, String> {
+    vavis_tools::workspace::list(&path)
 }
 
 #[tauri::command]
 pub fn read_workspace_file(path: String) -> Result<String, String> {
-    crate::workspace::read(&path)
+    vavis_tools::workspace::read(&path)
 }
 
 #[tauri::command]
 pub fn write_workspace_file(path: String, content: String) -> Result<(), String> {
-    crate::workspace::write(&path, &content)
+    vavis_tools::workspace::write(&path, &content)
 }
 
 #[derive(Debug, Serialize)]
@@ -53,7 +53,7 @@ pub struct SearchHit {
 
 #[tauri::command]
 pub fn search_workspace(query: String) -> Result<Vec<SearchHit>, String> {
-    Ok(crate::workspace::grep(&query, 100)?
+    Ok(vavis_tools::workspace::grep(&query, 100)?
         .into_iter()
         .map(|(path, line, text)| SearchHit { path, line, text })
         .collect())

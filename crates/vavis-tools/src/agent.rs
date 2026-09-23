@@ -16,7 +16,17 @@ use crate::tool::{Registry, Risk, ToolOutcome};
 use vavis_brain::{Message, ToolCall};
 
 /// Bir istekte en fazla kaç model↔tool turu dönülür.
-pub const MAX_STEPS: usize = 5;
+///
+/// Was 5, which a single computer-use task spends before it is half done:
+/// look, click, wait, look again, type, confirm. The turn then ended with
+/// "no answer after 5 steps" and the work abandoned midway. The loop guard
+/// and the destructive budget are what stop a runaway model; this is only
+/// the backstop.
+pub const MAX_STEPS: usize = 15;
+
+/// The same backstop for a code turn, which reads, edits, runs the tests,
+/// reads the failure and edits again -- a normal fix is a dozen steps.
+pub const CODE_MAX_STEPS: usize = 40;
 
 /// Aynı tool aynı argümanlarla üst üste bu kadar çağrılırsa döngü sayılır.
 const REPEAT_LIMIT: usize = 2;

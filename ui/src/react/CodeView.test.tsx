@@ -13,11 +13,17 @@ vi.mock("../lib/api", () => ({
         openWorkspace: vi.fn(async () => "repo"),
         searchWorkspace: vi.fn(async () => []),
     },
+    on: vi.fn(async (event: string, fn: (p: unknown) => void) => {
+        handlers.set(event, fn);
+        return () => {};
+    }),
 }));
+
+const handlers = new Map<string, (p: unknown) => void>();
 
 vi.mock("./store/confirm", () => ({ ask: vi.fn(async () => true) }));
 vi.mock("./store/toast", () => ({
-    toast: { success: vi.fn(), failure: vi.fn() },
+    toast: { success: vi.fn(), failure: vi.fn(), info: vi.fn() },
 }));
 vi.mock("./store/chat", () => ({
     chat: { view: "code", input: "" },
@@ -62,6 +68,26 @@ describe("CodeView", () => {
             ),
         );
         expect(api.readWorkspaceFile).toHaveBeenCalledWith("a.txt");
+    });
+
+    it("shows the assistant's edit to the open file", async () => {
+        const user = userEvent.setup();
+        render(<CodeView />);
+        await user.click(await screen.findByText("a.txt"));
+        await waitFor(() =>
+            expect(screen.getByRole("textbox", { name: "a.txt" })).toHaveValue("hello\nworld"),
+        );
+
+        vi.mocked(api.readWorkspaceFile).mockResolvedValue("hello\nthere");
+        handlers.get("chat:tool-done")!({
+            tool: "ws_edit",
+            ok: true,
+            summary: "a.txt düzenlendi (1 değişiklik)",
+            detail: "",
+        });
+        await waitFor(() =>
+            expect(screen.getByRole("textbox", { name: "a.txt" })).toHaveValue("hello\nthere"),
+        );
     });
 
     it("marks the file dirty after an edit and saves on the Save button", async () => {

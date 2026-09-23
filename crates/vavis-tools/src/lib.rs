@@ -32,8 +32,9 @@ pub mod tool;
 pub mod untrusted;
 pub mod virustotal;
 pub mod websearch;
+pub mod workspace;
 
-pub use agent::{Agent, AgentHost, Approval, MAX_STEPS};
+pub use agent::{Agent, AgentHost, Approval, CODE_MAX_STEPS, MAX_STEPS};
 pub use blocking::run_async;
 pub use permission::{ApprovalReason, Decision, PermissionGate};
 pub use router::{KeywordRouter, LlmRouter, Router, ToolBrief};

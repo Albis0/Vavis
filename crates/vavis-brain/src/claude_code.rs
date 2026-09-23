@@ -26,10 +26,11 @@
 //! other provider -- Claude Code just waits for the answer.
 //!
 //! Its own built-in tools are cut down to web search and fetch. Both are
-//! read-only and served by Anthropic, so they need no key of ours. File,
-//! shell and edit tools are removed outright: they would act on the machine
-//! without passing through the gate, which is the one thing that must not
-//! happen.
+//! read-only and served by Anthropic, so they need no key of ours. Shell and
+//! edit tools are removed outright: they would act on the machine without
+//! passing through the gate, which is the one thing that must not happen.
+//! A code turn also gets the read-only file tools, confined to the project
+//! (see `CODE_READ_TOOLS`); changing it still goes through Vavis.
 //!
 //! ## History
 //!
@@ -67,6 +68,14 @@ pub const SERVER_NAME: &str = "vavis";
 
 /// Claude Code's built-in tools that stay on. Read-only, served remotely.
 const BUILTIN_TOOLS: &str = "WebSearch,WebFetch";
+
+/// Added for a code turn: Claude Code's own file reading, which is better
+/// at finding its way round a project than anything Vavis offers. Read-only
+/// -- every change still goes through Vavis's `ws_edit`/`ws_write`/`ws_run`
+/// and the gate -- and confined by the CLI to the working directory, which
+/// is the project; reading elsewhere needs a permission print mode cannot
+/// grant.
+const CODE_READ_TOOLS: &str = "Read,Glob,Grep";
 
 /// How long the CLI may stay silent before the turn is abandoned.
 ///
@@ -306,6 +315,22 @@ pub fn mcp_config(bridge: &ToolBridge) -> Value {
 /// a `.cmd` shim runs through `cmd.exe`, which reinterprets `%` and `&` --
 /// text on the command line is a problem twice over.
 pub fn args(model: &str, system_file: &Path, mcp_file: Option<&Path>) -> Vec<OsString> {
+    args_for(model, system_file, mcp_file, false)
+}
+
+/// As [`args`]; `code` switches on the read-only file tools for a turn
+/// running inside a project.
+pub fn args_for(
+    model: &str,
+    system_file: &Path,
+    mcp_file: Option<&Path>,
+    code: bool,
+) -> Vec<OsString> {
+    let builtin = if code {
+        format!("{BUILTIN_TOOLS},{CODE_READ_TOOLS}")
+    } else {
+        BUILTIN_TOOLS.to_string()
+    };
     let mut args: Vec<OsString> = [
         "-p",
         "--verbose",
@@ -319,18 +344,18 @@ pub fn args(model: &str, system_file: &Path, mcp_file: Option<&Path>) -> Vec<OsS
         // for coding sessions and would bypass the gate.
         "--strict-mcp-config",
         "--tools",
-        BUILTIN_TOOLS,
     ]
     .iter()
     .map(OsString::from)
     .collect();
+    args.push(builtin.clone().into());
 
     args.push("--system-prompt-file".into());
     args.push(system_file.into());
 
     // One comma-separated value: `--allowedTools` is variadic and would
     // swallow whatever came after a space-separated list.
-    let mut allowed = BUILTIN_TOOLS.to_string();
+    let mut allowed = builtin;
     if let Some(mcp) = mcp_file {
         args.push("--mcp-config".into());
         args.push(mcp.into());
@@ -586,20 +611,26 @@ where
         None => None,
     };
 
+    let project = cfg.workdir.as_deref().filter(|p| p.is_dir());
     let mut cmd = tokio::process::Command::new(&cli);
-    cmd.args(args(&cfg.model, &system_file, mcp_file.as_deref()))
-        .current_dir(&dir)
-        .env("MCP_TOOL_TIMEOUT", TOOL_TIMEOUT_MS)
-        .env("MCP_TIMEOUT", "30000")
-        // One process per message: an update check on each would be waste,
-        // and the user's interactive sessions still update themselves.
-        .env("DISABLE_AUTOUPDATER", "1")
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        // Dropping the turn (the user closed the app, the thread ended)
-        // must not leave a process running on their subscription.
-        .kill_on_drop(true);
+    cmd.args(args_for(
+        &cfg.model,
+        &system_file,
+        mcp_file.as_deref(),
+        project.is_some(),
+    ))
+    .current_dir(project.unwrap_or(&dir))
+    .env("MCP_TOOL_TIMEOUT", TOOL_TIMEOUT_MS)
+    .env("MCP_TIMEOUT", "30000")
+    // One process per message: an update check on each would be waste,
+    // and the user's interactive sessions still update themselves.
+    .env("DISABLE_AUTOUPDATER", "1")
+    .stdin(std::process::Stdio::piped())
+    .stdout(std::process::Stdio::piped())
+    .stderr(std::process::Stdio::piped())
+    // Dropping the turn (the user closed the app, the thread ended)
+    // must not leave a process running on their subscription.
+    .kill_on_drop(true);
     hide_window(&mut cmd);
 
     let mut child = cmd
@@ -930,6 +961,18 @@ mod tests {
         assert!(allowed(&with).contains("mcp__vavis"));
         assert!(!allowed(&without).contains("mcp__"));
         assert!(!without.contains(&"--mcp-config".to_string()));
+    }
+
+    #[test]
+    fn a_code_turn_can_read_the_project_but_not_change_it() {
+        let line = arg_strings(&args_for("", Path::new("s"), Some(Path::new("m")), true));
+        let tools = &line[line.iter().position(|a| a == "--tools").unwrap() + 1];
+        assert!(tools.contains("Read") && tools.contains("Grep") && tools.contains("Glob"));
+        for writer in ["Edit", "Write", "Bash", "NotebookEdit"] {
+            assert!(!tools.contains(writer), "{writer} is on: {tools}");
+        }
+        let allowed = &line[line.iter().position(|a| a == "--allowedTools").unwrap() + 1];
+        assert!(allowed.contains("Read") && allowed.contains("mcp__vavis"));
     }
 
     #[test]

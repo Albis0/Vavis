@@ -16,7 +16,6 @@ mod state;
 mod update;
 mod voice;
 mod watch;
-mod workspace;
 
 use state::AppState;
 use tauri::{Emitter, Manager};

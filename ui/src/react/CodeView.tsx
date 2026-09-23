@@ -17,7 +17,7 @@
  * between them shows up immediately as numbers drifting off their lines.
  */
 import { useEffect, useRef, useState } from "react";
-import { api, type SearchHit, type WorkspaceEntry } from "../lib/api";
+import { api, on, type SearchHit, type ToolDoneEvent, type WorkspaceEntry } from "../lib/api";
 import { ask } from "./store/confirm";
 import Icon from "./Icon";
 import { chat } from "./store/chat";
@@ -62,6 +62,35 @@ export default function CodeView() {
             setRoot(current);
             if (current) await loadFolder("");
         })();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // The assistant edits files from the conversation. When it changes the
+    // one on screen, show the new version -- unless there are unsaved edits
+    // here, which are never overwritten; the user is told instead.
+    useEffect(() => {
+        let off: (() => void) | undefined;
+        void on<ToolDoneEvent>("chat:tool-done", async (p) => {
+            if (!p.ok || (p.tool !== "ws_edit" && p.tool !== "ws_write")) return;
+            // The tree may have gained a file.
+            await loadFolder("");
+            const current = fileRef.current;
+            if (!current || !p.summary.includes(current)) return;
+            if (dirtyRef.current) {
+                toast.info(`${current} was changed by the assistant — save or discard your edits to see it.`);
+                return;
+            }
+            try {
+                const fresh = await api.readWorkspaceFile(current);
+                setText(fresh);
+                setSaved(fresh);
+            } catch {
+                // Deleted or unreadable now; the next open will say so.
+            }
+        }).then((u) => {
+            off = u;
+        });
+        return () => off?.();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
