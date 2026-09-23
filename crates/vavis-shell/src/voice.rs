@@ -40,6 +40,28 @@ pub enum VoiceEvent {
     Enrol { count: usize, needed: usize },
     /// Wake-word training finished, or failed and needs starting over.
     EnrolDone { ok: bool, message: String },
+    /// The live conversation started or ended; `error` says why it ended
+    /// when it was not asked to.
+    Live { active: bool, error: Option<String> },
+    /// One exchange of the live conversation, both sides transcribed.
+    LiveTurn { user: String, assistant: String },
+}
+
+/// Runs a tool call (id, name, arguments) and returns what it said.
+pub type ToolRunner = Box<dyn FnMut(&str, &str, serde_json::Value) -> String + Send>;
+/// Records one finished exchange (user, assistant).
+pub type TurnRecorder = Box<dyn FnMut(&str, &str) + Send>;
+
+/// What the live conversation needs from the rest of the app.
+pub struct LiveHooks {
+    /// Runs a tool call through the agent and permission gate.
+    pub run_tool: ToolRunner,
+    /// Records a finished exchange in the conversation.
+    pub on_turn: TurnRecorder,
+}
+
+struct LiveHandle {
+    stop: Arc<AtomicBool>,
 }
 
 pub struct VoiceState {
@@ -77,6 +99,9 @@ pub struct VoiceState {
     enrolling: Option<Vec<Vec<f32>>>,
     /// Until when the next utterance counts as addressed without the name.
     awake_until: Arc<Mutex<Option<Instant>>>,
+    /// The live conversation, while one runs. It owns the microphone's raw
+    /// stream and the speaker; the ordinary voice path stands aside.
+    live: Option<LiveHandle>,
 }
 
 impl VoiceState {
@@ -108,6 +133,111 @@ impl VoiceState {
             wake_path: None,
             enrolling: None,
             awake_until: Arc::new(Mutex::new(None)),
+            live: None,
+        }
+    }
+
+    pub fn is_live(&self) -> bool {
+        self.live.is_some()
+    }
+
+    /// Starts a live conversation. Replaces nothing: a second call while
+    /// one runs is an error, not a restart.
+    pub fn start_live(
+        &mut self,
+        config: vavis_audio::live::LiveConfig,
+        mut hooks: LiveHooks,
+    ) -> Result<(), String> {
+        if self.live.is_some() {
+            return Err("a live conversation is already running".into());
+        }
+        if self.mic.is_none() {
+            self.mic = Some(Microphone::start().map_err(|e| format!("microphone: {e}"))?);
+        }
+        self.stop_speaking();
+        let mic = self.mic.as_ref().expect("opened above");
+        mic.set_muted(false);
+        let frames = mic.tap();
+
+        let stop = Arc::new(AtomicBool::new(false));
+        let tx = self.tx.clone();
+        let thread_stop = stop.clone();
+        std::thread::Builder::new()
+            .name("live".into())
+            .spawn(move || {
+                let player = match vavis_audio::stream_out::PcmPlayer::start() {
+                    Ok(p) => p,
+                    Err(e) => {
+                        let _ = tx.send(VoiceEvent::Live {
+                            active: false,
+                            error: Some(e.to_string()),
+                        });
+                        return;
+                    }
+                };
+                let mut user = String::new();
+                let mut assistant = String::new();
+                let events_tx = tx.clone();
+                let result = vavis_audio::live::run(
+                    &config,
+                    frames,
+                    &player,
+                    thread_stop,
+                    |event| {
+                        use vavis_audio::live::LiveEvent;
+                        match event {
+                            LiveEvent::Ready => {
+                                let _ = events_tx.send(VoiceEvent::Live {
+                                    active: true,
+                                    error: None,
+                                });
+                            }
+                            LiveEvent::UserText(t) => user.push_str(t),
+                            LiveEvent::ModelText(t) => assistant.push_str(t),
+                            LiveEvent::TurnComplete | LiveEvent::Interrupted => {
+                                let (u, a) =
+                                    (user.trim().to_string(), assistant.trim().to_string());
+                                if !u.is_empty() || !a.is_empty() {
+                                    (hooks.on_turn)(&u, &a);
+                                    let _ = events_tx.send(VoiceEvent::LiveTurn {
+                                        user: u,
+                                        assistant: a,
+                                    });
+                                }
+                                user.clear();
+                                assistant.clear();
+                            }
+                            LiveEvent::GoingAway => {
+                                let _ = events_tx.send(VoiceEvent::Notice {
+                                    text: "The live session is about to end (server limit).".into(),
+                                });
+                            }
+                            _ => {}
+                        }
+                    },
+                    |call| (hooks.run_tool)(&call.id, &call.name, call.args.clone()),
+                );
+                let _ = tx.send(VoiceEvent::Live {
+                    active: false,
+                    error: result.err(),
+                });
+            })
+            .map_err(|e| e.to_string())?;
+
+        self.live = Some(LiveHandle { stop });
+        Ok(())
+    }
+
+    /// Ends the live conversation, if one runs.
+    pub fn stop_live(&mut self) {
+        if let Some(live) = self.live.take() {
+            live.stop.store(true, Ordering::Relaxed);
+        }
+        if let Some(mic) = &self.mic {
+            mic.untap();
+        }
+        if !self.mode.is_listening() && self.enrolling.is_none() {
+            self.mic = None;
         }
     }
 
@@ -451,7 +581,7 @@ impl VoiceState {
             Some(mic) => {
                 // Mute the microphone while speaking, or the assistant hears
                 // itself and answers its own voice.
-                let should_mute = self.is_speaking();
+                let should_mute = self.is_speaking() && self.live.is_none();
                 if mic.is_muted() != should_mute {
                     mic.set_muted(should_mute);
                 }
@@ -462,11 +592,23 @@ impl VoiceState {
         for utterance in heard {
             if self.enrolling.is_some() {
                 self.enrol(utterance);
+            } else if self.live.is_some() {
+                // The live session hears everything itself; transcribing
+                // here too would answer every sentence twice.
             } else if self.mode.is_listening() {
                 self.transcribe(utterance);
             }
         }
-        self.rx.try_iter().collect()
+        let events: Vec<VoiceEvent> = self.rx.try_iter().collect();
+        // A session that ended on its own (closed by the server, failed)
+        // releases what it held.
+        if events
+            .iter()
+            .any(|e| matches!(e, VoiceEvent::Live { active: false, .. }))
+        {
+            self.stop_live();
+        }
+        events
     }
 
     /// Whether the follow-up window after a bare wake word is still open.

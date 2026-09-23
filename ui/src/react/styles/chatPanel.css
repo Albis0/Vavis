@@ -123,6 +123,11 @@ header {
 .icon-btn:hover:not(:disabled) {
     color: var(--text);
 }
+/* A live conversation is an open microphone: it should never be easy to
+   forget one is running. */
+.icon-btn.live-on {
+    color: var(--danger, #e5484d);
+}
 
 /* -- Feed ---------------------------------------------------------- */
 

@@ -63,6 +63,11 @@ pub struct VoiceSettings {
     /// A wake word has been trained on this machine.
     pub wake_trained: bool,
     pub wake_sensitivity: u8,
+    /// Live conversation model and voice; empty means the default.
+    pub live_model: String,
+    pub live_voice: String,
+    pub live_default_model: String,
+    pub live_voices: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -124,6 +129,13 @@ pub fn get_voice_settings(state: State<AppState>) -> VoiceSettings {
             .to_string(),
         wake_trained: AppState::lock(&state.voice).wake_trained(),
         wake_sensitivity: v.wake_sensitivity,
+        live_model: v.live_model.clone(),
+        live_voice: v.live_voice.clone(),
+        live_default_model: vavis_audio::live::DEFAULT_MODEL.to_string(),
+        live_voices: vavis_audio::live::VOICES
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
     }
 }
 
@@ -190,4 +202,142 @@ pub fn poll_voice(state: State<AppState>) -> Vec<crate::voice::VoiceEvent> {
 #[tauri::command]
 pub fn mic_level(state: State<AppState>) -> f32 {
     AppState::lock(&state.voice).mic_level()
+}
+
+/// Tools the live conversation is not given: `request_tools` only makes
+/// sense for a model handed a subset, and the screenshot pair returns
+/// images that cannot travel back over a voice session.
+const NOT_LIVE: [&str; 4] = [
+    "request_tools",
+    "take_screenshot",
+    "wait_for_screen",
+    "generate_image",
+];
+
+/// Starts a live, spoken conversation (Gemini Live). Progress arrives as
+/// `voice` events: `live` when it starts and ends, `liveTurn` per exchange.
+#[tauri::command]
+pub fn start_live(app: tauri::AppHandle, state: State<AppState>) -> Result<(), String> {
+    let config = {
+        let core = AppState::lock(&state.core);
+        let keys = AppState::lock(&state.keys);
+        let api_key = keys.get("gemini").unwrap_or_default().to_string();
+        if api_key.trim().is_empty() {
+            return Err(
+                "The live conversation runs on Gemini — add a Gemini key (free at aistudio.google.com)."
+                    .into(),
+            );
+        }
+        let v = &core.config.voice;
+        let model = if v.live_model.trim().is_empty() {
+            vavis_audio::live::DEFAULT_MODEL.to_string()
+        } else {
+            v.live_model.trim().to_string()
+        };
+        let voice = if v.live_voice.trim().is_empty() {
+            vavis_audio::live::DEFAULT_VOICE.to_string()
+        } else {
+            v.live_voice.trim().to_string()
+        };
+
+        let mut system = vavis_brain::system_prompt_for(
+            Provider::Gemini,
+            &core.config.general.assistant_name,
+            &core.config.general.language,
+        );
+        system.push_str(
+            "\n\nBu sesli, canlı bir konuşma. Konuşur gibi cevap ver: kısa, doğal \
+             cümleler; liste, başlık, markdown ya da emoji yok. Kullanıcı sözünü \
+             keserse dur ve dinle.",
+        );
+        // Facts as they are: there is no single question to rank them
+        // against in a conversation that has not started yet.
+        let facts: Vec<String> = AppState::lock(&state.store)
+            .all_facts()
+            .unwrap_or_default()
+            .into_iter()
+            .rev()
+            .take(15)
+            .map(|f| f.text)
+            .collect();
+        system.push_str(&crate::recall::block(&facts));
+
+        let tools = {
+            let agent = AppState::lock(&state.agent);
+            let names: Vec<&str> = agent
+                .registry
+                .iter()
+                .map(|t| t.name())
+                .filter(|n| !NOT_LIVE.contains(n))
+                .collect();
+            agent.schemas_for(&names)
+        };
+
+        vavis_audio::live::LiveConfig {
+            endpoint: None,
+            api_key,
+            model,
+            voice,
+            system,
+            tools,
+        }
+    };
+
+    {
+        let full_authority = AppState::lock(&state.core).config.security.full_authority;
+        let mut agent = AppState::lock(&state.agent);
+        agent.start_run();
+        agent.gate.set_full_authority(full_authority);
+    }
+
+    let handler = super::chat::ToolBridgeHandler {
+        agent: state.agent.clone(),
+        app: app.clone(),
+        approval_rx: state.approval_rx.clone(),
+    };
+    let store = state.store.clone();
+    let history = state.history.clone();
+    let conversation = state.conversation.clone();
+    let hooks = crate::voice::LiveHooks {
+        run_tool: Box::new(move |id, name, args| {
+            use vavis_tools::mcp::bridge::Handler;
+            handler.call(id, name, args).text
+        }),
+        on_turn: Box::new(move |user, assistant| {
+            let id = *AppState::lock(&conversation);
+            let store = AppState::lock(&store);
+            let mut history = AppState::lock(&history);
+            if !user.is_empty() {
+                let _ = store.add_message_to(id, "user", user);
+                history.push(Message::user(user));
+            }
+            if !assistant.is_empty() {
+                let _ = store.add_message_to(id, "assistant", assistant);
+                history.push(Message::assistant(assistant));
+            }
+        }),
+    };
+
+    AppState::lock(&state.voice).start_live(config, hooks)
+}
+
+#[tauri::command]
+pub fn stop_live(state: State<AppState>) {
+    AppState::lock(&state.voice).stop_live();
+}
+
+/// Live-capable Gemini models the stored key can reach.
+#[tauri::command]
+pub async fn list_live_models(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    let (key, client) = {
+        let keys = AppState::lock(&state.keys);
+        (
+            keys.get("gemini").unwrap_or_default().to_string(),
+            state.client.clone(),
+        )
+    };
+    client
+        .list_live_models(&key)
+        .await
+        .map_err(|e| super::friendly_error(&e))
 }

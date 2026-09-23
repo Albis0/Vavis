@@ -267,6 +267,14 @@ function ChatPanel({ onClose }: Props, ref: ForwardedRef<ChatPanelHandle>) {
 
                 <div className="chat-header-actions">
                     <button
+                        className={status?.live ? "icon-btn live-on" : "icon-btn"}
+                        title={status?.live ? "End the live conversation" : "Live conversation (Gemini) — talk freely, interrupt any time"}
+                        aria-pressed={status?.live ?? false}
+                        onClick={() => void chat.toggleLive()}
+                    >
+                        <Icon name={status?.live ? "stop" : "mic"} size={16} />
+                    </button>
+                    <button
                         className="icon-btn"
                         title="Conversations"
                         aria-pressed={listOpen}

@@ -57,6 +57,8 @@ export interface Status {
     automationCount: number;
     messageCount: number;
     voiceMode: "off" | "continuous" | "wake";
+    /** A live conversation is running. */
+    live: boolean;
     /** Microphone level, 0.0–1.0. Drives the meter next to the mic button. */
     micLevel: number;
     busy: boolean;
@@ -213,6 +215,11 @@ export type UpdateCheck =
 export interface VoiceSettings {
     /** A wake word has been trained on this machine. */
     wakeTrained: boolean;
+    /** Live conversation model and voice; empty means the default. */
+    liveModel: string;
+    liveVoice: string;
+    liveDefaultModel: string;
+    liveVoices: string[];
     /** 1 (strict) to 10 (lenient). */
     wakeSensitivity: number;
     engines: VoiceEngineInfo[];
@@ -386,6 +393,9 @@ export const api = {
     startWakeTraining: () => invoke<void>("start_wake_training"),
     cancelWakeTraining: () => invoke<void>("cancel_wake_training"),
     forgetWakeWord: () => invoke<void>("forget_wake_word"),
+    startLive: () => invoke<void>("start_live"),
+    stopLive: () => invoke<void>("stop_live"),
+    listLiveModels: () => invoke<string[]>("list_live_models"),
     /** Drops the oldest half of the conversation. Returns how many went. */
     forgetOldest: () => invoke<number>("forget_oldest"),
 
@@ -670,7 +680,9 @@ export type VoiceEvent =
     | { kind: "notice"; text: string }
     | { kind: "speaking"; active: boolean }
     | { kind: "enrol"; count: number; needed: number }
-    | { kind: "enrolDone"; ok: boolean; message: string };
+    | { kind: "enrolDone"; ok: boolean; message: string }
+    | { kind: "live"; active: boolean; error: string | null }
+    | { kind: "liveTurn"; user: string; assistant: string };
 
 /**
  * Subscribes to a backend event.

@@ -49,6 +49,8 @@ pub fn set_setting(state: State<AppState>, field: String, value: String) -> Resu
             core.config.voice.wake_sensitivity = n.clamp(1, 10);
             AppState::lock(&state.voice).set_wake_sensitivity(n);
         }
+        "liveModel" => core.config.voice.live_model = value.trim().to_string(),
+        "liveVoice" => core.config.voice.live_voice = value.trim().to_string(),
         "memoryInject" => core.config.memory.inject = value == "true",
         "memoryAutoExtract" => core.config.memory.auto_extract = value == "true",
         "memoryEmbeddings" => {
