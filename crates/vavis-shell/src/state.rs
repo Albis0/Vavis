@@ -56,8 +56,23 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new(core: CoreApp) -> anyhow::Result<Self> {
+    pub fn new(mut core: CoreApp) -> anyhow::Result<Self> {
         let keys = KeyStore::load(core.paths.root());
+
+        // A provider that cannot answer makes the first message an error. If
+        // Claude Code is installed it can -- the user's own plan, no key --
+        // so it takes over, once, and the choice is saved like any other.
+        // A provider that works is never replaced.
+        let chosen = vavis_brain::Provider::parse(&core.config.llm.provider)
+            .unwrap_or(vavis_brain::Provider::Groq);
+        if !crate::commands::llm::is_usable(&core.config, &keys, chosen)
+            && vavis_brain::claude_code::find_cli().is_some()
+        {
+            tracing::info!(from = %chosen, "chosen provider has no key; Claude Code is installed, using it");
+            core.config.llm.provider = vavis_brain::Provider::ClaudeCode.key_name().to_string();
+            core.config.llm.model = String::new();
+            let _ = core.config.save(&core.paths);
+        }
 
         let store = Store::open(&core.paths)?;
         // Reopen where the user left off; a first run starts a fresh one.
@@ -103,6 +118,7 @@ impl AppState {
         // spoken -- otherwise the first reply of every session would come
         // out in the default voice regardless of what the user chose.
         voice.set_tts_config(tts_config_from(&core.config, &keys));
+        voice.set_gemini_key(keys.get("gemini").unwrap_or_default().to_string());
         // A wake word trained in an earlier session is recognised from the
         // first utterance of this one.
         voice.attach_wake_model(core.paths.root().join("wake.json"));

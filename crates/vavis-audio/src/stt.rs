@@ -100,6 +100,82 @@ impl SttClient {
     }
 }
 
+/// A Gemini model for transcription when there is no Groq key. Any
+/// current Flash model hears audio; this is the one the chat side defaults
+/// to, and a user without Groq is likely to have this key.
+pub const GEMINI_STT_MODEL: &str = "gemini-3.6-flash";
+
+impl SttClient {
+    /// Transcribes with Gemini: the audio goes inline in an ordinary
+    /// `generateContent` request, with an instruction to write down exactly
+    /// what was said.
+    ///
+    /// Slower than Whisper on Groq and not built for it, but it means voice
+    /// works for someone whose only key is the free Gemini one -- before,
+    /// no Groq key meant no voice at all.
+    pub async fn transcribe_gemini(
+        &self,
+        utterance: &Utterance,
+        api_key: &str,
+        language: &str,
+    ) -> Result<String> {
+        use base64::Engine;
+        if api_key.trim().is_empty() {
+            return Err(SttError::MissingKey);
+        }
+        let wav = to_wav(&utterance.samples);
+        let data = base64::engine::general_purpose::STANDARD.encode(wav);
+        let body = serde_json::json!({
+            "contents": [{"role": "user", "parts": [
+                {"inline_data": {"mime_type": "audio/wav", "data": data}},
+                {"text": gemini_instruction(language)}
+            ]}],
+            "generationConfig": {"temperature": 0}
+        });
+        let url = format!(
+            "https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_STT_MODEL}:generateContent"
+        );
+        let resp = self
+            .http
+            .post(url)
+            .header("x-goog-api-key", api_key)
+            .json(&body)
+            .send()
+            .await?;
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(SttError::Api {
+                status: status.as_u16(),
+                body: body.chars().take(300).collect(),
+            });
+        }
+        let v: serde_json::Value = resp.json().await.unwrap_or_default();
+        Ok(clean_transcript(&gemini_text(&v)))
+    }
+}
+
+fn gemini_instruction(language: &str) -> String {
+    format!(
+        "Transcribe this recording verbatim. The speaker most likely speaks the \
+         language with code '{language}'. Output only the words that were said, \
+         with no quotes, labels or commentary. If nothing intelligible was said, \
+         output nothing."
+    )
+}
+
+/// The text of a `generateContent` answer: every text part of the first
+/// candidate, joined.
+fn gemini_text(v: &serde_json::Value) -> String {
+    v["candidates"][0]["content"]["parts"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|p| p["text"].as_str())
+        .collect::<Vec<_>>()
+        .join("")
+}
+
 /// Whisper çıktısını temizler.
 ///
 /// Whisper sessizlikte halüsinasyon görür — "Altyazı M.K.", "Abone olun" gibi
@@ -275,6 +351,16 @@ mod tests {
     }
 
     // ── Halüsinasyon filtresi ────────────────────────────────────────────
+
+    #[test]
+    fn a_gemini_answer_is_read_from_its_parts() {
+        let v = serde_json::json!({"candidates": [{"content": {"parts": [
+            {"text": "hava "}, {"text": "nasıl"}
+        ]}}]});
+        assert_eq!(gemini_text(&v), "hava nasıl");
+        assert_eq!(gemini_text(&serde_json::json!({})), "");
+        assert!(gemini_instruction("tr").contains("'tr'"));
+    }
 
     #[test]
     fn whisper_hallucinations_are_filtered() {
