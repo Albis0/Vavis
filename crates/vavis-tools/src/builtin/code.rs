@@ -525,6 +525,7 @@ mod tests {
 
     #[test]
     fn edits_and_reads_go_through_the_workspace() {
+        let _guard = workspace::test_lock();
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(
             dir.path().join("main.rs"),

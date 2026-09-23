@@ -72,11 +72,17 @@ pub fn resolve(relative: &str) -> Result<PathBuf, String> {
         }
     }
 
-    // Belt and braces: symlinks could still point outside, so the resolved
-    // path is checked against the root.
-    if let (Ok(canonical), Ok(canonical_root)) = (out.canonicalize(), root.canonicalize()) {
-        if !canonical.starts_with(&canonical_root) {
-            return Err("path may not leave the workspace".into());
+    // Symlinks could still point outside, so the resolved path is checked
+    // against the root. A file about to be created does not exist yet and
+    // cannot be resolved, so its nearest existing folder is checked instead:
+    // otherwise `link/new.txt`, with `link` pointing at the home folder,
+    // would write there.
+    if let Ok(canonical_root) = root.canonicalize() {
+        let existing = out.ancestors().find(|p| p.exists());
+        if let Some(canonical) = existing.and_then(|p| p.canonicalize().ok()) {
+            if !canonical.starts_with(&canonical_root) {
+                return Err("path may not leave the workspace".into());
+            }
         }
     }
 
@@ -159,7 +165,16 @@ pub fn write(relative: &str, content: &str) -> Result<(), String> {
     }
 
     let tmp = path.with_extension("vavis-tmp");
-    std::fs::write(&tmp, content).map_err(|e| format!("write failed: {e}"))?;
+    // A fresh file, never whatever is already there: a repository could ship
+    // `main.vavis-tmp` as a link to a file elsewhere, and writing through it
+    // would put the content there.
+    let _ = std::fs::remove_file(&tmp);
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&tmp)
+        .and_then(|mut f| std::io::Write::write_all(&mut f, content.as_bytes()))
+        .map_err(|e| format!("write failed: {e}"))?;
     std::fs::rename(&tmp, &path).map_err(|e| {
         let _ = std::fs::remove_file(&tmp);
         format!("save failed: {e}")
@@ -213,6 +228,12 @@ fn walk(root: &Path, dir: &Path, visit: &mut impl FnMut(&Path, &str)) {
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().to_string();
 
+        // Links are not followed: one pointing at its own folder would recurse
+        // until the path got too long, and one pointing at the home folder
+        // would search it. (On Windows this covers junctions too.)
+        if entry.file_type().is_ok_and(|t| t.is_symlink()) {
+            continue;
+        }
         if path.is_dir() {
             if !SKIP_DIRS.contains(&name.as_str()) {
                 walk(root, &path, visit);
@@ -229,17 +250,19 @@ fn walk(root: &Path, dir: &Path, visit: &mut impl FnMut(&Path, &str)) {
     }
 }
 
+/// The open workspace is process-global, so every test that opens one takes
+/// this first -- here and in the tools built on top.
+#[cfg(test)]
+pub(crate) fn test_lock() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// The open workspace is process-global, so these tests are serialised.
-    fn test_lock() -> std::sync::MutexGuard<'static, ()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-    }
 
     fn workspace(files: &[(&str, &str)], f: impl FnOnce()) {
         let _guard = test_lock();
@@ -271,6 +294,57 @@ mod tests {
             assert!(resolve("/etc/passwd").is_err());
             assert!(resolve("C:/Windows/system.ini").is_err());
             assert!(resolve("a.rs").is_ok());
+        });
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_link_out_of_the_workspace_is_refused_even_for_a_new_file() {
+        let outside = tempfile::tempdir().unwrap();
+        workspace(&[("a.rs", "")], || {
+            let root = current_root().unwrap();
+            std::os::unix::fs::symlink(outside.path(), root.join("out")).unwrap();
+
+            assert!(resolve("out/new.txt").is_err());
+            assert!(resolve("out/deeper/new.txt").is_err());
+            assert!(write("out/new.txt", "x").is_err());
+            assert!(!outside.path().join("new.txt").exists());
+            // A new file in a real folder is fine.
+            assert!(write("src/new.txt", "x").is_ok());
+        });
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn writing_never_goes_through_a_planted_temp_link() {
+        let outside = tempfile::tempdir().unwrap();
+        let victim = outside.path().join("victim.txt");
+        std::fs::write(&victim, "original").unwrap();
+        workspace(&[("main.rs", "fn main() {}")], || {
+            let root = current_root().unwrap();
+            std::os::unix::fs::symlink(&victim, root.join("main.vavis-tmp")).unwrap();
+
+            write("main.rs", "changed").unwrap();
+
+            assert_eq!(std::fs::read_to_string(&victim).unwrap(), "original");
+            assert_eq!(read("main.rs").unwrap(), "changed");
+        });
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn search_does_not_follow_links() {
+        let outside = tempfile::tempdir().unwrap();
+        std::fs::write(outside.path().join("secret.txt"), "needle outside").unwrap();
+        workspace(&[("a.txt", "needle inside")], || {
+            let root = current_root().unwrap();
+            std::os::unix::fs::symlink(outside.path(), root.join("out")).unwrap();
+            // And a loop, which would recurse until the path got too long.
+            std::os::unix::fs::symlink(&root, root.join("loop")).unwrap();
+
+            let hits = grep("needle", 50).unwrap();
+            assert_eq!(hits.len(), 1, "{hits:?}");
+            assert_eq!(hits[0].0, "a.txt");
         });
     }
 

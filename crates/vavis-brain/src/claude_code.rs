@@ -74,7 +74,8 @@ const BUILTIN_TOOLS: &str = "WebSearch,WebFetch";
 /// -- every change still goes through Vavis's `ws_edit`/`ws_write`/`ws_run`
 /// and the gate -- and confined by the CLI to the working directory, which
 /// is the project; reading elsewhere needs a permission print mode cannot
-/// grant.
+/// grant. That only holds while they stay off `--allowedTools`: listed
+/// there, they read any file on the machine without asking.
 const CODE_READ_TOOLS: &str = "Read,Glob,Grep";
 
 /// How long the CLI may stay silent before the turn is abandoned.
@@ -357,14 +358,21 @@ pub fn args_for(
     .iter()
     .map(OsString::from)
     .collect();
-    args.push(builtin.clone().into());
+    args.push(builtin.into());
 
     args.push("--system-prompt-file".into());
     args.push(system_file.into());
 
     // One comma-separated value: `--allowedTools` is variadic and would
     // swallow whatever came after a space-separated list.
-    let mut allowed = builtin;
+    //
+    // The project's read tools are switched on above but not listed here.
+    // Inside the working directory the CLI lets them read without asking;
+    // outside it, it would ask, and print mode turns that into a no. Listing
+    // them would allow every path: checked by hand, a code turn then read a
+    // file outside the project on request -- and with WebFetch beside it, a
+    // page's instructions could have sent it anywhere.
+    let mut allowed = BUILTIN_TOOLS.to_string();
     if let Some(mcp) = mcp_file {
         args.push("--mcp-config".into());
         args.push(mcp.into());
@@ -1079,8 +1087,16 @@ mod tests {
         for writer in ["Edit", "Write", "Bash", "NotebookEdit"] {
             assert!(!tools.contains(writer), "{writer} is on: {tools}");
         }
+        // On, but not pre-approved: the CLI then keeps them inside the
+        // project by itself.
         let allowed = &line[line.iter().position(|a| a == "--allowedTools").unwrap() + 1];
-        assert!(allowed.contains("Read") && allowed.contains("mcp__vavis"));
+        assert!(allowed.contains("mcp__vavis"));
+        for reader in ["Read", "Glob", "Grep"] {
+            assert!(
+                !allowed.contains(reader),
+                "{reader} reads anywhere: {allowed}"
+            );
+        }
     }
 
     #[test]
