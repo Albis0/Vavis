@@ -44,6 +44,32 @@ impl std::fmt::Display for RpcError {
     }
 }
 
+/// Finds a bare command name on `path` the way the Windows shell would,
+/// `.cmd` and `.bat` included.
+///
+/// Starting a process looks for `name.exe` only. `npx` -- the command half
+/// of all MCP servers are configured with, and what the settings screen
+/// suggests -- is `npx.cmd`, so every such server failed with "program not
+/// found". Handed the full path, the standard library runs a `.cmd` through
+/// `cmd.exe` itself, escaping the arguments (or refusing ones it cannot
+/// escape safely).
+///
+/// `None` for a name with a folder or an extension already, or one that is
+/// not there.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn find_program(name: &str, path: &std::ffi::OsStr) -> Option<std::path::PathBuf> {
+    let bare = std::path::Path::new(name);
+    if name.contains(['/', '\\']) || bare.extension().is_some() {
+        return None;
+    }
+    std::env::split_paths(path).find_map(|dir| {
+        ["com", "exe", "bat", "cmd"]
+            .iter()
+            .map(|ext| dir.join(format!("{name}.{ext}")))
+            .find(|candidate| candidate.is_file())
+    })
+}
+
 fn next_id() -> i64 {
     static NEXT: AtomicI64 = AtomicI64::new(1);
     NEXT.fetch_add(1, Ordering::SeqCst)
@@ -65,7 +91,14 @@ impl StdioTransport {
         args: &[String],
         env: &[(String, String)],
     ) -> Result<Self, RpcError> {
-        let mut cmd = Command::new(command);
+        #[cfg(windows)]
+        let program = std::env::var_os("PATH")
+            .and_then(|path| find_program(command, &path))
+            .unwrap_or_else(|| command.into());
+        #[cfg(not(windows))]
+        let program = std::path::PathBuf::from(command);
+
+        let mut cmd = Command::new(program);
         cmd.args(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -347,5 +380,68 @@ mod tests {
                 "should name the problem: {err}"
             ),
         }
+    }
+
+    #[test]
+    fn a_bare_name_is_found_as_a_cmd_shim() {
+        let first = tempfile::tempdir().unwrap();
+        let second = tempfile::tempdir().unwrap();
+        std::fs::write(second.path().join("npx.cmd"), "@echo off").unwrap();
+        // A same-named file without an extension (npm ships one for Git
+        // Bash) is not what Windows would run.
+        std::fs::write(first.path().join("npx"), "#!/bin/sh").unwrap();
+        let path = std::env::join_paths([first.path(), second.path()]).unwrap();
+
+        assert_eq!(
+            find_program("npx", &path),
+            Some(second.path().join("npx.cmd"))
+        );
+        // .exe wins over .cmd in the same folder, as it does in the shell.
+        std::fs::write(second.path().join("npx.exe"), "").unwrap();
+        assert_eq!(
+            find_program("npx", &path),
+            Some(second.path().join("npx.exe"))
+        );
+    }
+
+    #[test]
+    fn a_path_or_an_extension_is_left_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("node.exe"), "").unwrap();
+        let path = std::env::join_paths([dir.path()]).unwrap();
+        assert_eq!(find_program("node.exe", &path), None);
+        assert_eq!(find_program("C:\\tools\\node", &path), None);
+        assert_eq!(find_program("./node", &path), None);
+        assert_eq!(find_program("missing", &path), None);
+    }
+
+    /// The whole way through on Windows: a server started by bare name
+    /// from a `.cmd` shim answers.
+    #[cfg(windows)]
+    #[test]
+    fn a_cmd_shim_server_starts_by_its_bare_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let script = dir.path().join("fake-mcp.cmd");
+        std::fs::write(
+            &script,
+            "@echo off\r\nset /p line=\r\n\
+             echo {\"jsonrpc\":\"2.0\",\"id\":%1,\"result\":{\"ok\":true}}\r\n",
+        )
+        .unwrap();
+        let path = std::env::join_paths([dir.path()]).unwrap();
+        let program = find_program("fake-mcp", &path).unwrap();
+        let out = std::process::Command::new(&program)
+            .arg("7")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut c| {
+                use std::io::Write;
+                c.stdin.take().unwrap().write_all(b"{}\r\n")?;
+                c.wait_with_output()
+            })
+            .unwrap();
+        let text = String::from_utf8_lossy(&out.stdout);
+        assert!(text.contains("\"id\":7"), "{text}");
     }
 }

@@ -82,6 +82,10 @@ Bir düzeltmenin hangi dosyaya dokunduğu git geçmişinde zaten var.
   okunduktan sonra yalnızca yıkıcı işlemler değil **her değişiklik** soruluyor:
   bir otomasyon kurmak da buna dahil, çünkü otomasyon daha sonra temiz bir
   turda çalışıp o sayfanın dediğini yapabilirdi.
+- **`npx` ile eklenen MCP sunucuları Windows'ta hiç başlamıyordu** ("program
+  bulunamadı") — MCP sunucularının neredeyse hepsinin kurulum şekli, ayar
+  ekranının da önerdiği buydu. `npx`, `npm`, `pnpm` gibi `.cmd` kısayolları
+  artık bulunuyor.
 - Adında köşeli parantez olan düğmeler, alanlar ve pencereler ("Sayfa [1]",
   "Belge [Salt okunur]") adıyla bulunamıyordu.
 - Çok satırlı bir metni yazdırırken her satır sonu Ctrl+Enter olarak
