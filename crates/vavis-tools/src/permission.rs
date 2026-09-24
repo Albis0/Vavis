@@ -90,12 +90,17 @@ impl PermissionGate {
         // to do" -- it cannot mean "I trust whatever a web page tells it to
         // do", because the user never sees that page. With the guard off, one
         // poisoned search result could run a command with nobody asked.
+        //
+        // Moderate changes count too, once the turn is suspect. Opening an
+        // app can open `powershell` with arguments, and an automation runs
+        // its prompt later in a clean turn where nothing is suspect any
+        // more -- "moderate" is a statement about the user's own requests,
+        // not about what a page can build out of them.
+        if self.tainted && risk != Risk::Safe {
+            return Decision::Ask(ApprovalReason::TaintedContext);
+        }
         if self.full_authority {
-            return if self.tainted && risk == Risk::Destructive {
-                Decision::Ask(ApprovalReason::TaintedContext)
-            } else {
-                Decision::Allow
-            };
+            return Decision::Allow;
         }
 
         match risk {
@@ -302,9 +307,32 @@ mod tests {
             gate.check("run_command", Risk::Destructive),
             Decision::Ask(ApprovalReason::TaintedContext)
         );
-        // Looking and moderate changes still go through.
+        // Looking still goes through; changing anything asks.
         assert_eq!(gate.check("read_file", Risk::Safe), Decision::Allow);
-        assert_eq!(gate.check("set_volume", Risk::Moderate), Decision::Allow);
+        assert_eq!(
+            gate.check("launch_app", Risk::Moderate),
+            Decision::Ask(ApprovalReason::TaintedContext)
+        );
+    }
+
+    /// A standing "always allow" for a moderate tool does not survive a
+    /// page that gave orders either: opening an app or scheduling an
+    /// automation is enough to turn the page's words into a command.
+    #[test]
+    fn a_suspect_turn_asks_before_moderate_changes_too() {
+        let mut gate = PermissionGate::new();
+        gate.grant_always("create_automation");
+        assert_eq!(
+            gate.check("create_automation", Risk::Moderate),
+            Decision::Allow
+        );
+
+        gate.mark_tainted();
+        assert_eq!(
+            gate.check("create_automation", Risk::Moderate),
+            Decision::Ask(ApprovalReason::TaintedContext)
+        );
+        assert_eq!(gate.check("read_file", Risk::Safe), Decision::Allow);
     }
 
     #[test]

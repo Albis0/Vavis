@@ -109,8 +109,77 @@ impl Tool for LaunchApp {
         if name.contains('"') || name.contains(';') || name.contains('|') || name.contains('&') {
             return ToolOutcome::err("uygulama adında geçersiz karakter var");
         }
-        launch_platform(name, arg_str(args, "args"))
+        let arguments = arg_str(args, "args");
+        if runs_code(name, arguments) {
+            return ToolOutcome::err(format!(
+                "{name} bir komut çalıştırıcı; uygulama açar gibi açılmaz. \
+                 Komut çalıştırmak için run_command kullan."
+            ));
+        }
+        launch_platform(name, arguments)
     }
+}
+
+/// Programs whose job is to run whatever they are handed.
+///
+/// Opening one of them with arguments is running a command, and running a
+/// command is `run_command`'s job -- which asks every time and counts
+/// against the turn's budget, where opening an app is allowed once for the
+/// session. Without this, `launch_app("powershell", "-c …")` was the same
+/// power at the lower price.
+const RUNS_CODE: &[&str] = &[
+    "powershell",
+    "pwsh",
+    "cmd",
+    "wscript",
+    "cscript",
+    "mshta",
+    "wsl",
+    "bash",
+    "sh",
+    "rundll32",
+    "regsvr32",
+    "schtasks",
+    "reg",
+    "msiexec",
+    "certutil",
+    "bitsadmin",
+    "wmic",
+    "forfiles",
+    "conhost",
+    "python",
+    "pythonw",
+    "py",
+    "node",
+    "java",
+    "javaw",
+];
+
+/// Files Windows runs rather than opens.
+const RUNS_AS_CODE: &[&str] = &[
+    "bat", "cmd", "ps1", "psm1", "vbs", "vbe", "js", "jse", "wsf", "wsh", "hta", "scr", "pif",
+    "com", "msi", "reg", "jar",
+];
+
+fn runs_code(name: &str, arguments: Option<&str>) -> bool {
+    // Forward slashes: a separator on Windows too, and the only one the
+    // path parser knows elsewhere, so the tests read Windows paths right.
+    let normalized = name.trim().trim_matches('\'').replace('\\', "/");
+    let path = std::path::Path::new(&normalized);
+    let stem = path
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    let ext = path
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    let has_args = arguments.is_some_and(|a| !a.trim().is_empty());
+
+    let interpreter = (ext.is_empty() || ext == "exe") && RUNS_CODE.contains(&stem.as_str());
+    // Explorer opens folders, which is fine; handed a file, it runs it.
+    let explorer_with_a_file = stem == "explorer" && has_args;
+    interpreter || explorer_with_a_file || RUNS_AS_CODE.contains(&ext.as_str())
 }
 
 #[cfg(windows)]
@@ -470,6 +539,42 @@ mod tests {
             assert!(!out.ok, "'{evil}' reddedilmeliydi");
             assert!(out.content.contains("geçersiz"));
         }
+    }
+
+    #[test]
+    fn launch_will_not_run_a_command_in_disguise() {
+        for (name, args) in [
+            ("powershell", Some("-c Remove-Item ~ -Recurse")),
+            (
+                "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+                None,
+            ),
+            ("PWSH.EXE", None),
+            ("cmd", Some("/c del *")),
+            ("mshta", Some("http://x/y.hta")),
+            ("C:\\Users\\a\\Downloads\\setup.bat", None),
+            ("invoice.vbs", None),
+            ("explorer", Some("C:\\evil.exe")),
+        ] {
+            let mut a = serde_json::json!({"name": name});
+            if let Some(args) = args {
+                a["args"] = args.into();
+            }
+            let out = LaunchApp.run(&a);
+            assert!(!out.ok, "{name} {args:?} was launched");
+            assert!(out.content.contains("run_command"), "{}", out.content);
+        }
+        // Apps, documents, folders and links are what it is for.
+        for name in [
+            "notepad",
+            "chrome",
+            "C:\\a\\report.pdf",
+            "spotify:",
+            "explorer",
+        ] {
+            assert!(!runs_code(name, None), "{name} refused");
+        }
+        assert!(!runs_code("code", Some("C:\\project")));
     }
 
     #[test]

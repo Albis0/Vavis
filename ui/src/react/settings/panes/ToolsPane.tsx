@@ -68,9 +68,9 @@ export default function ToolsPane({ tools, fullAuthority, ontoggle }: Props) {
                     <span>Full authority — don't ask me</span>
                 </label>
                 <p className="blurb">
-                    Even with full authority, destructive actions still ask after the assistant reads
-                    something that tries to give it orders — you trust your own requests, not a
-                    stranger's web page — and requests from the phone always ask.
+                    Even with full authority, anything that changes something still asks after the
+                    assistant reads something that tries to give it orders — you trust your own
+                    requests, not a stranger's web page — and requests from the phone always ask.
                 </p>
             </Section>
 
