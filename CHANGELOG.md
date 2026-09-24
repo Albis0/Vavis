@@ -75,6 +75,13 @@ Bir düzeltmenin hangi dosyaya dokunduğu git geçmişinde zaten var.
 - **Uygulama açarken verilen argümanlar komut olarak çalışabiliyordu**
   (`x & başka-komut`). Uygulamalar artık kabuk üzerinden değil, doğrudan
   Windows'un açma işleviyle başlatılıyor.
+- **Onay kapısında iki arka kapı vardı.** "Uygulama aç" aracı PowerShell'i
+  argümanlarla açabiliyordu (yani komut çalıştırıyordu), ama komut
+  çalıştırmanın onayını istemeden. Artık komut çalıştırıcıları ve betik
+  dosyalarını açmayı reddediyor. Ayrıca talimat vermeye çalışan bir sayfa
+  okunduktan sonra yalnızca yıkıcı işlemler değil **her değişiklik** soruluyor:
+  bir otomasyon kurmak da buna dahil, çünkü otomasyon daha sonra temiz bir
+  turda çalışıp o sayfanın dediğini yapabilirdi.
 - Adında köşeli parantez olan düğmeler, alanlar ve pencereler ("Sayfa [1]",
   "Belge [Salt okunur]") adıyla bulunamıyordu.
 - Çok satırlı bir metni yazdırırken her satır sonu Ctrl+Enter olarak
