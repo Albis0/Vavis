@@ -71,14 +71,14 @@ fn play_file(path: &std::path::Path, cancel: &AtomicBool) -> Result<()> {
     let script = format!(
         "Add-Type -AssemblyName presentationCore; \
          $p = New-Object System.Windows.Media.MediaPlayer; \
-         $p.Open([uri]'{}'); \
+         $p.Open([uri]{}); \
          Start-Sleep -Milliseconds 400; \
          $p.Play(); \
          $d = $p.NaturalDuration.TimeSpan.TotalMilliseconds; \
          if ($d -le 0) {{ $d = 3000 }}; \
          Start-Sleep -Milliseconds $d; \
          $p.Stop(); $p.Close()",
-        path.display()
+        vavis_core::process::ps_quote(&path.display().to_string())
     );
 
     let mut child = vavis_core::process::hidden(&mut Command::new("powershell"))

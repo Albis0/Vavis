@@ -508,9 +508,9 @@ impl TtsEngine {
 fn speak_platform(text: &str, config: &TtsConfig) -> Result<()> {
     use std::process::Command;
 
-    // Metni PowerShell'e güvenle geçirmek: tek tırnaklar ikilenir.
-    // Komut enjeksiyonu riski yok — metin veri olarak kalıyor.
-    let safe = text.replace('\'', "''");
+    // Metni PowerShell'e güvenle geçirmek: bütün tek tırnak türleri
+    // (’ dahil) ikilenir — bkz. `ps_quote`. Metin veri olarak kalıyor.
+    let spoken = vavis_core::process::ps_quote(text);
 
     let voice_line = if config.voice.trim().is_empty() {
         // Ses seçilmemişse dile uyan ilk sesi seç.
@@ -532,8 +532,8 @@ fn speak_platform(text: &str, config: &TtsConfig) -> Result<()> {
         )
     } else {
         format!(
-            "try {{ $s.SelectVoice('{}') }} catch {{ }};",
-            config.voice.replace('\'', "''")
+            "try {{ $s.SelectVoice({}) }} catch {{ }};",
+            vavis_core::process::ps_quote(&config.voice)
         )
     };
 
@@ -541,7 +541,7 @@ fn speak_platform(text: &str, config: &TtsConfig) -> Result<()> {
         "Add-Type -AssemblyName System.Speech; \
          $s = New-Object System.Speech.Synthesis.SpeechSynthesizer; \
          $s.Rate = {}; $s.Volume = {}; {voice_line} \
-         $s.Speak('{safe}')",
+         $s.Speak({spoken})",
         config.rate.clamp(-10, 10),
         config.volume.min(100),
     );
@@ -774,7 +774,8 @@ mod tests {
     fn quotes_in_text_do_not_break_the_script() {
         // Tek tırnak PowerShell'de string'i kapatır — ikilenmeli.
         let text = "O'nun dediği 'şey' buydu";
-        let escaped = text.replace('\'', "''");
+        let quoted = vavis_core::process::ps_quote(text);
+        let escaped = &quoted[1..quoted.len() - 1];
 
         assert!(escaped.contains("O''nun"));
         // Metindeki 3 tırnağın her biri ikilenmiş olmalı.

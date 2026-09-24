@@ -67,6 +67,20 @@ Bir düzeltmenin hangi dosyaya dokunduğu git geçmişinde zaten var.
 - Kod araçları, proje içindeki bir kısayol (symlink) üzerinden proje dışına
   yeni dosya yazabiliyordu; aramada kendine dönen bir kısayol sonsuz döngüye
   sokuyordu. İkisi de kapandı.
+- **Kıvrık tırnaklı ("it’s") bir metin PowerShell komutu çalıştırabiliyordu.**
+  PowerShell ’ ‘ ‚ ‛ işaretlerini de tırnak sayıyor; yalnızca düz `'`
+  kaçırılıyordu. Sesli okuma, pano, pencere kontrolleri, ekran görüntüsü —
+  metin geçiren her yer hem bu yüzden bozuluyordu hem de dışarıdan gelen bir
+  metinle komut çalıştırılabiliyordu. Artık her tırnak türü kaçırılıyor.
+- **Uygulama açarken verilen argümanlar komut olarak çalışabiliyordu**
+  (`x & başka-komut`). Uygulamalar artık kabuk üzerinden değil, doğrudan
+  Windows'un açma işleviyle başlatılıyor.
+- Adında köşeli parantez olan düğmeler, alanlar ve pencereler ("Sayfa [1]",
+  "Belge [Salt okunur]") adıyla bulunamıyordu.
+- Çok satırlı bir metni yazdırırken her satır sonu Ctrl+Enter olarak
+  gidiyordu — Teams, Slack, Outlook'ta mesaj yarıda gönderiliyordu.
+- Kullanıcı adında `'` olan bilgisayarlarda (O'Brien) ses dosyaları
+  çalınamıyordu.
 - Telefondan: Vavis botu bir gruba eklenirse cevaplar ve onay soruları gruba
   gidiyordu; artık yalnızca botla özel sohbet geçerli.
 

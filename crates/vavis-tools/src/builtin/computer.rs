@@ -585,6 +585,13 @@ fn escape_sendkeys(text: &str) -> String {
                 out.push(c);
                 out.push('}');
             }
+            // A bare line feed goes out as Ctrl+Enter -- which sends the
+            // message in Teams, Slack or Outlook halfway through typing it.
+            // A new line is the Enter key; the carriage return of a CRLF
+            // pair would press it twice.
+            '\n' => out.push_str("{ENTER}"),
+            '\r' => {}
+            '\t' => out.push_str("{TAB}"),
             c => out.push(c),
         }
     }
@@ -776,9 +783,9 @@ fn type_platform(text: &str) -> ToolOutcome {
     let sends: Vec<String> = type_chunks(text, TYPE_CHUNK)
         .iter()
         .map(|chunk| {
-            let escaped = escape_sendkeys(chunk).replace('\'', "''");
+            let keys = vavis_core::process::ps_quote(&escape_sendkeys(chunk));
             format!(
-                "[System.Windows.Forms.SendKeys]::SendWait('{escaped}'); \
+                "[System.Windows.Forms.SendKeys]::SendWait({keys}); \
                  Start-Sleep -Milliseconds {TYPE_CHUNK_MS}"
             )
         })
@@ -804,10 +811,10 @@ fn type_platform(_text: &str) -> ToolOutcome {
 fn press_platform(sequence: &str, label: &str) -> ToolOutcome {
     use super::system::run_powershell;
 
-    let safe = sequence.replace('\'', "''");
+    let keys = vavis_core::process::ps_quote(sequence);
     let script = format!(
         "Add-Type -AssemblyName System.Windows.Forms; \
-         [System.Windows.Forms.SendKeys]::SendWait('{safe}')"
+         [System.Windows.Forms.SendKeys]::SendWait({keys})"
     );
 
     match run_powershell(&script) {
@@ -933,6 +940,13 @@ mod tests {
         assert_eq!(escape_sendkeys("100%"), "100{%}");
         assert_eq!(escape_sendkeys("f(x)"), "f{(}x{)}");
         assert_eq!(escape_sendkeys("a^b~c"), "a{^}b{~}c");
+    }
+
+    #[test]
+    fn a_new_line_is_the_enter_key_not_ctrl_enter() {
+        assert_eq!(escape_sendkeys("a\nb"), "a{ENTER}b");
+        assert_eq!(escape_sendkeys("a\r\nb"), "a{ENTER}b");
+        assert_eq!(escape_sendkeys("a\tb"), "a{TAB}b");
     }
 
     #[test]
