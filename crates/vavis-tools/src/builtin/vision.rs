@@ -92,14 +92,15 @@ fn capture_screen(window_title: Option<&str>) -> Result<String, String> {
     use super::system::run_powershell;
 
     let path = std::env::temp_dir().join(format!("vavis_screen_{}.png", std::process::id()));
-    let path_str = path.display().to_string().replace('\'', "''");
+    let path_str = vavis_core::process::ps_quote(&path.display().to_string());
 
     // Belirli bir pencere istendiyse önce onu öne getir.
     let focus = match window_title {
         Some(title) if !title.trim().is_empty() => {
-            let safe = title.replace('\'', "''");
+            let wanted = vavis_core::process::ps_quote(title);
             format!(
-                "$w = Get-Process | Where-Object {{ $_.MainWindowTitle -like '*{safe}*' }} | \
+                "$like = '*' + [WildcardPattern]::Escape({wanted}) + '*'; \
+                 $w = Get-Process | Where-Object {{ $_.MainWindowTitle -like $like }} | \
                  Select-Object -First 1; \
                  if ($w) {{ \
                    Add-Type -AssemblyName Microsoft.VisualBasic; \
@@ -117,7 +118,7 @@ fn capture_screen(window_title: Option<&str>) -> Result<String, String> {
          $bmp = New-Object System.Drawing.Bitmap($b.Width, $b.Height); \
          $g = [System.Drawing.Graphics]::FromImage($bmp); \
          $g.CopyFromScreen($b.Left, $b.Top, 0, 0, $bmp.Size); \
-         $bmp.Save('{path_str}', [System.Drawing.Imaging.ImageFormat]::Png); \
+         $bmp.Save({path_str}, [System.Drawing.Imaging.ImageFormat]::Png); \
          $g.Dispose(); $bmp.Dispose()"
     );
 

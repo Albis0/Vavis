@@ -102,10 +102,11 @@ pub fn format_elements(window: &str, elements: &[Element]) -> String {
 
 /// A PowerShell single-quoted literal. Inside single quotes PowerShell
 /// expands nothing -- no variables, no subexpressions -- and the only
-/// escape is a doubled quote. Anything the model or a window supplies goes
-/// through here and nowhere else.
+/// escape is a doubled quote (of any of the five kinds it accepts, see
+/// [`vavis_core::process::ps_quote`]). Anything the model or a window
+/// supplies goes through here and nowhere else.
 pub fn ps_literal(text: &str) -> String {
-    format!("'{}'", text.replace('\'', "''"))
+    vavis_core::process::ps_quote(text)
 }
 
 /// The prelude every script shares: UTF-8 output (Turkish control names
@@ -151,7 +152,7 @@ $win = $null
 if ($wanted -ne '') {{
     $cond = New-Object System.Windows.Automation.PropertyCondition($A::ControlTypeProperty, [System.Windows.Automation.ControlType]::Window)
     foreach ($w in $A::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, $cond)) {{
-        if ($w.Current.Name -like ('*' + $wanted + '*')) {{ $win = $w; break }}
+        if ($w.Current.Name -like ('*' + [WildcardPattern]::Escape($wanted) + '*')) {{ $win = $w; break }}
     }}
     if ($win -eq $null) {{ throw ('window not found: ' + $wanted) }}
 }} else {{
@@ -179,6 +180,9 @@ pub fn list_script(window: &str, filter: &str) -> String {
     format!(
         r#"{prelude}
 $filter = {filter}
+# Escaped: a name with brackets in it is a wildcard class to -like, and
+# "Page [1]" would never match itself ("Save [" would throw).
+$like = '*' + [WildcardPattern]::Escape($filter) + '*'
 '#WINDOW ' + $win.Current.Name
 $n = 0
 foreach ($e in $win.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)) {{
@@ -186,7 +190,7 @@ foreach ($e in $win.FindAll([System.Windows.Automation.TreeScope]::Descendants, 
     if ($kinds -notcontains $kind) {{ continue }}
     if (-not (Visible $e)) {{ continue }}
     $name = ($e.Current.Name -replace '[\x00-\x1f]', ' ').Trim()
-    if ($filter -ne '' -and $name -notlike ('*' + $filter + '*') -and $kind -notlike $filter) {{ continue }}
+    if ($filter -ne '' -and $name -notlike $like -and $kind -ne $filter) {{ continue }}
     $c = Center $e
     $kind + [char]31 + $name + [char]31 + $e.Current.AutomationId + [char]31 + $c[0] + [char]31 + $c[1] + [char]31 + $e.Current.IsEnabled
     $n++
@@ -215,6 +219,7 @@ $name = {name}
 $kind = {kind}
 $action = {action}
 $text = {text}
+$like = '*' + [WildcardPattern]::Escape($name) + '*'
 $exact = @(); $partial = @()
 foreach ($e in $win.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)) {{
     $k = $e.Current.ControlType.ProgrammaticName -replace '^ControlType\.', ''
@@ -222,7 +227,7 @@ foreach ($e in $win.FindAll([System.Windows.Automation.TreeScope]::Descendants, 
     if (-not (Visible $e)) {{ continue }}
     $n = $e.Current.Name.Trim()
     if ($n -eq $name -or $e.Current.AutomationId -eq $name) {{ $exact += $e }}
-    elseif ($n -like ('*' + $name + '*')) {{ $partial += $e }}
+    elseif ($n -like $like) {{ $partial += $e }}
 }}
 $found = @($exact + $partial)
 if ($found.Count -eq 0) {{ throw ('no control named: ' + $name) }}
@@ -634,6 +639,21 @@ mod tests {
         assert!(s.contains("$wanted = 'Not''epad'"));
         assert!(s.contains("$name = 'Kay''det'"));
         assert!(s.contains("$text = 'x''y'"));
+
+        // The typographic apostrophe closes a PowerShell string too.
+        let s = act_script("", "it\u{2019}s", "", 0, "invoke", "");
+        assert!(s.contains("$name = 'it\u{2019}\u{2019}s'"), "{s}");
+    }
+
+    #[test]
+    fn names_are_matched_as_text_not_as_wildcards() {
+        // "Page [1]" is a character class to -like and never matched itself;
+        // "Save [" threw.
+        let s = act_script("", "Page [1]", "", 0, "invoke", "");
+        assert!(s.contains("[WildcardPattern]::Escape($name)"));
+        let s = list_script("", "[x]");
+        assert!(s.contains("[WildcardPattern]::Escape($filter)"));
+        assert!(prelude("Doc [1]").contains("[WildcardPattern]::Escape($wanted)"));
     }
 
     #[test]

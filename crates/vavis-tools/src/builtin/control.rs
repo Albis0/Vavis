@@ -115,22 +115,49 @@ impl Tool for LaunchApp {
 
 #[cfg(windows)]
 fn launch_platform(name: &str, arguments: Option<&str>) -> ToolOutcome {
-    use std::process::Command;
-
-    // `cmd /C start` kabuk kısayollarını (chrome, spotify…) da çözer.
-    let mut cmd = Command::new("cmd");
-    vavis_core::process::hidden(&mut cmd);
-    cmd.args(["/C", "start", ""]);
-    cmd.arg(name);
-    if let Some(a) = arguments {
-        for part in a.split_whitespace() {
-            cmd.arg(part);
-        }
+    // ShellExecute, what `start` calls underneath: it finds "chrome" and
+    // "spotify" through App Paths, opens documents and `ms-settings:` links
+    // with their handler. What it does not do is read the text as a command
+    // line. `cmd /C start` did, and only the name was checked -- arguments
+    // of `x & powershell …` ran the second command, from a tool that asks
+    // once and is then allowed for the session.
+    #[link(name = "shell32")]
+    extern "system" {
+        fn ShellExecuteW(
+            hwnd: isize,
+            operation: *const u16,
+            file: *const u16,
+            parameters: *const u16,
+            directory: *const u16,
+            show: i32,
+        ) -> isize;
     }
+    fn wide(s: &str) -> Vec<u16> {
+        s.encode_utf16().chain(std::iter::once(0)).collect()
+    }
+    const SW_SHOWNORMAL: i32 = 1;
 
-    match cmd.spawn() {
-        Ok(_) => ToolOutcome::ok(format!("{name} başlatıldı")),
-        Err(e) => ToolOutcome::err(format!("{name} başlatılamadı: {e}")),
+    let operation = wide("open");
+    let file = wide(name.trim());
+    let parameters = arguments.map(str::trim).filter(|a| !a.is_empty()).map(wide);
+    // SAFETY: every pointer is to a NUL-terminated buffer that outlives the
+    // call, or null where the API allows it.
+    let code = unsafe {
+        ShellExecuteW(
+            0,
+            operation.as_ptr(),
+            file.as_ptr(),
+            parameters.as_ref().map_or(std::ptr::null(), |p| p.as_ptr()),
+            std::ptr::null(),
+            SW_SHOWNORMAL,
+        )
+    };
+    // Above 32 is success; the rest are the documented error codes.
+    match code {
+        c if c > 32 => ToolOutcome::ok(format!("{name} başlatıldı")),
+        2 | 3 => ToolOutcome::err(format!("{name} bulunamadı")),
+        5 => ToolOutcome::err(format!("{name} başlatılamadı: erişim reddedildi")),
+        c => ToolOutcome::err(format!("{name} başlatılamadı (kod {c})")),
     }
 }
 
@@ -195,8 +222,8 @@ fn close_platform(name: &str) -> ToolOutcome {
     if name.contains('\'') || name.contains(';') {
         return ToolOutcome::err("geçersiz süreç adı");
     }
-    let stem = name.trim_end_matches(".exe");
-    let script = format!("Stop-Process -Name '{stem}' -Force -ErrorAction Stop");
+    let stem = vavis_core::process::ps_quote(name.trim_end_matches(".exe"));
+    let script = format!("Stop-Process -Name {stem} -Force -ErrorAction Stop");
 
     match run_powershell(&script) {
         Ok(_) => ToolOutcome::ok(format!("{name} kapatıldı")),
@@ -354,8 +381,8 @@ impl Tool for WriteClipboard {
 
 #[cfg(windows)]
 fn write_clipboard_platform(text: &str) -> ToolOutcome {
-    let safe = text.replace('\'', "''");
-    match run_powershell(&format!("Set-Clipboard -Value '{safe}'")) {
+    let value = vavis_core::process::ps_quote(text);
+    match run_powershell(&format!("Set-Clipboard -Value {value}")) {
         Ok(_) => ToolOutcome::ok(format!(
             "panoya kopyalandı ({} karakter)",
             text.chars().count()
