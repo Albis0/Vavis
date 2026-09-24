@@ -924,6 +924,15 @@ impl Turn<'_> {
             provider = %cfg.provider,
             "tools offered for this request"
         );
+        // An automation can hand in outside text as part of its prompt --
+        // file names from a watched folder, framed by the watcher. Orders in
+        // there make the turn suspect from its first step.
+        if history.last().is_some_and(|m| {
+            m.role == vavis_brain::Role::User && vavis_tools::untrusted::framed_orders(&m.content)
+        }) {
+            tracing::warn!("the request carries outside text that tries to instruct the model");
+            outside.store(true, Ordering::SeqCst);
+        }
 
         let mut system = self.identity.system_for(cfg.provider);
         if code {
