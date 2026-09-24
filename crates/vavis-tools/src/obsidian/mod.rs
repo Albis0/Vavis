@@ -291,6 +291,23 @@ fn link_matches(link: &str, stem: &str) -> bool {
 }
 
 fn collect(root: &Path, dir: &Path, out: &mut Vec<Note>) -> Result<(), String> {
+    collect_once(root, dir, out, &mut std::collections::HashSet::new())
+}
+
+/// Each real folder once. Linked folders are followed -- people link shared
+/// folders into a vault on purpose -- but a link back to a folder above it
+/// would otherwise recurse until the stack ran out and took the app down.
+fn collect_once(
+    root: &Path,
+    dir: &Path,
+    out: &mut Vec<Note>,
+    seen: &mut std::collections::HashSet<PathBuf>,
+) -> Result<(), String> {
+    if let Ok(real) = dir.canonicalize() {
+        if !seen.insert(real) {
+            return Ok(());
+        }
+    }
     let entries =
         std::fs::read_dir(dir).map_err(|e| format!("{} unreadable: {e}", dir.display()))?;
 
@@ -302,7 +319,7 @@ fn collect(root: &Path, dir: &Path, out: &mut Vec<Note>) -> Result<(), String> {
             if IGNORED_DIRS.contains(&name.as_str()) {
                 continue;
             }
-            collect(root, &path, out)?;
+            collect_once(root, &path, out, seen)?;
             continue;
         }
 
@@ -732,6 +749,23 @@ mod tests {
     fn search_on_an_empty_vault_returns_nothing() {
         let (_tmp, vault) = vault_with(&[]);
         assert!(vault.search("anything", 5).unwrap().is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_link_loop_in_the_vault_is_walked_once() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join("sub")).unwrap();
+        std::fs::write(dir.path().join("sub/a.md"), "# A").unwrap();
+        std::os::unix::fs::symlink(dir.path(), dir.path().join("sub/up")).unwrap();
+
+        let notes = Vault::new(dir.path().to_path_buf()).scan().unwrap();
+        assert_eq!(
+            notes.len(),
+            1,
+            "{:?}",
+            notes.iter().map(|n| &n.path).collect::<Vec<_>>()
+        );
     }
 
     #[test]
