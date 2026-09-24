@@ -102,7 +102,7 @@ bölümüne yedek sağlayıcılar ekleyebilirsin.
 | `Ctrl+B` | Sohbet panelini gizle / göster |
 | `Ctrl+M` | Ses modunu değiştir |
 | `Ctrl+S` | Açık dosyayı kaydet (kod ekranı) |
-| `Esc` | Konuşmayı kes |
+| `Esc` | Konuşmayı kes (bekleyen onay varsa reddeder) |
 | `F11` | Pencere modu |
 
 ---

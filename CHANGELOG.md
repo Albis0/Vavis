@@ -90,6 +90,8 @@ Bir düzeltmenin hangi dosyaya dokunduğu git geçmişinde zaten var.
   bulunamadı") — MCP sunucularının neredeyse hepsinin kurulum şekli, ayar
   ekranının da önerdiği buydu. `npx`, `npm`, `pnpm` gibi `.cmd` kısayolları
   artık bulunuyor.
+- Ayarlar → Shortcuts listesinde `Ctrl+K` ve `Ctrl+B` yoktu; `Ctrl+L` de
+  "sohbeti temizle" yazıyordu, oysa yeni sohbet açıp eskisini listede tutuyor.
 - Adında köşeli parantez olan düğmeler, alanlar ve pencereler ("Sayfa [1]",
   "Belge [Salt okunur]") adıyla bulunamıyordu.
 - Çok satırlı bir metni yazdırırken her satır sonu Ctrl+Enter olarak

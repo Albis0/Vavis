@@ -1,7 +1,7 @@
 # Sağlayıcı test listesi
 
-Vavis'te **8 sağlayıcı** var. Çoğu uygulama tek modele basıp geçiyor; bizim
-sekiz ayrı tuhaflıkla uğraşmamız gerekiyor. Bu dosya, bir sağlayıcıyı sağlama
+Vavis'te **14 sağlayıcı** var. Çoğu uygulama tek modele basıp geçiyor; bizim
+her birinin ayrı tuhaflıklarıyla uğraşmamız gerekiyor. Bu dosya, bir sağlayıcıyı sağlama
 alırken **sırayla neye bakılacağını** tutuyor.
 
 Her madde Groq'ta gerçekten bulunmuş bir hatadan geliyor. Uydurma senaryo yok —
@@ -24,6 +24,11 @@ hepsi canlı API'ye sorularak ortaya çıktı.
 | XAI (Grok) | ⬜ | |
 | Nvidia NIM | ⬜ | |
 | Anthropic | ⬜ | Ayrı gövde şeması — kendi yolu var (`anthropic.rs`) |
+| **Claude Code** | ✅ canlı denendi | API değil, `claude -p` programı; araçlar yerel MCP köprüsünden. `claude_code_agent_e2e` testleri gerçek CLI'ye karşı |
+| OpenRouter | ⬜ | `:free` modeller |
+| Cerebras | ⬜ | |
+| GitHub Models | ⬜ | Kişisel erişim anahtarıyla |
+| Custom | ⬜ | Kullanıcının verdiği OpenAI uyumlu adres |
 | Local (Ollama/LM Studio) | ⬜ | Anahtar istemez; ayrı kontroller |
 
 ---

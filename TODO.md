@@ -120,12 +120,12 @@ Status legend: `[x]` done and tested · `[~]` partly done · `[ ]` not started
 
 ## Heavy works
 
-- [~] **Computer use** — the loop is closed and the actions are human-like:
+- [x] **Computer use** — the loop is closed and the actions are human-like:
   - [x] the cursor travels to its target on an eased path instead of
         teleporting, so hover states fire and slow software sees it arrive
   - [x] typing is paced in chunks rather than dumped in one burst, which
         several applications drop half of
-  - [x] `ekran_bekle` is the check step: it waits for the screen to settle
+  - [x] `wait_for_screen` is the check step: it waits for the screen to settle
         and answers in one sentence, so the model does not send a full
         screenshot after every click. A blinking caret does not count as
         movement — the signature is a coarse 32×18 brightness map.
@@ -235,9 +235,10 @@ Status legend: `[x]` done and tested · `[~]` partly done · `[ ]` not started
 ## Checks
 
 ```
-cargo test --workspace          # 644 passing
-cargo clippy --workspace --all-targets
-cd ui && npm run check && npm run build
+cargo test --all                # 1000+ passing
+cargo clippy --all-targets -- -D warnings
+cargo clippy --target x86_64-pc-windows-gnu --all-targets -- -D warnings
+cd ui && bun run check && bun run test && bun run build
 ```
 
 Environment-dependent tests are `#[ignore]`d and run explicitly:

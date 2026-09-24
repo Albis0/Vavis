@@ -77,9 +77,11 @@ const LANGUAGES: [string, string][] = [
 const WINDOW_MODES = ["windowed", "borderless", "fullscreen"];
 
 const SHORTCUTS: [string, string][] = [
+    ["Ctrl + K", "command palette"],
     ["Ctrl + ,", "open settings"],
+    ["Ctrl + L", "new conversation (the old one stays in the list)"],
+    ["Ctrl + B", "hide or show the chat panel"],
     ["Ctrl + M", "cycle voice mode"],
-    ["Ctrl + L", "clear the conversation"],
     ["Ctrl + S", "save the open file (code interface)"],
     ["Esc", "stop speaking, or close this"],
     ["F11", "cycle window mode"],

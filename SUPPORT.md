@@ -2,29 +2,33 @@
 
 ## Getting started
 
-The [README](README.md) covers installation, the first API key, and the full
-command list. Most first-run problems are one of these:
+The [README](README.md) covers installation, the first provider and the
+shortcuts. Most first-run problems are one of these:
 
-**"no API key" on startup** — enter one with `/key groq gsk_...`. Groq has a
-free tier and powers both chat and speech recognition. Get a key at
-[console.groq.com](https://console.groq.com).
+**The assistant does not answer** — no provider is set up yet. Open
+**Settings → Model & keys** (`Ctrl+,`) and pick one. Free options: Claude Code
+on a Claude subscription (no key), or a free key from Gemini
+([aistudio.google.com](https://aistudio.google.com)) or Groq
+([console.groq.com](https://console.groq.com)). The **test** button next to
+each provider makes a real request to check it.
 
 **Windows SmartScreen warning** — expected and permanent. The binary is
 deliberately unsigned; [SECURITY.md](SECURITY.md) explains how to verify a
 download instead.
 
-**Voice does nothing** — speech recognition needs a Groq key even if you use
-a different provider for chat. Press `Ctrl+M` to cycle voice modes; the
-indicator left of the input line shows the current one.
+**Voice does nothing** — speech recognition needs a Groq or Gemini key, even
+if you chat through another provider. Press `Ctrl+M` to cycle voice modes. For
+the wake word, train it once in **Settings → Voice → Wake word**.
 
-**The assistant answers in the wrong language** — `/ayar dil en` (or `tr`,
-`de`, `fr`, `es`).
+**The assistant answers in the wrong language** — **Settings → General →
+Language** (English, Türkçe, Deutsch, Français, Español).
 
 ## Something is broken
 
-1. Press `F1` and note the version, provider and model.
-2. Check `%APPDATA%\vavis\data\logs\` — the daily log usually names the cause.
-   A `cokme.log` file only exists if the app crashed.
+1. Note the version (**Settings → Updates**) and the provider and model
+   (**Settings → Model & keys**).
+2. Check `%APPDATA%\vavis\data\logs\` — the daily `vavis.log` usually names
+   the cause. A `crash.log` file only exists if the app crashed.
 3. Open a [bug report](https://github.com/Albis0/Vavis/issues/new/choose).
 
 Include the log output. Keys never appear in logs, but glance before pasting.
@@ -46,7 +50,8 @@ occasional delays happen. Security reports get looked at first.
 ## What is out of scope
 
 - **Platforms other than Windows.** The app links Win32 APIs directly
-  (DPAPI, screen capture, media keys) with no cross-platform stand-in.
+  (DPAPI, UI Automation, screen capture, media keys) with no cross-platform
+  stand-in.
 - **Provider account problems.** Billing, rate limits and key issues belong
   to Groq, Anthropic, OpenAI and the rest.
 - **"Make it do X" without detail.** Describe the problem you are hitting;
