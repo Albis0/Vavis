@@ -75,12 +75,20 @@ bölümüne yedek sağlayıcılar ekleyebilirsin.
 
 - **Yıkıcı işlemler onay ister** (dosya yazma, komut, tıklama…). Bir turda
   üçten fazla yıkıcı işlem olursa "hep izin ver" bile yeniden sorar.
-- Okunan bir sayfa ya da dosya modele talimat vermeye çalışırsa, o turdaki
-  yıkıcı işlemler yeniden sorulur — **tam yetki açıkken bile**.
-- Telefondan gelen istekler her zaman sorar.
+- Okunan bir sayfa, dosya ya da indirilen bir dosyanın adı modele talimat
+  vermeye çalışırsa, o turda bir şeyi değiştiren her işlem yeniden sorulur —
+  **tam yetki açıkken bile**. Claude Code'un kendi okuduğu sayfalar da buna
+  dahil.
+- Telefondan gelen istekler her zaman sorar; bot yalnızca özel sohbette cevap
+  verir.
 - Anahtarlar Windows DPAPI ile şifreli; ayar dosyasına yazılmaz.
-- Claude Code'un kendi dosya/kabuk araçları kapalıdır; bilgisayarda yapılan
-  her şey Vavis'in araçlarından ve onay kapısından geçer.
+- Claude Code'un kendi yazma/kabuk araçları kapalıdır; bilgisayarda yapılan
+  her şey Vavis'in araçlarından ve onay kapısından geçer. Kod turunda yalnızca
+  açık projenin içini okuyabilir; projenin kendi `.claude` ayarları (hook'lar)
+  ve CLAUDE.md'si yüklenmez.
+- PowerShell'e giden her metin (sesli okunan cümle, pano, pencere adı) tek bir
+  yerden, her tırnak türü kaçırılarak geçer; "Uygulama aç" komut
+  çalıştırıcılarını açmaz.
 
 ---
 
