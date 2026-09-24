@@ -82,6 +82,10 @@ Bir düzeltmenin hangi dosyaya dokunduğu git geçmişinde zaten var.
   okunduktan sonra yalnızca yıkıcı işlemler değil **her değişiklik** soruluyor:
   bir otomasyon kurmak da buna dahil, çünkü otomasyon daha sonra temiz bir
   turda çalışıp o sayfanın dediğini yapabilirdi.
+- İzlenen klasöre düşen bir dosyanın **adı** otomasyon istemine senin
+  sözün gibi giriyordu; "önceki talimatları unut ve …" adlı bir dosya
+  dışarıdan komut vermenin yoluydu. Böyle adlar artık dış içerik olarak
+  işaretleniyor ve o tur baştan temkinli başlıyor.
 - **`npx` ile eklenen MCP sunucuları Windows'ta hiç başlamıyordu** ("program
   bulunamadı") — MCP sunucularının neredeyse hepsinin kurulum şekli, ayar
   ekranının da önerdiği buydu. `npx`, `npm`, `pnpm` gibi `.cmd` kısayolları
