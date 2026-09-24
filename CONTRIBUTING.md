@@ -4,65 +4,85 @@ How to set up the project, the conventions it follows, and how to submit changes
 
 ## Development setup
 
-Requirements: **Windows 10/11** and **Rust 1.85+**.
+Requirements: **Windows 10/11**, **Rust 1.85+** and **[Bun](https://bun.sh)**
+(for the interface). The WebView2 runtime ships with Windows 11 and current
+Windows 10.
 
 ```bash
 git clone https://github.com/Albis0/Vavis.git
 cd Vavis
+cd ui && bun install && bun run build && cd ..
 cargo run --release
 ```
 
-No `.env` file, no build step, no package install. API keys are entered
-in-app (`/key groq <key>`) and stored encrypted via Windows DPAPI.
+The interface is built once into `ui/dist/` and embedded in the executable;
+rebuild it after changing anything under `ui/`. There is no `.env` file: API
+keys are entered in the app (**Settings → Model & keys**, `Ctrl+,`) and stored
+encrypted with Windows DPAPI.
+
+The core, brain, tools and audio crates also build and test on Linux, where the
+Windows-only code is stubbed out. To check the Windows target from Linux:
+
+```bash
+rustup target add x86_64-pc-windows-gnu
+cargo clippy --target x86_64-pc-windows-gnu --all-targets -- -D warnings
+```
 
 ## Project layout
 
-Five crates, each a layer. **Dependencies point one way only** — a lower
-layer never knows about the one above it.
+Five crates and the interface, each a layer. **Dependencies point one way
+only** — a lower layer never knows about the one above it.
 
-| Crate | Layer | Contents |
+| Part | Layer | Contents |
 |---|---|---|
-| `vavis-core` | Foundation | Config, SQLite store, BM25 search, scheduler, logging, i18n |
-| `vavis-audio` | Senses | Microphone capture, VAD, speech-to-text, text-to-speech, speech queue |
-| `vavis-tools` | Hands | 32 tools, permission gate, tool selection, agent loop |
-| `vavis-brain` | Mind | LLM clients, context budget, key storage |
-| `vavis-ui` | Shell | egui interface, bridge, voice manager, automation ticker |
-
-The one-way rule is what makes the interface replaceable: swapping the UI
-touches nothing below it.
+| `ui/` | Interface | React + TypeScript (Vite), rendered in the Tauri window |
+| `vavis-shell` | Shell | Tauri window and commands, the chat turn, memory recall, event watcher, Telegram |
+| `vavis-tools` | Hands | Built-in tools, permission gate, tool selection, agent loop, MCP client and Claude Code bridge |
+| `vavis-brain` | Mind | Provider clients, the Claude Code CLI, embeddings, context budget, key storage |
+| `vavis-audio` | Senses | Microphone, VAD, wake word, speech-to-text, text-to-speech, Gemini Live |
+| `vavis-core` | Foundation | Config, SQLite store (conversations, memory, automations, gallery), search, scheduler, logging |
 
 ## Conventions
 
-**Language.** Code, comments, documentation, commit messages and issues are
-in English. User-facing strings go through `vavis-core::i18n` and are
-translated into five languages (en, tr, de, fr, es).
+**Language.** Code, commit messages and issues are in English; many older
+comments are in Turkish and stay as they are. The interface text is English;
+the **Language** setting (Settings → General) sets the language the assistant
+answers and speaks in.
 
 **Comments explain *why*, not *what*.** The code already says what it does.
 A comment earns its place by recording a decision, a constraint, or a trap
 someone would otherwise fall into again.
 
 **Tests are part of the change.** A bug fix without a test that fails before
-it is not finished. Run the whole suite before opening a PR:
+it is not finished. Run everything before opening a PR:
 
 ```bash
-cargo test              # 402 tests
-cargo clippy --all-targets   # must be clean
+cargo test --all                              # 1000+ tests
+cargo clippy --all-targets -- -D warnings     # must be clean
+cargo fmt --all -- --check
+cd ui && bun run check && bun run test        # type check + interface tests
 ```
 
 **Commits** follow [Conventional Commits](https://www.conventionalcommits.org/):
 `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`. The body explains
 the reasoning, not just the diff.
 
+**Versions** live in three places (`Cargo.toml`, `ui/package.json`,
+`crates/vavis-shell/tauri.conf.json`); `bun scripts/version.mjs --check` fails
+if they disagree.
+
 ## Invariants a change must not break
 
 These are load-bearing. Breaking one is a regression even if the tests pass.
 
-**1. The model never sees more than `MAX_TOOLS` (12) tools.**
+**1. A request offers at most 12 tools** (`DEFAULT_TOOL_BUDGET`).
 
 The predecessor project defined 353 tools and sent 64 on every request; no
-model chooses reliably from 64 options. Selection narrows by domain first.
+model chooses reliably from 64 options. Selection narrows by domain first, and
+a large domain is ranked by the tools the message names and cut at six.
 `crates/vavis-tools/tests/selection_eval.rs` measures this — it must stay at
-100% and the average must stay under 8.
+100% and the average must stay at or under 8. (Claude Code and code turns are
+the exception: they get every tool the job needs.)
 
 **2. Conversational messages get no tools at all.**
 
@@ -71,10 +91,8 @@ tool list to a chat message provokes needless tool calls.
 
 **3. Barge-in must not start the next utterance.**
 
-Pressing ESC clears the speech queue *before* stopping playback, and no
-callback runs in between. The predecessor project got this backwards: its
-stop function synchronously triggered the queue drain, which started the
-next sentence. See `crates/vavis-audio/src/queue.rs`.
+Stopping speech clears the queue *before* stopping playback, under one lock,
+and no callback runs in between. See `crates/vavis-audio/src/queue.rs`.
 
 **4. Everything counts against the context budget.**
 
@@ -82,10 +100,17 @@ System prompt, history, tool schemas *and* images. Images cost a flat 1,100
 tokens — counting their base64 length would blow the budget on a single
 screenshot. See `crates/vavis-brain/src/budget.rs`.
 
-**5. Destructive tools require approval, and the budget overrides grants.**
+**5. Anything that changes something asks, and the guards outrank grants.**
 
-After three destructive actions in one turn, "always allow" stops applying.
-See `crates/vavis-tools/src/permission.rs`.
+`Destructive` tools ask every time unless granted; after three destructive
+actions in one turn, "always allow" stops applying. Once a turn has read
+outside content that tries to give orders, every non-`Safe` tool asks again —
+even with full authority on. See `crates/vavis-tools/src/permission.rs`.
+
+**6. Outside text never reaches a PowerShell script unquoted.**
+
+Every value goes through `vavis_core::process::ps_quote`, which escapes all
+five single-quote characters PowerShell accepts, not only `'`.
 
 ## Adding a tool
 
@@ -97,13 +122,8 @@ See `crates/vavis-tools/src/permission.rs`.
    sentence, and check the eval still scores 100%.
 
 Watch the domain size: when one domain grows past a handful of tools it
-starts crowding core tools out of the 12-tool budget. That is what forced
-the System/Control split.
-
-## Adding a language
-
-Add a variant to `Lang` in `crates/vavis-core/src/i18n.rs`. The compiler will
-then refuse to build until every key has a translation — that is deliberate.
+starts crowding core tools out of the budget. That is what forced the
+System/Control split.
 
 ## Reporting bugs
 
@@ -113,5 +133,5 @@ public issue — see [SECURITY.md](SECURITY.md).
 ## Pull requests
 
 - One logical change per PR.
-- Tests pass, clippy is clean.
+- Tests pass, clippy is clean, the interface type-checks.
 - The description says *why*, and names any invariant the change touches.

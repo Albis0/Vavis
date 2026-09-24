@@ -1,230 +1,193 @@
 # VAVIS — Manuel Test Kılavuzu
 
-> Elle test edilmesi gereken her şey. Otomatik testler (393 tane) mantığı
-> doğruluyor; bu liste **gerçekte çalışıyor mu** sorusunu yanıtlıyor.
+> Otomatik testler (1000+) mantığı doğruluyor; bu liste **gerçek bir Windows
+> bilgisayarda gerçekten çalışıyor mu** sorusunu yanıtlıyor. Mikrofon,
+> hoparlör, pencereler ve gerçek hesaplar gerektiren her şey burada.
 >
-> Çalıştırma: `cargo run --release`
-> Kısayollar: `ESC` konuşmayı kes · `Ctrl+M` ses modu · `Ctrl+L` temizle · `F1` durum
+> Hazırlık: `cd ui && bun install && bun run build && cd ..` ve
+> `cargo run --release`
+>
+> Kısayollar: `Ctrl+K` komut paleti · `Ctrl+,` ayarlar · `Ctrl+L` yeni sohbet ·
+> `Ctrl+B` sohbet paneli · `Ctrl+M` ses modu · `Esc` konuşmayı kes · `F11` pencere
+
+Her bölümün sonunda bir not satırı var; beklenmeyen bir şey olursa oraya yaz.
 
 ---
 
 ## 0. Açılış (2 dk)
 
-- [ ] Pencere açıldı, terminal görünümü geldi
-- [ ] Karşılama mesajı göründü, anahtar yoksa uyarı verdi
-- [ ] `F1` → sistem durumu penceresi açılıyor (sürüm, tool sayısı, veri dizini)
-- [ ] Pencere yeniden boyutlandırılabiliyor, metin sarmalanıyor
-- [ ] Kapat–aç → önceki sohbet geri yükleniyor
+- [ ] Pencere açıldı; ortada reaktör, sağda sohbet paneli
+- [ ] `Ctrl+K` → komut paleti açılıyor, yazınca süzülüyor, `Esc` kapatıyor
+- [ ] `Ctrl+B` → sohbet paneli gizleniyor / geri geliyor; sol kenarından
+      sürükleyince genişliği değişiyor ve yeniden açınca hatırlanıyor
+- [ ] `F11` → pencere, çerçevesiz ve tam ekran modları arasında geçiyor
+- [ ] Kapat–aç → son sohbet geri geliyor
+- [ ] Ayarlar → Updates → sürüm doğru görünüyor
 
 **Not:** _______________________________________________
 
 ---
 
-## 1. Sohbet (3 dk)
+## 1. Sağlayıcı ve sohbet (5 dk)
 
-- [ ] `/key groq gsk_...` → "kaydedildi (şifreli)" mesajı
-- [ ] "merhaba" → cevap **harf harf akıyor** (tek seferde belirmiyor)
-- [ ] Türkçe soru → Türkçe cevap
-- [ ] `/models` → model listesi geliyor
-- [ ] `/model <başka-model>` → değişiyor, sonraki cevap o modelden
-- [ ] `/provider local` → anahtarsız çalışıyor (Ollama kuruluysa)
-- [ ] Uzun bir sohbet → eski mesajlar düşse de hata vermiyor
-
-**Anahtar güvenliği:**
-- [ ] `/keys` → sadece sağlayıcı adı görünüyor, **anahtarın kendisi yok**
-- [ ] `%APPDATA%\vavis\data\keys.dat` dosyasını Not Defteri'nde aç →
-      anahtar **düz metin olarak görünmüyor**
+- [ ] Ayarlar → Model & keys → bir sağlayıcı seç, anahtar ekle → **test**
+      düğmesi "çalışıyor" diyor; yanlış anahtarla net bir hata veriyor
+- [ ] Claude Code kuruluysa ve giriş yapılmışsa anahtarsız seçilebiliyor
+- [ ] "merhaba" → cevap **kelime kelime akıyor**, tek seferde belirmiyor
+- [ ] Türkçe soru → Türkçe cevap; Ayarlar → General → Language değişince
+      cevap dili de değişiyor
+- [ ] **change model** → liste geliyor, seçilen model sonraki cevapta kullanılıyor
+- [ ] Fallback'e ikinci bir sağlayıcı ekle, birincinin anahtarını boz → mesaj
+      yarıda kalmadan yedeğe geçiyor ve bunu söylüyor
+- [ ] Markdown: kod bloğu, liste ve tablo düzgün görünüyor
 
 **Not:** _______________________________________________
 
 ---
 
-## 2. Tool'lar — sohbet ayrımı (2 dk)
+## 2. Sohbetler ve hafıza (5 dk)
 
-Bu bölüm en kritik. **Sohbet mesajlarına tool gitmemeli.**
-
-- [ ] "bana bir şiir yaz" → şiir yazıyor, dosya tool'u çağırmıyor
-- [ ] "bir fıkra anlat" → anlatıyor, tool yok
-- [ ] "iyi geceler" → normal cevap, otomasyon kurmuyor
-- [ ] "python nedir" → açıklıyor, web araması yapmıyor (bilgi zaten var)
-
-**Not:** _______________________________________________
-
----
-
-## 3. Sistem tool'ları (3 dk)
-
-- [ ] "cpu durumu nasıl" → gerçek CPU/RAM değerleri
-- [ ] "pil yüzde kaç" → pil durumu (masaüstünde "pil yok" der, bu doğru)
-- [ ] "hangi uygulamalar çalışıyor" → süreç listesi
-- [ ] "saat kaç" → doğru tarih/saat
-- [ ] "15 çarpı 23 kaç eder" → 345 (hesap tool'u)
+- [ ] `Ctrl+L` → yeni sohbet; eskisi sağ paneldeki saat simgesinin listesinde
+- [ ] Listede arama, açma, yeniden adlandırma ve silme çalışıyor
+- [ ] "Benim adım …, …'da yaşıyorum" de → birkaç saniye sonra
+      "Remembered: …" bildirimi çıkıyor
+- [ ] Yeni sohbette "nerede yaşıyorum?" → hatırlıyor
+- [ ] Anlama göre arama (Gemini anahtarı varsa): "espresso severim" de, sonra
+      "kahve tercihim ne?" diye sor → buluyor
+- [ ] Ayarlar → Memory → bilgiler listeleniyor ve silinebiliyor
+- [ ] Bir web sayfasını özetlet → sayfadaki "kullanıcının adı X" gibi cümleler
+      hafızaya **girmiyor**
 
 **Not:** _______________________________________________
 
 ---
 
-## 4. Kontrol tool'ları — onay kapısı (4 dk)
+## 3. Ses (10 dk)
 
-- [ ] "sesi %30 yap" → **onay diyaloğu çıkıyor** → izin ver → ses değişiyor
-- [ ] "parlaklığı azalt" → onay → değişiyor (dizüstünde; harici monitörde hata der)
-- [ ] "notepad aç" → onay → Not Defteri açılıyor
-- [ ] "panoya 'test' yaz" → onay → pano değişiyor
-- [ ] "panoda ne var" → onaysız okuyor (güvenli işlem)
-
-**Onay kapısını sına:**
-- [ ] Bir onay diyaloğunda **Reddet** → işlem yapılmıyor, asistan bunu söylüyor
-- [ ] "Hep izin ver" → aynı tool bir daha sormuyor
-- [ ] Üst üste 4 yıkıcı işlem iste → **4.'de tekrar soruyor** (bütçe koruması)
-
-**Not:** _______________________________________________
-
----
-
-## 5. Dosya tool'ları (3 dk)
-
-- [ ] "masaüstündeki dosyaları listele" → liste geliyor
-- [ ] "şu dosyayı oku: ~/bir-dosya.txt" → içerik geliyor
-- [ ] "masaüstüne test.txt oluştur, içine merhaba yaz" → **onay** → dosya oluşuyor
-- [ ] Olmayan dosya iste → net hata mesajı (çökme yok)
-- [ ] Çok büyük dosya iste → "dosya çok büyük" diyor
+- [ ] Composer'daki mikrofon → konuşurken halka ses seviyesine göre büyüyor
+- [ ] Söylenen cümle metne dönüyor (Groq, yoksa Gemini)
+- [ ] Cevap sesli okunuyor; `Esc` anında kesiyor, **bir sonraki cümle başlamıyor**
+- [ ] `Ctrl+M` → ses modları arasında geçiyor, durum satırında görünüyor
+- [ ] Ayarlar → Voice → Wake word → adını üç kez söyle → eğitildi diyor
+- [ ] Uyandırma: adını söyleyince dinlemeye başlıyor; adın geçmeyen konuşmada
+      **hiçbir şey olmuyor** (log'da STT isteği yok)
+- [ ] Başka biri adını söyleyince davranışı not et (uyanmayabilir — bilinen sınır)
+- [ ] Komut paleti → **Start live conversation** (Gemini anahtarı gerekli):
+  - [ ] kesintisiz konuşuyor, sözünü kesince susuyor
+  - [ ] canlı konuşmada "saat kaç" gibi bir araç isteği çalışıyor
+  - [ ] **End live conversation** ile kapanıyor; konuşma sohbete yazılmış
+- [ ] Edge TTS 403 verirse SAPI'ye düşüyor ve bunu söylüyor
 
 **Not:** _______________________________________________
 
 ---
 
-## 6. Ses (5 dk)
+## 4. Onaylar ve güvenlik (10 dk)
 
-- [ ] `Ctrl+M` → "sürekli dinliyor" moduna geçiyor, gösterge değişiyor
-- [ ] Mikrofona konuş → metne çevriliyor, feed'e `🎤` ile düşüyor
-- [ ] Asistan cevabı **sesli okunuyor**
-- [ ] **Konuşurken `ESC`** → ses **anında** kesiliyor ve **sonraki cümleye geçmiyor**
-      ⚠️ Eski projedeki bug buydu — özellikle dene
-- [ ] `Ctrl+M` tekrar → "uyandırma kelimesi bekliyor"
-- [ ] "Vavis, saat kaç" → uyanıp cevaplıyor
-- [ ] Uyandırma kelimesi olmadan konuş → tepki vermiyor
-- [ ] `Ctrl+M` tekrar → ses kapanıyor
-- [ ] Asistan konuşurken mikrofon kendi sesini almıyor (sonsuz döngü yok)
-
-**Not:** _______________________________________________
-
----
-
-## 7. Görü ve computer use (4 dk)
-
-- [ ] "ekranımda ne var" → ekran görüntüsü alınıyor, **model gerçekten görüyor**
-      ve içeriği anlatıyor
-- [ ] "ekran boyutu nedir" → doğru çözünürlük
-- [ ] "şuraya tıkla: 500, 300" → **onay** → tıklıyor
-- [ ] "klavyeden 'test' yaz" → **onay** → yazıyor
-- [ ] "enter'a bas" → **onay** → basıyor
-- [ ] Ekran dışı koordinat iste → reddediyor
+- [ ] "Masaüstüne deneme.txt yaz" → onay mesajı sohbet akışında çıkıyor;
+      **Deny** → dosya oluşmuyor; **Allow** → oluşuyor
+- [ ] **Always allow** dedikten sonra aynı araç sormuyor; bir turda üçten fazla
+      yıkıcı işlemde yine soruyor
+- [ ] Ayarlar → Tools → **Full authority** açılınca onay sorusu gelmiyor
+- [ ] İçinde "ignore previous instructions" geçen bir sayfayı okut (ya da böyle
+      adlı bir dosyayı izlenen klasöre koy), ardından dosya yazdır → full
+      authority açıkken bile **soruyor**
+- [ ] "Uygulama aç: powershell" → reddediyor, `run_command`'ı öneriyor
+- [ ] Panoya `it’s a test` (kıvrık tırnaklı) yazdır → aynen kopyalanıyor
+- [ ] Çok satırlı bir metni Not Defteri'ne yazdır → satırlar ayrı, mesaj
+      uygulamalarında yarıda gönderilmiyor
 
 **Not:** _______________________________________________
 
 ---
 
-## 8. Medya (2 dk)
+## 5. Bilgisayar kontrolü (10 dk)
 
-Spotify veya YouTube açıkken:
-
-- [ ] "müziği duraklat" → **onay** → duruyor
-- [ ] "devam ettir" → çalıyor
-- [ ] "sonraki şarkı" → geçiyor
-- [ ] "ne çalıyor" → parça adını söylüyor
-
-**Not:** _______________________________________________
-
----
-
-## 9. Hafıza (3 dk)
-
-- [ ] "beni hatırla: kahveyi sade içerim" → kaydediyor, numara veriyor
-- [ ] "hakkımda ne biliyorsun" → kaydedileni söylüyor
-- [ ] "kahve hakkında ne biliyorsun" → **ek almış hâli de buluyor**
-      (BM25 + Türkçe ek eşleşmesi)
-- [ ] `/clear` → sohbet siliniyor ama **hafıza duruyor**
-- [ ] "hakkımda ne biliyorsun" → hâlâ hatırlıyor ✓
-- [ ] Uygulamayı kapat–aç → hâlâ hatırlıyor ✓
-- [ ] "#1'i unut" → **onay** → siliniyor
+- [ ] "Açık pencereleri listele" → doğru liste
+- [ ] Not Defteri açıkken "Not Defteri'ndeki düğmeleri listele" → kontroller
+      adlarıyla geliyor (`list_ui_elements`)
+- [ ] "Dosya menüsüne tıkla" → ekran görüntüsü almadan adıyla tıklıyor
+- [ ] "Metin alanına merhaba yaz" → `set_element_text` ile yazıyor
+- [ ] Adında `[1]` gibi köşeli parantez olan bir düğme adıyla bulunuyor
+- [ ] Tarayıcıda "aşağı kaydır" ve bir öğeyi "sürükle" çalışıyor
+- [ ] "Ekran görüntüsü al, ne görüyorsun?" → ekranı doğru tarif ediyor
+- [ ] Ses düzeyi, parlaklık (dizüstünde), medya tuşları, pano okuma çalışıyor
+- [ ] "Chrome'u aç", bir PDF'i aç, `ms-settings:` aç → hepsi açılıyor;
+      olmayan bir uygulama "bulunamadı" diyor
 
 **Not:** _______________________________________________
 
 ---
 
-## 10. Otomasyon (5 dk + bekleme)
+## 6. Otomasyonlar (10 dk)
 
-- [ ] "her 2 dakikada bir saati söyle" → otomasyon kuruluyor
-- [ ] "kurulu otomasyonları listele" → görünüyor
-- [ ] **2 dakika bekle** → `⏰ otomasyon #N` satırı düşüyor ve asistan çalışıyor
-- [ ] "pil 90'ın altına inince uyar" (pil %90'ın altındaysa hemen tetiklenir)
-- [ ] "otomasyon #1'i sil" → **onay** → siliniyor
-- [ ] Uygulamayı kapat–aç → otomasyonlar duruyor
-- [ ] `F1` → otomasyon sayısı doğru
-
-**Not:** _______________________________________________
-
----
-
-## 11. Web (2 dk)
-
-- [ ] "bugün hava nasıl" → web araması yapıp cevaplıyor
-- [ ] "şu sayfayı özetle: example.com" → sayfayı okuyup özetliyor
-- [ ] Erişilemeyen adres → net hata (çökme yok)
+- [ ] "2 dakika sonra bana su içmemi hatırlat" → zamanında tetikleniyor
+- [ ] İndirilenler klasörüne bağlı otomasyon ("VirusTotal ile kontrol et:
+      {file}") → dosya inip büyümesi bitince **bir kez** tetikleniyor; yarım
+      inen `.crdownload` dosyası tetiklemiyor
+- [ ] Bir program açılınca / kapanınca tetiklenen otomasyon çalışıyor
+- [ ] Vavis açılınca çalışan otomasyon (sabah özeti) açılıştan kısa süre sonra geliyor
+- [ ] Komut paleti → Automations → liste, kapatma ve silme çalışıyor
+- [ ] Meşgulken tetiklenen otomasyon kuyruğa alınıp cevap bitince çalışıyor
 
 **Not:** _______________________________________________
 
 ---
 
-## 12. Ayarlar (2 dk)
+## 7. Telefon — Telegram (10 dk)
 
-- [ ] `/ayarlar` → mevcut ayarlar listeleniyor
-- [ ] `/ayar isim Jarvis` → asistan adı değişiyor
-- [ ] `/ayar yazitipi 18` → "yeniden başlatınca etkili" diyor
-- [ ] Yeniden başlat → yazı tipi büyümüş
-- [ ] `/ayar pencere fullscreen` → yeniden başlat → tam ekran
-- [ ] `/ayar pencere windowed` → normale dönüyor
-- [ ] Geçersiz değer (`/ayar yazitipi abc`) → net hata
-
-**Not:** _______________________________________________
-
----
-
-## 13. Dayanıklılık (3 dk)
-
-- [ ] Cevap gelirken yeni mesaj yaz → "önceki cevap sürüyor" diyor, çökmüyor
-- [ ] İnternet bağlantısını kes → net hata mesajı ("bağlanılamadı")
-- [ ] Yanlış anahtar gir → "API anahtarı geçersiz" diyor
-- [ ] Çok uzun bir metin yapıştır → kırpıyor veya sığdırıyor, 413 hatası vermiyor
-- [ ] Ayar dosyasını (`vavis.toml`) elle boz → açılış çalışıyor,
-      `.toml.bozuk` yedeği oluşuyor
-- [ ] `logs/cokme.log` **boş olmalı** — doluysa oradaki hatayı bildir
+- [ ] Ayarlar → Phone → kendi bot token'ını gir, eşleştirme adımlarını izle
+- [ ] Eşleşen hesaptan yazılan mesaja cevap geliyor
+- [ ] Başka bir hesaptan yazınca cevap **gelmiyor**
+- [ ] Botu bir gruba ekle → grupta cevap **vermiyor**
+- [ ] Yıkıcı bir istek → telefonda düğmeli onay geliyor, full authority açıkken bile
+- [ ] "Bana telefondan söyle: …" → mesaj telefona düşüyor
+- [ ] `/yeni` → yeni sohbet başlıyor
 
 **Not:** _______________________________________________
 
 ---
 
-## Özet
+## 8. Kod ekranı (10 dk)
 
-| Bölüm | ✓ / ✗ / kısmi | Kritik sorun |
-|---|---|---|
-| 0. Açılış | | |
-| 1. Sohbet | | |
-| 2. Tool–sohbet ayrımı | | |
-| 3. Sistem | | |
-| 4. Kontrol + onay | | |
-| 5. Dosya | | |
-| 6. Ses + barge-in | | |
-| 7. Görü + computer use | | |
-| 8. Medya | | |
-| 9. Hafıza | | |
-| 10. Otomasyon | | |
-| 11. Web | | |
-| 12. Ayarlar | | |
-| 13. Dayanıklılık | | |
+- [ ] `Ctrl+K` → Code → bir proje klasörü aç, dosya ağacı geliyor
+- [ ] Bir dosyayı aç, düzenle, `Ctrl+S` → kaydediliyor
+- [ ] "Testleri çalıştır, hata varsa düzelt" → okuyor, düzenliyor, çalıştırıyor;
+      her düzenleme onaydan geçiyor ve açık dosya ekranda güncelleniyor
+- [ ] Claude Code ile: projenin dışındaki bir dosyayı okutmaya çalış → okuyamıyor
+- [ ] Projede `.claude/settings.json` içinde bir hook varsa **çalışmıyor**
 
-**Genel değerlendirme:** _______________________________________________
+**Not:** _______________________________________________
 
 ---
 
-*VAVIS · 32 tool · 393 otomatik test · manuel test ~40 dk*
+## 9. Entegrasyonlar (15 dk, hesabın olanlar)
+
+- [ ] **Web araması** — güncel bir soru → kaynaklı cevap; Ayarlar → Web search
+      sırası değişince ona uyuyor
+- [ ] **Görsel üretimi** — Canvas ekranında üret; galeriye düşüyor
+- [ ] **Konsey** — Council ekranında bir soru → birkaç modelin cevabı yan yana
+- [ ] **Spotify** — bağlan, "şunu çal", "sıraya ekle", şu an çalan paneli
+- [ ] **Steam** — kütüphane, "şu an ne oynuyorum", bir oyunu başlat (soruyor)
+- [ ] **Obsidian** — not ara, oku, oluştur; silinen not `.trash`'e gidiyor
+- [ ] **VirusTotal** — bir dosyayı sor; dosya yüklenmiyor, yalnızca hash soruluyor
+- [ ] **MCP** — Ayarlar → MCP servers → `npx` ile bir sunucu ekle → başlıyor,
+      araçları listeleniyor ve kullanılabiliyor
+
+**Not:** _______________________________________________
+
+---
+
+## 10. Kapanış (2 dk)
+
+- [ ] `%APPDATA%\vavis\data\` içinde `vavis.toml`, `vavis.db`, `keys.dat`,
+      `media\`, `logs\` var
+- [ ] `keys.dat` bir metin düzenleyicide açılınca anahtarlar okunamıyor
+- [ ] `logs\crash.log` **yok** — varsa içindeki hatayı bildir
+- [ ] Günlük `vavis.log`'da anahtar görünmüyor
+
+**Not:** _______________________________________________
+
+---
+
+*VAVIS · manuel test ~90 dk*

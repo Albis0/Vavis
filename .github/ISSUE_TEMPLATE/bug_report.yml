@@ -15,8 +15,8 @@ body:
     id: version
     attributes:
       label: VAVIS version
-      description: Press F1, or use the filename you downloaded
-      placeholder: "0.2.0"
+      description: Settings → Updates, or the filename you downloaded
+      placeholder: "0.8.0"
     validations:
       required: true
 
@@ -25,13 +25,19 @@ body:
     attributes:
       label: LLM provider
       options:
-        - Groq
-        - Anthropic (Claude)
-        - OpenAI
+        - Claude Code (subscription)
         - Gemini
+        - Groq
+        - Cerebras
+        - OpenRouter
+        - GitHub Models
         - Mistral
+        - NVIDIA
+        - OpenAI
+        - Anthropic (API key)
         - DeepSeek
         - xAI
+        - Custom endpoint
         - Local (Ollama / LM Studio)
         - Not applicable
     validations:
@@ -41,7 +47,7 @@ body:
     id: model
     attributes:
       label: Model
-      description: Which model was selected (F1 shows it)
+      description: Which model was selected (Settings → Model & keys)
       placeholder: "llama-3.3-70b-versatile"
 
   - type: textarea
@@ -61,7 +67,7 @@ body:
       label: Log output
       description: |
         From `%APPDATA%\vavis\data\logs\`. The daily log is usually enough;
-        include `cokme.log` if it exists (that file only appears after a crash).
+        include `crash.log` if it exists (that file only appears after a crash).
 
         **Check for API keys before pasting** — keys should never appear in
         logs, but glance anyway.
