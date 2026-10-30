@@ -71,15 +71,21 @@ struct DomainKeywords {
 /// Gerçek bir tarih sorusunda yanlarında "saat", "date" ya da "kaçı"
 /// gibi güçlü bir kelime bulunuyor.
 const WEAK_VERBS: &[&str] = &[
-    "yaz", "oku", "kaydet", "sil", "listele", "ara", "bul", "ac", "kapat", "goster", "write",
-    "read", "save", "delete", "list", "search", "find", "open", "close", "show", "bugun", "gun",
-    "zaman", "today",
+    "yaz", "oku", "kaydet", "sil", "listele", "ara", "bul", "goster", "write", "read", "save",
+    "delete", "list", "search", "find", "show", "bugun", "gun", "zaman", "today",
 ];
 
 const DOMAIN_KEYWORDS: &[DomainKeywords] = &[
     DomainKeywords {
         domain: Domain::Files,
         words: &[
+            "masaustu",
+            "masaüstü",
+            "desktop",
+            "indirilenler",
+            "downloads",
+            "documents",
+            "belgelerim",
             "dosya",
             "klasör",
             "klasor",
@@ -109,6 +115,8 @@ const DOMAIN_KEYWORDS: &[DomainKeywords] = &[
     DomainKeywords {
         domain: Domain::System,
         words: &[
+            "gb",
+            "depolama",
             "cpu",
             "ram",
             "bellek",
@@ -151,6 +159,18 @@ const DOMAIN_KEYWORDS: &[DomainKeywords] = &[
     DomainKeywords {
         domain: Domain::Control,
         words: &[
+            "calistir",
+            "kilitle",
+            "lock",
+            "wifi",
+            "bluetooth",
+            "ethernet",
+            "restart",
+            "reboot",
+            "shutdown",
+            "uyku",
+            "hibernate",
+            "vpn",
             "ses",
             "sesi",
             "volume",
@@ -235,6 +255,17 @@ const DOMAIN_KEYWORDS: &[DomainKeywords] = &[
     DomainKeywords {
         domain: Domain::Web,
         words: &[
+            "dolar",
+            "euro",
+            "borsa",
+            "altin",
+            "bitcoin",
+            "btc",
+            "skor",
+            "yagmur",
+            "sicaklik",
+            "deprem",
+            "kimdir",
             "web",
             "internet",
             "ara",
@@ -272,6 +303,8 @@ const DOMAIN_KEYWORDS: &[DomainKeywords] = &[
     DomainKeywords {
         domain: Domain::Automation,
         words: &[
+            "uyandir",
+            "uyandır",
             "otomasyon",
             "zamanla",
             "zamanlanmis",
@@ -401,6 +434,23 @@ const DOMAIN_KEYWORDS: &[DomainKeywords] = &[
         ],
     },
     DomainKeywords {
+        domain: Domain::Security,
+        words: &[
+            "virus",
+            "virustotal",
+            "zararli",
+            "malware",
+            "trojan",
+            "tehlikeli",
+            "guvenli",
+            "itibar",
+            "reputation",
+            "hash",
+            "sha256",
+            "md5",
+        ],
+    },
+    DomainKeywords {
         domain: Domain::Canvas,
         // "çiz" ve "resim çiz" gibi kısa kökler bilinçli olarak yok:
         // "çizelge", "çizgi" gibi kelimeleri yakalıyor. Alan tek tool
@@ -450,6 +500,41 @@ const DOMAIN_KEYWORDS: &[DomainKeywords] = &[
             "compute",
         ],
     },
+];
+
+/// Short words that must match whole. The suffix rule above would let "ip"
+/// swallow "ipucu" and "kur" swallow "kurulum", so these never take an ending.
+/// The open/close verbs are here too: "ac" is a prefix of "acaba" and "acikla".
+const EXACT_WORDS: &[(Domain, &[&str])] = &[
+    (
+        Domain::Control,
+        &[
+            "ac", "acar", "acsana", "acin", "open", "launch", "start", "run", "close", "quit",
+            "kill", "ip", "dns",
+        ],
+    ),
+    (Domain::Web, &["kur", "tl", "mac", "maci", "maclar", "kar"]),
+    (Domain::System, &["ip", "dns", "ag"]),
+];
+
+/// Multi-word signals, matched as text.
+const PHRASES: &[(Domain, &[&str])] = &[
+    (Domain::Control, &["yeniden baslat", "yeniden baslatma"]),
+    (Domain::System, &["bos yer", "ne kadar yer", "disk alani"]),
+    (
+        Domain::Web,
+        &["ne zaman", "kac yasinda", "son dakika", "mac sonucu"],
+    ),
+    (
+        Domain::Automation,
+        &[
+            "dakika sonra",
+            "saat sonra",
+            "yarin sabah",
+            "her gun",
+            "her sabah",
+        ],
+    ),
 ];
 
 /// Sohbet kapatıcıları — bunlara tool sunulmaz.
@@ -598,6 +683,21 @@ pub fn match_domains(message: &str) -> Vec<Domain> {
                 }
             }
 
+            for (d, words_for) in EXACT_WORDS {
+                if *d == dk.domain {
+                    strong += words_for
+                        .iter()
+                        .filter(|e| words.iter().any(|w| w == *e))
+                        .count();
+                }
+            }
+            let text = normalize(message);
+            for (d, phrases) in PHRASES {
+                if *d == dk.domain {
+                    strong += phrases.iter().filter(|p| text.contains(**p)).count();
+                }
+            }
+
             // Sadece zayıf fiil eşleşti → bu alan değil ("şiir yaz").
             let mut score = if strong == 0 {
                 0
@@ -739,10 +839,106 @@ pub fn select_tools(registry: &Registry, message: &str, budget: usize) -> Vec<Va
 
 /// Seçilen tool adları — testler ve günlük kaydı için.
 ///
-/// `budget` bir **tavan**, hedef değil: alan eşleşmesi az tool getiriyorsa
-/// liste kısa kalır. Bütçenin yüksek olması listeyi doldurmak için sebep
-/// değildir — gereksiz tool hem faturayı büyütür hem modeli kışkırtır.
+/// Konuşma geçmişi olmadan: bkz. [`select_named_ctx`].
 pub fn select_named<'a>(registry: &'a Registry, message: &str, budget: usize) -> Vec<&'a str> {
+    select_named_ctx(registry, message, &[], budget)
+}
+
+/// Words that say nothing about which tool is wanted.
+const FILLER: &[&str] = &[
+    "nedir", "icin", "nasil", "bana", "benim", "benin", "yapar", "misin", "misiniz", "olarak",
+    "gibi", "lutfen", "bunu", "sunu", "onu", "bir", "var", "yok", "ama", "veya", "ile", "daha",
+    "cok", "kadar", "hangi", "neden", "nerede", "the", "and", "for", "you", "please", "can",
+];
+
+/// Tools whose own words the message touches, for a request no domain table
+/// recognises.
+///
+/// The domain tables only know the words someone thought of. "discord'u aç"
+/// and "dolar kaç tl" are ordinary requests with none of them; before this,
+/// they offered the model nothing at all -- not even `request_tools` -- and
+/// the model answered as if it had done the job. Every tool brings its own
+/// name, keywords and description, so a message can be matched against those.
+fn rescue<'a>(registry: &'a Registry, words: &[String]) -> Vec<&'a str> {
+    let probes: Vec<&String> = words
+        .iter()
+        .filter(|w| w.len() >= 4 && !FILLER.contains(&w.as_str()))
+        .collect();
+    if probes.is_empty() {
+        return Vec::new();
+    }
+    let touches = |doc: &str| {
+        probes
+            .iter()
+            .any(|p| p.starts_with(doc) || doc.starts_with(p.as_str()))
+    };
+
+    let mut scored: Vec<(&str, usize)> = registry
+        .iter()
+        .filter(|t| !matches!(t.domain(), Domain::Code | Domain::Mcp(_) | Domain::Core))
+        .map(|t| {
+            let mut score = 0;
+            for part in t.name().split('_').filter(|p| p.len() >= 4) {
+                if touches(&normalize(part)) {
+                    score += 3;
+                }
+            }
+            for k in t.keywords() {
+                let k = normalize(k);
+                if k.len() >= 4 && touches(&k) {
+                    score += 3;
+                }
+            }
+            for w in tokenize(t.description()) {
+                if w.len() >= 5 && !FILLER.contains(&w.as_str()) && touches(&w) {
+                    score += 1;
+                }
+            }
+            (t.name(), score)
+        })
+        .filter(|(_, score)| *score >= 2)
+        .collect();
+    scored.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
+    let best = scored.first().map_or(0, |(_, s)| *s);
+    scored
+        .into_iter()
+        .filter(|(_, s)| *s * 2 >= best)
+        .take(5)
+        .map(|(n, _)| n)
+        .collect()
+}
+
+/// Tools for this message, knowing what the conversation was just doing.
+///
+/// `recent` are the tools the last turns called, newest first. A message
+/// like "evet", "devam et" or "bir daha dene" names nothing -- the task is in
+/// the turns before it, so the tools that task used come along.
+///
+/// Whatever the message says, a request that is not a greeting never gets
+/// *nothing*: the core tools, `request_tools` among them, are the floor. A
+/// model with no tools cannot ask for one, and says it has done what it could
+/// not.
+pub fn select_named_ctx<'a>(
+    registry: &'a Registry,
+    message: &str,
+    recent: &[String],
+    budget: usize,
+) -> Vec<&'a str> {
+    let words = tokenize(message);
+    if words.is_empty() || (is_chatter(&words) && recent.is_empty()) {
+        // Greeting -- no tools. Do not provoke the model for nothing.
+        return Vec::new();
+    }
+    if is_chatter(&words) {
+        // "evet" / "tamam" after the assistant asked whether to go ahead:
+        // the answer is only useful if the tools it unlocks are still there.
+        return recent
+            .iter()
+            .filter_map(|n| registry.get(n).map(|t| t.name()))
+            .take(budget.min(6))
+            .collect();
+    }
+
     let mut domains = match_domains(message);
     // MCP alanları çalışma anında oluşuyor, statik tabloda yer alamıyor —
     // ayrı eşleştiriliyor ve yerleşik alanların önüne geçiyor: kullanıcı bir
@@ -755,38 +951,102 @@ pub fn select_named<'a>(registry: &'a Registry, message: &str, budget: usize) ->
         domains = combined;
     }
 
-    if domains.is_empty() {
-        // Sohbet — tool yok. Modeli boş yere kışkırtma.
-        return Vec::new();
-    }
-
     let mut names: Vec<&str> = Vec::new();
+    let push = |name: &'a str, names: &mut Vec<&'a str>| {
+        if names.len() < budget && !names.contains(&name) {
+            names.push(name);
+        }
+    };
+    let remembered = || {
+        recent
+            .iter()
+            .filter_map(|n| registry.get(n).map(|t| t.name()))
+            .take(4)
+            .collect::<Vec<_>>()
+    };
+    // Short and without a domain of its own: a follow-up.
+    let follow_up = words.len() <= 3;
+
+    if domains.is_empty() || follow_up {
+        for name in remembered() {
+            push(name, &mut names);
+        }
+    }
 
     // 1) Eşleşen alanların tool'ları (en alakalı olan önce).
     for domain in &domains {
         for name in domain_tools(registry, *domain, message) {
-            if names.len() >= budget {
-                break;
-            }
-            if !names.contains(&name) {
-                names.push(name);
-            }
+            push(name, &mut names);
         }
     }
 
-    // 2) Çekirdek tool'lar — kalan yere sığdığı kadar.
+    // 2) Nothing recognised it: let the tools' own words speak.
+    if domains.is_empty() && names.is_empty() {
+        for name in rescue(registry, &words) {
+            push(name, &mut names);
+        }
+    }
+
+    // 3) Çekirdek tool'lar — kalan yere sığdığı kadar.
     for tool in registry.in_domain(Domain::Core) {
-        if names.len() >= budget {
-            break;
-        }
-        if !names.contains(&tool.name()) {
-            names.push(tool.name());
-        }
+        push(tool.name(), &mut names);
     }
 
     debug_assert!(names.len() <= budget);
     names
 }
+
+/// Domains in the order a general request is most likely to need them; used
+/// to fill a large budget with breadth once the relevant tools are in.
+const BREADTH: &[Domain] = &[
+    Domain::Core,
+    Domain::Control,
+    Domain::Web,
+    Domain::Files,
+    Domain::System,
+    Domain::Vision,
+    Domain::Media,
+    Domain::Automation,
+    Domain::Memory,
+    Domain::Security,
+    Domain::Spotify,
+    Domain::Obsidian,
+    Domain::Steam,
+    Domain::Canvas,
+];
+
+/// For models that choose well among many tools: what the message calls for,
+/// then breadth up to the budget.
+///
+/// The whole built-in catalogue is about 7k tokens. A strong model reads that
+/// without trouble, and being offered too little costs far more than being
+/// offered too much -- a missing tool is a request that silently fails.
+/// Small and rate-limited models keep [`select_named_ctx`] alone.
+pub fn select_broad<'a>(
+    registry: &'a Registry,
+    message: &str,
+    recent: &[String],
+    budget: usize,
+) -> Vec<&'a str> {
+    let mut names = select_named_ctx(registry, message, recent, budget);
+    if names.is_empty() {
+        return names;
+    }
+    for domain in BREADTH {
+        for tool in registry.in_domain(*domain) {
+            if names.len() >= budget {
+                return names;
+            }
+            if !names.contains(&tool.name()) {
+                names.push(tool.name());
+            }
+        }
+    }
+    names
+}
+
+/// Models with at least this tool budget get [`select_broad`].
+pub const BROAD_BUDGET: usize = 32;
 
 /// Most tools one built-in domain contributes to a request.
 ///
@@ -817,14 +1077,47 @@ fn domain_tools<'a>(registry: &'a Registry, domain: Domain, message: &str) -> Ve
             }
         })
     };
-    let (hit, miss): (Vec<&dyn crate::tool::Tool>, Vec<&dyn crate::tool::Tool>) =
-        tools.into_iter().partition(|t| mentioned(t));
-    hit.into_iter()
-        .chain(miss)
+    // Tools of one domain often share their keywords (every vault tool
+    // carries the vault's words), so the message's *verb* decides among them:
+    // "notlarıma bak" is a search, not a delete.
+    let mut ranked: Vec<(usize, &dyn crate::tool::Tool)> = tools
+        .into_iter()
+        .map(|t| {
+            let verb = VERBS
+                .iter()
+                .filter(|(fragment, _)| t.name().contains(fragment))
+                .any(|(_, said)| {
+                    words
+                        .iter()
+                        .any(|w| said.iter().any(|v| matches_with_suffix(w, v)))
+                });
+            (usize::from(mentioned(&t)) * 2 + usize::from(verb) * 3, t)
+        })
+        .collect();
+    // Stable: ties keep registration order.
+    ranked.sort_by_key(|(score, _)| std::cmp::Reverse(*score));
+    ranked
+        .into_iter()
         .take(DOMAIN_CAP)
-        .map(|t| t.name())
+        .map(|(_, t)| t.name())
         .collect()
 }
+
+/// (fragment of a tool's name, the words that ask for it).
+const VERBS: &[(&str, &[&str])] = &[
+    (
+        "search",
+        &["ara", "arama", "bul", "bak", "search", "find", "yazmistim"],
+    ),
+    ("read", &["oku", "goster", "read", "icerik", "ne yaziyor"]),
+    ("list", &["listele", "list", "neler", "hangi"]),
+    ("create", &["olustur", "yeni", "create"]),
+    ("append", &["ekle", "append", "add"]),
+    ("edit", &["duzenle", "degistir", "edit", "guncelle"]),
+    ("delete", &["sil", "delete", "kaldir"]),
+    ("links", &["baglanti", "link", "backlink"]),
+    ("daily", &["gunluk", "daily"]),
+];
 
 /// Seçilen tool'ların yaklaşık token maliyeti — bağlam bütçesi için.
 pub fn schema_tokens(schemas: &[Value]) -> usize {

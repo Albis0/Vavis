@@ -40,6 +40,13 @@ Bir düzeltmenin hangi dosyaya dokunduğu git geçmişinde zaten var.
 
 ### Düzeltildi
 
+- **Araç seçimi gerçek cümlelerle çalışıyor.** "Discord'u aç", "dolar kaç tl",
+  "excel'i kapat", "ip adresim ne" gibi cümlelerde model hiç araç görmüyordu
+  (ölçülen 34 cümlenin 23'ü) ve işi yapmış gibi cevap veriyordu. Artık selamlama
+  dışındaki her istek en az çekirdek araçları ve `request_tools`'u alıyor;
+  "evet" / "devam et" gibi takip mesajları önceki işin araçlarını koruyor;
+  Claude, GPT ve Gemini gibi güçlü modeller ilgili araçlardan sonra geniş bir
+  liste görüyor. VirusTotal araçları hiçbir cümleyle seçilemiyordu, düzeltildi.
 - **Onay sorulduğu anda pencere donuyordu** — onay hiçbir zaman
   tıklanamıyordu. Ağ isteği yapan ayar ekranları da pencereyi donduruyordu.
 - Takılan bir komut (girdi bekleyen PowerShell gibi) asistanı sonsuza kadar
