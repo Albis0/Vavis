@@ -75,8 +75,9 @@ impl Tool for RequestTools {
     }
 
     fn description(&self) -> &'static str {
-        "İhtiyacın olan bir araç elinde yoksa ne yapmak istediğini yaz; \
-         ilgili araçlar bir sonraki adımda sunulur. Örnek: 'dosyaya yazmam lazım'."
+        "İhtiyacın olan bir araç elinde yoksa araç adını (prompttaki 'Diğer araçlar' \
+         listesinden) ya da ne yapmak istediğini yaz; araç bir sonraki adımda \
+         sunulur. Örnek: 'launch_app' ya da 'dosyaya yazmam lazım'."
     }
 
     fn domain(&self) -> Domain {
