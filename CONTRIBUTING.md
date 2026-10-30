@@ -75,19 +75,29 @@ if they disagree.
 
 These are load-bearing. Breaking one is a regression even if the tests pass.
 
-**1. A request offers at most 12 tools** (`DEFAULT_TOOL_BUDGET`).
+**1. A request offers few tools, and never none by accident** (`selection.rs`).
 
-The predecessor project defined 353 tools and sent 64 on every request; no
-model chooses reliably from 64 options. Selection narrows by domain first, and
-a large domain is ranked by the tools the message names and cut at six.
-`crates/vavis-tools/tests/selection_eval.rs` measures this — it must stay at
-100% and the average must stay at or under 8. (Claude Code and code turns are
-the exception: they get every tool the job needs.)
+Small and rate-limited models (Groq, Llama, Qwen) get at most their
+`tool_budget`, narrowed by domain first; a large domain is ranked by the
+tools the message names and by its verb ("bak" is a search, not a delete). A
+model that chooses well among many tools (budget 32+: Claude, GPT, Gemini)
+gets the relevant ones first and then breadth up to the budget, because the
+whole built-in catalogue is only about 7k tokens and a tool it was not shown
+is a request that fails silently. Claude Code and code turns get every tool
+the job needs.
 
-**2. Conversational messages get no tools at all.**
+`crates/vavis-tools/tests/selection_eval.rs` measures this. Two lists, and
+both must stay at 100%: curated sentences, and realistic ones written the way
+people type ("discord'u aç", "dolar kaç tl"). The first list alone hid the
+real failure rate -- on realistic sentences two thirds got no tool at all.
+The average offered must stay at or under 8 for the small-model path.
 
-"hello", "write me a poem", "good night" must offer zero tools. Offering a
-tool list to a chat message provokes needless tool calls.
+**2. A greeting gets no tools; everything else gets at least the core.**
+
+"merhaba", "teşekkürler" offer zero tools. Any other message, chat included,
+offers at least the core tools, `request_tools` among them: a model that has
+no tools cannot ask for one, and answers as if it had done the job. A
+follow-up ("evet", "devam et") carries the tools the last turns used.
 
 **3. Barge-in must not start the next utterance.**
 

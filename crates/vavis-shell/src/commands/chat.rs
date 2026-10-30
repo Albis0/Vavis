@@ -619,6 +619,26 @@ fn drop_oldest_half(messages: &mut Vec<Message>) -> usize {
     drop
 }
 
+/// Tool names the conversation used lately, newest first, without repeats.
+///
+/// Scans the last few assistant turns. Eight is enough to cover one task and
+/// the one before it; more would drag an old job's tools into a new one.
+fn recent_tools(history: &[Message]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for message in history.iter().rev().take(16) {
+        for call in message.tool_calls.iter().flatten() {
+            let name = &call.function.name;
+            if name != "request_tools" && !out.contains(name) {
+                out.push(name.clone());
+            }
+        }
+        if out.len() >= 8 {
+            break;
+        }
+    }
+    out
+}
+
 /// Which tools this request gets.
 ///
 /// With `llm.router_model` set, a cheap model reads the request and the tool
@@ -634,14 +654,20 @@ async fn route_tools(
     router_model: &str,
     agent: &std::sync::Arc<std::sync::Mutex<vavis_tools::Agent>>,
     user_message: &str,
+    recent: &[String],
     budget: usize,
 ) -> Vec<String> {
     let keywords = || {
         let guard = AppState::lock(agent);
-        vavis_tools::selection::select_named(&guard.registry, user_message, budget)
-            .into_iter()
-            .map(str::to_string)
-            .collect::<Vec<_>>()
+        // A model that chooses well among many tools is offered breadth after
+        // the relevant ones: a tool it was not shown is a request that fails
+        // without a word, and the whole catalogue is only about 7k tokens.
+        let names = if budget >= vavis_tools::selection::BROAD_BUDGET {
+            vavis_tools::selection::select_broad(&guard.registry, user_message, recent, budget)
+        } else {
+            vavis_tools::selection::select_named_ctx(&guard.registry, user_message, recent, budget)
+        };
+        names.into_iter().map(str::to_string).collect::<Vec<_>>()
     };
 
     if router_model.trim().is_empty() {
@@ -859,6 +885,10 @@ impl Turn<'_> {
         // ceiling, not a target: domain matching still decides what is relevant.
         let budget = vavis_brain::ModelCaps::for_model(&cfg.model).tool_budget;
 
+        // What the last turns were doing, newest first -- "evet" and "devam
+        // et" name no tool, the task that wants one is in the history.
+        let recent = recent_tools(&history);
+
         let picked: Vec<String> = if code && !claude {
             // The project's tools and the core ones, chosen by what the work
             // is rather than by the words in the message: "why does this
@@ -888,7 +918,16 @@ impl Turn<'_> {
         } else {
             // A cheap model picks what is needed; the expensive one does the
             // work. Configured off, in which case this is keyword matching.
-            let picked = route_tools(client, cfg, router_model, agent, user_message, budget).await;
+            let picked = route_tools(
+                client,
+                cfg,
+                router_model,
+                agent,
+                user_message,
+                &recent,
+                budget,
+            )
+            .await;
 
             // Some models bring their own web search, run on the provider's
             // servers. Offering ours alongside it opens two doors onto the
@@ -1110,8 +1149,12 @@ impl Turn<'_> {
             for need in vavis_tools::builtin::request_tools::take() {
                 let added = {
                     let guard = AppState::lock(agent);
-                    let names =
-                        vavis_tools::selection::select_named(&guard.registry, &need, budget);
+                    let names = vavis_tools::selection::select_named_ctx(
+                        &guard.registry,
+                        &need,
+                        &[],
+                        budget,
+                    );
                     // The same exclusion as at the top of the turn: a tool the
                     // provider already runs server-side must not slip back in
                     // through a mid-turn request either.

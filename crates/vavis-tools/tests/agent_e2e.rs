@@ -183,9 +183,9 @@ fn destructive_budget_forces_reapproval_within_one_run() {
 }
 
 #[test]
-fn conversational_message_offers_no_tools_at_all() {
+fn greeting_offers_no_tools_at_all() {
     let agent = agent();
-    for msg in ["merhaba", "teşekkürler", "bana bir şiir yaz", "nasılsın"] {
+    for msg in ["merhaba", "teşekkürler", "tamam", "selam"] {
         assert!(
             agent
                 .tools_for(msg, selection::DEFAULT_TOOL_BUDGET)

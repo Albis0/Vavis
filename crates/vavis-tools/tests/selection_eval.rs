@@ -74,18 +74,54 @@ const EXPECT_OFFERED: &[(&str, &str)] = &[
     ("240 ın yüzde 18 i ne kadar", "calculate"),
 ];
 
-/// Bu cümlelerde **hiç** tool sunulmamalı — sohbet.
-const EXPECT_NO_TOOLS: &[&str] = &[
-    "merhaba",
+/// Selamlama ve onay: **hiç** tool sunulmamalı.
+const EXPECT_NO_TOOLS: &[&str] = &["merhaba", "teşekkürler", "tamam", "ok", "selam", "sağol"];
+
+/// Sohbet: alan tool'ları sunulmamalı, yalnızca çekirdek (saat, hesap,
+/// `request_tools`). Boş liste de değil -- araç gerektiren bir istek
+/// anahtar kelime tablosunun bilmediği kelimelerle gelebilir ve model
+/// hiç araç görmezse ne `request_tools` çağırabilir ne de işi yapabilir.
+const EXPECT_CHAT_ONLY_CORE: &[&str] = &[
     "selam nasılsın",
-    "teşekkürler",
-    "tamam",
     "bana bir şiir yaz",
     "bir fıkra anlat",
     "python nedir",
     "ne düşünüyorsun",
     "kendini tanıt",
     "iyi geceler",
+];
+
+/// Gerçek kullanıcı cümleleri: tablodaki kelimelere göre değil, insanların
+/// yazdığı gibi. İlk ölçümde 34 cümlenin 23'ünde doğru araç sunulmuyordu.
+const EXPECT_REALISTIC: &[(&str, &str)] = &[
+    ("discord'u aç", "launch_app"),
+    ("youtube'u aç", "launch_app"),
+    ("steam'i aç", "launch_app"),
+    ("vscode çalıştır", "launch_app"),
+    ("kamerayı aç", "launch_app"),
+    ("excel'i kapat", "close_app"),
+    ("yarın İstanbul'da yağmur var mı", "web_search"),
+    ("dolar kaç tl", "web_search"),
+    ("bitcoin fiyatı ne", "web_search"),
+    ("galatasaray maçı kaç kaç bitti", "web_search"),
+    ("what's the weather in london", "web_search"),
+    ("bunu kopyala", "write_clipboard"),
+    ("masaüstüne deneme.txt yaz", "write_file"),
+    ("downloads'taki en büyük 5 dosya hangisi", "list_directory"),
+    ("wifi'yi kapat", "run_command"),
+    ("bilgisayarı yeniden başlat", "run_command"),
+    ("ip adresim ne", "run_command"),
+    ("ekranı kilitle", "run_command"),
+    ("saat 5te beni uyandır", "create_automation"),
+    ("10 dakika sonra hatırlat", "create_automation"),
+    ("şarkıyı değiştir", "media_control"),
+    ("sesi kapat", "set_volume"),
+    ("notlarıma bak", "search_notes"),
+    ("open spotify and play something", "media_control"),
+    ("take a screenshot and save it to desktop", "write_file"),
+    ("kaç gb boş yerim var", "get_system_status"),
+    ("bu dosya virüslü mü", "virus_tara_dosya"),
+    ("bu linkin itibarı nasıl", "virus_tara_adres"),
 ];
 
 #[test]
@@ -111,6 +147,74 @@ fn offered_tool_eval_scores_100_percent() {
         "\nTool sunum skoru: {score:.0}% ({passed}/{total})\nBaşarısızlar:\n{}",
         failures.join("\n")
     );
+}
+
+#[test]
+fn realistic_requests_reach_their_tool() {
+    let reg = default_registry();
+    let failures: Vec<String> = EXPECT_REALISTIC
+        .iter()
+        .filter_map(|(msg, want)| {
+            let offered = selection::select_named(&reg, msg, DEFAULT_TOOL_BUDGET);
+            (!offered.contains(want))
+                .then(|| format!("  '{msg}' → {want} bekleniyordu, sunulan: {offered:?}"))
+        })
+        .collect();
+    assert!(
+        failures.is_empty(),
+        "\n{}/{} gerçekçi cümle yanlış:\n{}",
+        failures.len(),
+        EXPECT_REALISTIC.len(),
+        failures.join("\n")
+    );
+}
+
+/// "evet" / "devam et" name no tool -- the task is in the turns before them.
+#[test]
+fn follow_ups_keep_the_tools_the_task_was_using() {
+    let reg = default_registry();
+    let recent = vec!["write_file".to_string(), "list_directory".to_string()];
+    for msg in ["evet", "tamam", "devam et", "bir daha dene", "onu sil"] {
+        let offered = selection::select_named_ctx(&reg, msg, &recent, DEFAULT_TOOL_BUDGET);
+        assert!(
+            offered.contains(&"write_file"),
+            "'{msg}' önceki işin aracını kaybetti: {offered:?}"
+        );
+    }
+    // No history, no tools to carry: a bare "evet" is still a greeting.
+    assert!(selection::select_named(&reg, "evet", DEFAULT_TOOL_BUDGET).is_empty());
+}
+
+/// A large budget fills with breadth after the relevant tools, never past it.
+#[test]
+fn broad_selection_leads_with_the_relevant_tools_and_respects_the_budget() {
+    let reg = default_registry();
+    for budget in [32, 48] {
+        let offered = selection::select_broad(&reg, "discord'u aç", &[], budget);
+        assert_eq!(offered.first(), Some(&"launch_app"), "{offered:?}");
+        assert_eq!(offered.len(), budget, "{offered:?}");
+        assert!(!offered.iter().any(|n| n.starts_with("ws_")), "{offered:?}");
+    }
+    assert!(selection::select_broad(&reg, "merhaba", &[], 48).is_empty());
+}
+
+#[test]
+fn chat_gets_only_the_core_tools() {
+    use vavis_tools::Domain;
+    let reg = default_registry();
+    for msg in EXPECT_CHAT_ONLY_CORE {
+        let offered = selection::select_named(&reg, msg, DEFAULT_TOOL_BUDGET);
+        assert!(
+            offered.contains(&"request_tools"),
+            "'{msg}' request_tools'u kaybetti: {offered:?}"
+        );
+        assert!(
+            offered
+                .iter()
+                .all(|n| reg.get(n).is_some_and(|t| t.domain() == Domain::Core)),
+            "'{msg}' sohbet, alan tool'u sunulmamalı: {offered:?}"
+        );
+    }
 }
 
 #[test]
