@@ -1,7 +1,7 @@
 # VAVIS
 
 > Telaffuz: **veyvis**
-> Windows için kişisel AI asistanı. Tek `.exe`, kurulum yok.
+> Windows için kişisel AI asistanı.
 
 AEGIS/RealJarvis'in (TypeScript + Electron, ~1 GB) yerine sıfırdan yazıldı:
 arka taraf Rust, pencere Tauri, arayüz React + TypeScript.
