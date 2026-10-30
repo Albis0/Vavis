@@ -216,7 +216,7 @@ impl Tool for SetVolume {
     }
 
     fn description(&self) -> &'static str {
-        "Sets the system volume, 0 to 100."
+        "Sets the system volume, 0 to 100. Level 0 mutes the sound: use it for 'sesi kapat', 'sustur', 'mute'."
     }
 
     fn domain(&self) -> Domain {
@@ -233,7 +233,7 @@ impl Tool for SetVolume {
     }
 
     fn keywords(&self) -> &'static [&'static str] {
-        &["ses", "volume", "sessiz", "kıs", "aç"]
+        &["ses", "volume", "sessiz", "sustur", "mute", "kıs", "aç"]
     }
 
     fn run(&self, args: &Value) -> ToolOutcome {

@@ -7,7 +7,8 @@
 //!
 //! Needs `claude` installed and logged in, spends subscription tokens:
 //! `cargo test -p vavis-tools --test tool_calling_eval -- --ignored --nocapture`
-//! Pick the model with `EVAL_MODEL` (default `haiku`).
+//! Pick the model with `EVAL_MODEL` (default `haiku`); `EVAL_ONLY=sesi` runs
+//! just the sentences containing that text.
 
 use serde_json::Value;
 use std::sync::{Arc, Mutex};
@@ -20,10 +21,13 @@ use vavis_tools::{default_registry, selection, Agent};
 enum Want {
     /// The model has to call one of these.
     Any(&'static [&'static str]),
+    /// Web question: the bridge's search tools, or Claude Code's own built-in
+    /// WebSearch (invisible to the bridge, but its answer carries sources).
+    Web,
     /// Plain conversation: calling anything is a mistake.
     Nothing,
 }
-use Want::{Any, Nothing};
+use Want::{Any, Nothing, Web};
 
 const CASES: &[(&str, Want)] = &[
     // Direct: one obvious tool.
@@ -48,9 +52,9 @@ const CASES: &[(&str, Want)] = &[
     ("kurulu otomasyonlarım neler", Any(&["list_automations"])),
     ("bu linkin güvenli olduğundan emin misin: http://example.com", Any(&["virus_tara_adres"])),
     // Direct, but phrased the way people really type.
-    ("dolar kaç tl", Any(&["web_search", "fetch_url"])),
-    ("yarın istanbul'da yağmur var mı", Any(&["web_search", "fetch_url"])),
-    ("galatasaray maçı kaç kaç bitti", Any(&["web_search", "fetch_url"])),
+    ("dolar kaç tl", Web),
+    ("yarın istanbul'da yağmur var mı", Web),
+    ("galatasaray maçı kaç kaç bitti", Web),
     ("ip adresim ne", Any(&["run_command", "get_system_status"])),
     ("ekranı kilitle", Any(&["run_command"])),
     ("wifi'yi kapat", Any(&["run_command"])),
@@ -114,7 +118,11 @@ async fn the_model_calls_the_right_tool_for_real_sentences() {
     let (mut direct_hit, mut direct_total, mut stray, mut neg_total) = (0, 0, 0, 0);
     let mut rows = Vec::new();
 
+    let only = std::env::var("EVAL_ONLY").ok();
     for (msg, want) in CASES {
+        if only.as_deref().is_some_and(|o| !msg.contains(o)) {
+            continue;
+        }
         let names = selection::select_broad(&agent.registry, msg, &[], selection::BROAD_BUDGET);
         let offered = agent.schemas_for(&names);
         *rec.tools.lock().unwrap() = offered.clone();
@@ -132,12 +140,24 @@ async fn the_model_calls_the_right_tool_for_real_sentences() {
             .map(|(n, _)| n.rsplit("__").next().unwrap_or(n).to_string())
             .collect();
 
+        let (reply, err) = match outcome {
+            Ok(r) => (r.text, String::new()),
+            Err(e) => (String::new(), format!(" ERR {e}")),
+        };
+
         let (ok, expect) = match want {
             Any(tools) => {
                 direct_total += 1;
                 let ok = called.iter().any(|c| tools.contains(&c.as_str()));
                 direct_hit += ok as usize;
                 (ok, tools.join("|"))
+            }
+            Web => {
+                direct_total += 1;
+                let ok = called.iter().any(|c| c == "web_search" || c == "fetch_url")
+                    || reply.contains("http");
+                direct_hit += ok as usize;
+                (ok, "web".to_string())
             }
             Nothing => {
                 neg_total += 1;
@@ -148,9 +168,13 @@ async fn the_model_calls_the_right_tool_for_real_sentences() {
         };
         let offered_ok = match want {
             Any(tools) => tools.iter().any(|t| names.contains(t)),
-            Nothing => true,
+            Web | Nothing => true,
         };
-        let err = outcome.err().map(|e| format!(" ERR {e}")).unwrap_or_default();
+        let said = if ok {
+            String::new()
+        } else {
+            format!("\n    model dedi ki: {}", reply.trim().replace('\n', " "))
+        };
         rows.push(format!(
             "{} {:<58} bekl={:<28} çağrı={:?}{}{}",
             if ok { "✓" } else { "✗" },
@@ -159,7 +183,7 @@ async fn the_model_calls_the_right_tool_for_real_sentences() {
             called,
             if offered_ok { "" } else { " [araç sunulmadı!]" },
             err
-        ));
+        ) + &said);
     }
 
     println!("\n{}\n", rows.join("\n"));
