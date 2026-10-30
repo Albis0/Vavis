@@ -50,7 +50,7 @@ const CASES: &[(&str, Want)] = &[
     ("hakkımda ne biliyorsun", Any(&["search_memory"])),
     ("10 dakika sonra bana su içmeyi hatırlat", Any(&["create_automation"])),
     ("kurulu otomasyonlarım neler", Any(&["list_automations"])),
-    ("bu linkin güvenli olduğundan emin misin: http://example.com", Any(&["virus_tara_adres"])),
+    ("bu linkin güvenli olduğundan emin misin: http://example.com", Any(&["virus_scan_url"])),
     // Direct, but phrased the way people really type.
     ("dolar kaç tl", Web),
     ("yarın istanbul'da yağmur var mı", Web),

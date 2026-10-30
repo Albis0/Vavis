@@ -120,8 +120,8 @@ const EXPECT_REALISTIC: &[(&str, &str)] = &[
     ("open spotify and play something", "media_control"),
     ("take a screenshot and save it to desktop", "write_file"),
     ("kaç gb boş yerim var", "get_system_status"),
-    ("bu dosya virüslü mü", "virus_tara_dosya"),
-    ("bu linkin itibarı nasıl", "virus_tara_adres"),
+    ("bu dosya virüslü mü", "virus_scan_file"),
+    ("bu linkin itibarı nasıl", "virus_scan_url"),
 ];
 
 #[test]

@@ -243,9 +243,27 @@ pub fn arg_num(args: &Value, key: &str) -> Option<f64> {
     v.as_f64().or_else(|| v.as_str()?.trim().parse().ok())
 }
 
+fn edit_distance(a: &str, b: &str) -> usize {
+    let b: Vec<char> = b.chars().collect();
+    let mut row: Vec<usize> = (0..=b.len()).collect();
+    for (i, ca) in a.chars().enumerate() {
+        let mut prev = row[0];
+        row[0] = i + 1;
+        for (j, cb) in b.iter().enumerate() {
+            let cur = row[j + 1];
+            row[j + 1] = (prev + (ca != *cb) as usize).min(row[j] + 1).min(cur + 1);
+            prev = cur;
+        }
+    }
+    row[b.len()]
+}
+
 /// Tool kayıt defteri.
 pub struct Registry {
     tools: BTreeMap<&'static str, Box<dyn Tool>>,
+    /// Old names that still work, so a renamed tool does not break a model
+    /// (or a saved automation) that remembers the previous one.
+    aliases: BTreeMap<&'static str, &'static str>,
 }
 
 impl Default for Registry {
@@ -258,7 +276,14 @@ impl Registry {
     pub fn new() -> Self {
         Self {
             tools: BTreeMap::new(),
+            aliases: BTreeMap::new(),
         }
+    }
+
+    /// `old` keeps resolving to `current`.
+    pub fn alias(&mut self, old: &'static str, current: &'static str) {
+        debug_assert!(self.tools.contains_key(current), "alias to unknown {current}");
+        self.aliases.insert(old, current);
     }
 
     pub fn register(&mut self, tool: Box<dyn Tool>) {
@@ -270,7 +295,38 @@ impl Registry {
     }
 
     pub fn get(&self, name: &str) -> Option<&dyn Tool> {
+        let name = self.aliases.get(name).copied().unwrap_or(name);
         self.tools.get(name).map(AsRef::as_ref)
+    }
+
+    /// Up to `n` real tool names closest to a name the model made up.
+    ///
+    /// Shared words count most (`scan_virus` -> `virus_scan_file`), then a
+    /// shared prefix or edit distance catches typos (`launch_apps`).
+    pub fn suggest(&self, wrong: &str, n: usize) -> Vec<&'static str> {
+        let wrong = wrong.to_lowercase();
+        let words = |s: &str| -> Vec<String> {
+            s.split(|c: char| !c.is_alphanumeric())
+                .filter(|w| w.len() > 1)
+                .map(str::to_string)
+                .collect()
+        };
+        let wrong_words = words(&wrong);
+        let mut scored: Vec<(usize, &'static str)> = self
+            .tools
+            .keys()
+            .map(|&name| {
+                let shared = words(name)
+                    .iter()
+                    .filter(|w| wrong_words.contains(w))
+                    .count();
+                let typo = 8usize.saturating_sub(edit_distance(&wrong, name));
+                (shared * 10 + typo, name)
+            })
+            .filter(|(score, _)| *score > 2)
+            .collect();
+        scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(b.1)));
+        scored.into_iter().take(n).map(|(_, name)| name).collect()
     }
 
     pub fn len(&self) -> usize {

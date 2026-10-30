@@ -69,7 +69,7 @@ pub struct ScanFile;
 
 impl Tool for ScanFile {
     fn name(&self) -> &'static str {
-        "virus_tara_dosya"
+        "virus_scan_file"
     }
 
     fn description(&self) -> &'static str {
@@ -120,7 +120,7 @@ pub struct LookupHash;
 
 impl Tool for LookupHash {
     fn name(&self) -> &'static str {
-        "virus_tara_hash"
+        "virus_scan_hash"
     }
 
     fn description(&self) -> &'static str {
@@ -159,7 +159,7 @@ pub struct CheckUrl;
 
 impl Tool for CheckUrl {
     fn name(&self) -> &'static str {
-        "virus_tara_adres"
+        "virus_scan_url"
     }
 
     fn description(&self) -> &'static str {

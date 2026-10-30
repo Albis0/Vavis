@@ -40,6 +40,11 @@ Bir düzeltmenin hangi dosyaya dokunduğu git geçmişinde zaten var.
 
 ### Düzeltildi
 
+- **Yanlış araç çağrısı artık model için yol gösteriyor.** Olmayan bir ad
+  çağrılınca en yakın 3 gerçek araç adı dönüyor; eksik zorunlu argümanda
+  hangi alanın eksik olduğu ve aracın aldığı alanlar söyleniyor. VirusTotal
+  araçları `virus_scan_file/hash/url` oldu (eski `virus_tara_*` adları
+  takma ad olarak çalışmaya devam ediyor). "Sesi kapat" artık sessize alıyor.
 - **Araç seçimi gerçek cümlelerle çalışıyor.** "Discord'u aç", "dolar kaç tl",
   "excel'i kapat", "ip adresim ne" gibi cümlelerde model hiç araç görmüyordu
   (ölçülen 34 cümlenin 23'ü) ve işi yapmış gibi cevap veriyordu. Artık selamlama
