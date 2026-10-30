@@ -125,4 +125,9 @@ pub fn register_all(registry: &mut Registry) {
     registry.register(Box::new(memory::Remember));
     registry.register(Box::new(memory::Recall));
     registry.register(Box::new(memory::Forget));
+
+    // Renamed to English like the rest; the old Turkish names keep working.
+    registry.alias("virus_tara_dosya", "virus_scan_file");
+    registry.alias("virus_tara_hash", "virus_scan_hash");
+    registry.alias("virus_tara_adres", "virus_scan_url");
 }

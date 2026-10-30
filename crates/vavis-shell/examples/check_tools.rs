@@ -26,7 +26,7 @@ fn main() {
     // Bu dosyanın kendisini tara: yerel hash'lenecek, dosya gitmeyecek.
     let me = std::env::current_exe().expect("exe");
     println!("\ntaranan: {}", me.display());
-    let tool = reg.get("virus_tara_dosya").expect("tool kayıtlı");
+    let tool = reg.get("virus_scan_file").expect("tool kayıtlı");
     let out = tool.run(&serde_json::json!({ "path": me.to_string_lossy() }));
     println!("ok={}\n{}", out.ok, out.content);
 }

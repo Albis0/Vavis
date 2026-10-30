@@ -12,7 +12,7 @@
 
 use crate::permission::{Decision, PermissionGate};
 use crate::selection;
-use crate::tool::{Registry, Risk, ToolOutcome};
+use crate::tool::{Registry, Risk, Tool, ToolOutcome};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use vavis_brain::{Message, ToolCall};
@@ -165,10 +165,17 @@ impl Agent {
             let args_json = &call.function.arguments;
 
             let Some(tool) = self.registry.get(name) else {
-                // Model olmayan bir tool uydurdu — sessizce yutma, modele söyle.
+                // Model olmayan bir tool uydurdu — sessizce yutma, modele söyle
+                // ve doğrusunu göster: ikinci denemede tutturabilsin.
+                let near = self.registry.suggest(name, 3);
+                let hint = if near.is_empty() {
+                    " Bilmediğin bir iş için `request_tools` ile ara.".to_string()
+                } else {
+                    format!(" En yakın araçlar: {}.", near.join(", "))
+                };
                 results.push(Message::tool_result(
                     &call.id,
-                    format!("HATA: '{name}' diye bir araç yok"),
+                    format!("HATA: '{name}' diye bir araç yok.{hint}"),
                 ));
                 continue;
             };
@@ -215,6 +222,11 @@ impl Agent {
                 }
             };
 
+            if let Some(problem) = missing_params(tool, &args) {
+                results.push(Message::tool_result(&call.id, format!("HATA: {problem}")));
+                continue;
+            }
+
             host.on_tool_start(name, args_json);
             let outcome = tool.run(&args);
             self.gate.record_execution(risk);
@@ -238,6 +250,38 @@ impl Agent {
 
         results
     }
+}
+
+/// A required argument that is absent, null or blank: say which one, and
+/// what the tool takes, so the model can fix the call instead of guessing.
+fn missing_params(tool: &dyn Tool, args: &serde_json::Value) -> Option<String> {
+    let params = tool.params();
+    let missing: Vec<&str> = params
+        .iter()
+        .filter(|p| p.required)
+        .filter(|p| match args.get(p.name) {
+            None | Some(serde_json::Value::Null) => true,
+            Some(serde_json::Value::String(s)) => s.trim().is_empty(),
+            Some(_) => false,
+        })
+        .map(|p| p.name)
+        .collect();
+    if missing.is_empty() {
+        return None;
+    }
+    let takes: Vec<String> = params
+        .iter()
+        .map(|p| {
+            let opt = if p.required { "" } else { "?" };
+            format!("{}{opt} ({})", p.name, p.description)
+        })
+        .collect();
+    Some(format!(
+        "'{}' için eksik alan: {}. Aldığı alanlar: {}",
+        tool.name(),
+        missing.join(", "),
+        takes.join("; ")
+    ))
 }
 
 /// Tool çalıştırma sırasında risk bilgisi — arayüz gösterimi için.
@@ -298,6 +342,36 @@ mod tests {
                 arguments: args.into(),
             },
         }
+    }
+
+    #[test]
+    fn an_unknown_tool_name_gets_the_nearest_real_ones() {
+        let mut agent = agent();
+        let mut host = AllowAll::default();
+        let out = agent.execute_calls(&[call("launch_apps", "{}")], &mut host);
+        assert!(out[0].content.contains("launch_app"), "{}", out[0].content);
+        let out = agent.execute_calls(&[call("scan_virus", "{}")], &mut host);
+        assert!(out[0].content.contains("virus_scan"), "{}", out[0].content);
+    }
+
+    #[test]
+    fn a_renamed_tool_still_answers_to_its_old_name() {
+        let agent = agent();
+        assert!(agent.registry.get("virus_tara_dosya").is_some());
+        assert_eq!(
+            agent.registry.get("virus_tara_adres").unwrap().name(),
+            "virus_scan_url"
+        );
+    }
+
+    #[test]
+    fn a_missing_required_argument_is_named() {
+        let mut agent = agent();
+        let mut host = AllowAll::default();
+        let out = agent.execute_calls(&[call("set_volume", "{}")], &mut host);
+        assert!(out[0].content.starts_with("HATA:"), "{}", out[0].content);
+        assert!(out[0].content.contains("level"), "{}", out[0].content);
+        assert!(host.tools_run.is_empty(), "eksik argümanla çalışmamalı");
     }
 
     #[test]
