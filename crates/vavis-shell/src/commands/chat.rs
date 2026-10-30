@@ -974,6 +974,32 @@ impl Turn<'_> {
         }
 
         let mut system = self.identity.system_for(cfg.provider);
+        if !code && !claude && !offered.is_empty() {
+            // The model cannot ask for what it does not know exists. Names
+            // only -- schemas are what cost tokens -- so a request the tables
+            // missed can still be answered with `request_tools`.
+            let guard = AppState::lock(agent);
+            let unseen: Vec<&str> = guard
+                .registry
+                .iter()
+                .filter(|t| {
+                    !matches!(
+                        t.domain(),
+                        vavis_tools::Domain::Code | vavis_tools::Domain::Mcp(_)
+                    )
+                })
+                .map(|t| t.name())
+                .filter(|n| !offered.iter().any(|o| o == n))
+                .collect();
+            if !unseen.is_empty() {
+                system.content.push_str(&format!(
+                    "\n\n# Diğer araçlar\n\nŞu an elinde olmayan ama var olan araçlar: {}. \
+                     Birine ihtiyacın varsa request_tools'u adıyla çağır; \
+                     \"yapamam\" ya da \"yaptım\" demeden önce önce onu dene.",
+                    unseen.join(", ")
+                ));
+            }
+        }
         if code {
             system
                 .content
@@ -1149,12 +1175,22 @@ impl Turn<'_> {
             for need in vavis_tools::builtin::request_tools::take() {
                 let added = {
                     let guard = AppState::lock(agent);
-                    let names = vavis_tools::selection::select_named_ctx(
-                        &guard.registry,
-                        &need,
-                        &[],
-                        budget,
-                    );
+                    // Tool names the model read in its prompt open exactly
+                    // those tools; anything else is ranked like a message.
+                    let exact: Vec<&str> = need
+                        .split(|c: char| c == ',' || c.is_whitespace())
+                        .filter_map(|t| guard.registry.get(t.trim()).map(|tool| tool.name()))
+                        .collect();
+                    let names = if exact.is_empty() {
+                        vavis_tools::selection::select_named_ctx(
+                            &guard.registry,
+                            &need,
+                            &[],
+                            budget,
+                        )
+                    } else {
+                        exact
+                    };
                     // The same exclusion as at the top of the turn: a tool the
                     // provider already runs server-side must not slip back in
                     // through a mid-turn request either.
