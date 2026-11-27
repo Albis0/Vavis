@@ -1,18 +1,30 @@
 name: release
+run-name: ${{ github.event_name == 'workflow_dispatch' && format('Verify {0}', inputs.tag) || format('Publish {0}', github.ref_name) }}
 
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published release tag to verify, such as v0.8.0
+        required: true
+        type: string
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
+    if: github.event_name == 'push'
     runs-on: windows-latest
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - uses: oven-sh/setup-bun@v2
 
@@ -28,37 +40,81 @@ jobs:
         run: bun run check
         working-directory: ui
 
+      - name: Check the release version
+        run: |
+          bun scripts/version.mjs --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $version = (Get-Content -LiteralPath ui/package.json -Raw | ConvertFrom-Json).version
+          if ($env:GITHUB_REF_NAME -cne "v$version") {
+            throw "Tag $env:GITHUB_REF_NAME does not match version $version"
+          }
+
       - name: Build frontend
         run: bun run build
         working-directory: ui
 
       - name: Test before shipping
-        run: cargo test --all
+        run: cargo test --workspace --locked
 
       - name: Build release binary
-        run: cargo build --release -p vavis-shell
+        run: cargo build --release --locked -p vavis-shell
 
       # The frontend-embedding check only means anything in release mode, and
-      # `cargo test --all` above runs in debug. 0.4.1 shipped a binary whose
+      # The workspace tests above run in debug mode. 0.4.1 shipped a binary whose
       # window opened to ERR_CONNECTION_REFUSED and every step above was green.
       - name: Verify the frontend is embedded
-        run: cargo test --release -p vavis-shell release_builds_embed_the_frontend
+        run: cargo test --release --locked -p vavis-shell release_builds_embed_the_frontend
 
       - name: Name the artifact after the tag
         shell: pwsh
         run: |
-          $version = "${{ github.ref_name }}" -replace '^v', ''
+          $version = $env:GITHUB_REF_NAME -replace '^v', ''
           Copy-Item target/release/vavis.exe "vavis-$version.exe"
-          # The hash goes in the release notes so downloads can be verified;
-          # the binary is deliberately unsigned (see SECURITY.md).
+          # Publish the checksum beside the unsigned download (see SECURITY.md).
           $hash = (Get-FileHash "vavis-$version.exe" -Algorithm SHA256).Hash
           "SHA256: $hash" | Out-File -FilePath checksum.txt -Encoding utf8
           echo "VERSION=$version" >> $env:GITHUB_ENV
 
       - name: Publish release
-        uses: softprops/action-gh-release@v3
-        with:
-          files: |
-            vavis-${{ env.VERSION }}.exe
-            checksum.txt
-          generate_release_notes: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view $env:GITHUB_REF_NAME --json tagName *> $null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Output "Release $env:GITHUB_REF_NAME already exists."
+            exit 0
+          }
+          gh release create $env:GITHUB_REF_NAME "vavis-$env:VERSION.exe" checksum.txt --verify-tag --generate-notes
+          exit $LASTEXITCODE
+
+  verify-published:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify the published Windows download
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Expected a release tag such as v0.8.0." >&2
+            exit 1
+          fi
+          if [[ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" != false ]]; then
+            echo "Release $TAG is not published." >&2
+            exit 1
+          fi
+          cd "$(mktemp -d)"
+          binary="vavis-${TAG#v}.exe"
+          gh release download "$TAG" --pattern "$binary" --pattern checksum.txt
+          checksum="$(tr -d '\r' < checksum.txt)"
+          if [[ ! "$checksum" =~ ^SHA256:[[:space:]]+([[:xdigit:]]{64})$ ]]; then
+            echo "Invalid checksum.txt format." >&2
+            exit 1
+          fi
+          digest="${BASH_REMATCH[1]}"
+          printf '%s  %s\n' "${digest,,}" "$binary" | sha256sum --check
