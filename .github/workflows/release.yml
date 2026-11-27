@@ -80,8 +80,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh release view $env:GITHUB_REF_NAME --json tagName *> $null
+          $isDraft = gh release view $env:GITHUB_REF_NAME --json isDraft --jq .isDraft 2>$null
           if ($LASTEXITCODE -eq 0) {
+            if ($isDraft -ne 'false') {
+              throw "Release $env:GITHUB_REF_NAME is still a draft. Review its assets before publishing."
+            }
             Write-Output "Release $env:GITHUB_REF_NAME already exists."
             exit 0
           }
