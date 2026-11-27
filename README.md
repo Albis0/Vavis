@@ -147,4 +147,4 @@ Run `bun run check` and `bun run test` from `ui/`. The application targets Windo
 
 </details>
 
-[Changelog](CHANGELOG.md) · [Support](SUPPORT.md) · [Contributing](CONTRIBUTING.md) · [Apache-2.0 license](LICENSE)
+[Changelog](CHANGELOG.md) · [Support](SUPPORT.md) · [Contributing](CONTRIBUTING.md) · [MIT License](LICENSE)
