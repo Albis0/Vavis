@@ -48,10 +48,10 @@ export default function ConversationList({ onClose }: Props) {
     }
 
     async function commitRename() {
+        setEditing(null);
         if (editing !== null && draft.trim()) {
             await chat.renameConversation(editing, draft.trim());
         }
-        setEditing(null);
     }
 
     function onRenameKey(e: KeyboardEvent<HTMLInputElement>) {
@@ -109,8 +109,7 @@ export default function ConversationList({ onClose }: Props) {
                                     if (!c.current) await chat.openConversation(c.id);
                                     onClose();
                                 }}
-                                onDoubleClick={() => startRename(c.id, c.title)}
-                                title="Open · double-click to rename"
+                                title="Open conversation"
                             >
                                 <span className="conv-title">{c.title || "Untitled"}</span>
                                 <span className="conv-meta">
@@ -118,6 +117,14 @@ export default function ConversationList({ onClose }: Props) {
                                 </span>
                             </button>
                         )}
+                        <button
+                            className="icon-btn"
+                            title="Rename conversation"
+                            onClick={() => startRename(c.id, c.title)}
+                            disabled={editing === c.id}
+                        >
+                            <Icon name="edit" size={14} />
+                        </button>
                         <button
                             className="icon-btn conv-delete"
                             title="Delete"

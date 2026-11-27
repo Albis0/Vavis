@@ -175,9 +175,8 @@ impl Provider {
             Self::Nvidia => "meta/llama-3.3-70b-instruct",
             Self::Anthropic => crate::anthropic::DEFAULT_MODEL,
             Self::ClaudeCode => crate::claude_code::DEFAULT_MODEL,
-            // A `:free` model, so a new key works before any credit is
-            // bought. The live list offers the rest.
-            Self::OpenRouter => "meta-llama/llama-3.3-70b-instruct:free",
+            // The free router follows the live catalog as free variants change.
+            Self::OpenRouter => "openrouter/free",
             Self::Cerebras => "gpt-oss-120b",
             Self::GitHub => "openai/gpt-4.1",
             // Whatever the endpoint serves; the user names it in settings.
@@ -295,6 +294,8 @@ pub fn is_useful_model(provider: Provider, id: &str) -> bool {
             lower.starts_with("gpt-4") || lower.starts_with("gpt-5") || lower.starts_with('o')
         }
         Provider::XAI => !lower.contains("grok-2") && !lower.contains("beta"),
+        // The old default was removed from the free catalog and returns 404.
+        Provider::OpenRouter => lower != "meta-llama/llama-3.3-70b-instruct:free",
         // OpenRouter lists image, audio and embedding models among the chat
         // ones; the name filter above has already dropped most. What is left
         // is the user's call.

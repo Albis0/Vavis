@@ -35,18 +35,17 @@ function short(name: string, max = 26): string {
 export default function StatusBar({ onOpenSettings }: Props) {
     const state = useStore(chatSignal, chat);
     const status = state.status;
+    const provider = status?.providers?.find((p) => p.id === status.provider);
 
     return (
         <footer className="status-bar">
             <div className="left">
-                {!status?.keys.length ? (
-                    // The one genuine error state: with no key nothing can work, so it
-                    // gets colour and says what to do about it.
+                {status && !provider?.usable ? (
                     <button className="status-item status-warn" onClick={onOpenSettings}>
                         <Icon name="warning" size={13} />
-                        <span>No API key — open settings</span>
+                        <span>Provider needs setup</span>
                     </button>
-                ) : (
+                ) : status ? (
                     <button className="status-item" onClick={onOpenSettings} title="Change model">
                         <span className="provider">{status.provider}</span>
                         <span className="sep">/</span>
@@ -54,7 +53,7 @@ export default function StatusBar({ onOpenSettings }: Props) {
                             {short(status.model)}
                         </span>
                     </button>
-                )}
+                ) : null}
             </div>
 
             <div className="right">
@@ -67,7 +66,7 @@ export default function StatusBar({ onOpenSettings }: Props) {
                     <button
                         className="status-item status-warn"
                         onClick={onOpenSettings}
-                        title="Every approval is off. Click to change."
+                        title="Routine approvals are skipped. Click to change."
                     >
                         <Icon name="warning" size={12} />
                         <span>Full authority</span>

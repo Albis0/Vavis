@@ -38,6 +38,7 @@ vi.mock("./toast", () => ({
 vi.mock("./confirm", () => ({ ask: vi.fn(async () => true) }));
 
 const { ChatStore } = await import("./chat");
+const { api, on } = await import("../../lib/api");
 
 beforeEach(() => {
     vi.useFakeTimers();
@@ -49,6 +50,37 @@ afterEach(() => {
 });
 
 describe("ChatStore lifecycle", () => {
+    it("cleans up subscriptions when stopped while startup is still pending", async () => {
+        const chat = new ChatStore();
+        const late = vi.fn();
+        let resolveListener!: (off: () => void) => void;
+        vi.mocked(on).mockImplementationOnce(() => new Promise((resolve) => {
+            resolveListener = resolve;
+        }));
+
+        const start = chat.start();
+        await vi.advanceTimersByTimeAsync(0);
+        chat.stop();
+        resolveListener(late);
+        await start;
+
+        expect(late).toHaveBeenCalledOnce();
+        for (const off of listeners) expect(off).toHaveBeenCalledOnce();
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("subscribes to replies even if saved history cannot be loaded", async () => {
+        const chat = new ChatStore();
+        vi.mocked(api.loadHistory).mockRejectedValueOnce(new Error("unreadable history"));
+        await chat.start();
+        try {
+            expect(listeners.length).toBeGreaterThan(0);
+            expect(vi.getTimerCount()).toBeGreaterThan(0);
+        } finally {
+            chat.stop();
+        }
+    });
+
     it("leaves no timer running after stop", async () => {
         const chat = new ChatStore();
         await chat.start();

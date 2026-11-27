@@ -335,7 +335,10 @@ impl StreamState {
         let Ok(v) = serde_json::from_str::<Value>(data) else {
             return vec![Chunk::Nothing];
         };
+        self.feed_event(&v)
+    }
 
+    pub(crate) fn feed_event(&mut self, v: &Value) -> Vec<Chunk> {
         let Some(parts) = v["candidates"][0]["content"]["parts"].as_array() else {
             return vec![Chunk::Nothing];
         };

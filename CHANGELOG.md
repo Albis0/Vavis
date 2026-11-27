@@ -1,208 +1,67 @@
-# Değişiklikler
+# Changelog
 
-Sürümler [semver](https://semver.org/lang/tr/) izliyor. Sürüm numarası üç
-dosyada birden duruyor ve `node scripts/version.mjs` ile değiştiriliyor —
-elle üç dosya düzenlemek, üçüncüsünün unutulması demek.
+VAVIS follows [Semantic Versioning](https://semver.org/). Use `bun scripts/version.mjs` to update the version in all three manifests. The changelog records user-visible changes. Git records the implementation details.
 
-Buradaki başlıklar yapılan işi değil, **kullanıcı için değişen şeyi** anlatıyor.
-Bir düzeltmenin hangi dosyaya dokunduğu git geçmişinde zaten var.
+## 0.8.0 — 2026-11-27
 
-## 0.8.0 — yayınlanmadı
+### Added
 
-### Eklendi
+- **Claude Code.** Use a Claude subscription without a separate API key. VAVIS exposes its tools through the same approval system as the other providers. A detected CLI can become the initial provider when the selected provider is unconfigured.
+- **Provider options.** OpenRouter, Cerebras, GitHub Models, a custom endpoint, and a configurable local server address. A fallback chain can retry with the next provider when the first one fails before producing output or running tools.
+- **Conversations and semantic memory.** Keep multiple searchable conversations and start a new one without removing the old one. Relevant saved facts can be retrieved by meaning.
+- **Voice.** On-device wake-word training, Gemini transcription as an alternative to Groq, and interruptible Gemini Live conversations with tool support.
+- **Windows UI Automation.** Address controls by name, scroll, and drag.
+- **Event-driven automations.** Trigger on files arriving, apps starting or stopping, VAVIS launching, and returning after an absence.
+- **Telegram.** Reach VAVIS through your own bot and approve destructive actions on the phone.
+- **Code workspace.** The assistant can read, edit, and run tests in the open project, with approvals for changes.
 
-- **Claude Code sağlayıcısı.** Claude Pro/Max aboneliğinle, API anahtarı
-  olmadan. Vavis'in bütün araçları kullanılabiliyor ve her yıkıcı işlem yine
-  onayına geliyor. Kuruluysa ve seçili sağlayıcının anahtarı yoksa Vavis onu
-  kendisi seçiyor.
-- **Ücretsiz sağlayıcılar:** OpenRouter (`:free` modeller önde), Cerebras,
-  GitHub Models, kendi adresini girebileceğin özel bir uç nokta; yerel sunucu
-  adresi (LM Studio) artık ayarlanabiliyor.
-- **Yedek sağlayıcı zinciri.** Kota dolunca ya da anahtar reddedilince mesaj
-  sıradaki sağlayıcıya geçiyor ve bunu söylüyor.
-- **Birden çok sohbet.** Yeni sohbet eskisini silmiyor; listeden aranıp
-  açılıyor, yeniden adlandırılıyor, siliniyor.
-- **Seni tanıyan hafıza.** Kendinden bahsettiğinde kalıcı bilgileri kendisi
-  çıkarıyor, her mesajda ilgili olanları kullanıyor, anlama göre arıyor.
-- **Uyandırma kelimesi bu bilgisayarda.** Adını üç kez söyleyip eğitiyorsun;
-  adın geçmeyen hiçbir cümle buluta gönderilmiyor. "Vavis." dedikten sonra
-  birkaç saniye içinde söylediğin komut da alınıyor.
-- **Canlı sesli konuşma** (Gemini Live): yarım saniyede cevap, istediğin an
-  sözünü kesebiliyorsun, araçlar çalışıyor.
-- **Pencerelerdeki kontrollere adıyla ulaşma** (UI Automation), kaydırma,
-  sürükleme.
-- **Olaylara bağlı otomasyonlar:** klasöre dosya düşünce, program açılınca ya
-  da kapanınca, Vavis açılınca, uzun aradan dönünce.
-- **Telefon:** kendi Telegram botunla dışarıdan erişim, onaylar telefonda.
-- **Kod ajanı:** kod ekranında projeyi okuyor, düzenliyor, testleri
-  çalıştırıyor, hatayı düzeltiyor.
-- Ses tanıma Groq anahtarı olmadan da (Gemini ile) çalışıyor.
+### Fixed
 
-### Düzeltildi
-
-- **Yanlış araç çağrısı artık model için yol gösteriyor.** Olmayan bir ad
-  çağrılınca en yakın 3 gerçek araç adı dönüyor; eksik zorunlu argümanda
-  hangi alanın eksik olduğu ve aracın aldığı alanlar söyleniyor. VirusTotal
-  araçları `virus_scan_file/hash/url` oldu (eski `virus_tara_*` adları
-  takma ad olarak çalışmaya devam ediyor). "Sesi kapat" artık sessize alıyor.
-- **Araç seçimi gerçek cümlelerle çalışıyor.** "Discord'u aç", "dolar kaç tl",
-  "excel'i kapat", "ip adresim ne" gibi cümlelerde model hiç araç görmüyordu
-  (ölçülen 34 cümlenin 23'ü) ve işi yapmış gibi cevap veriyordu. Artık selamlama
-  dışındaki her istek en az çekirdek araçları ve `request_tools`'u alıyor;
-  "evet" / "devam et" gibi takip mesajları önceki işin araçlarını koruyor;
-  Claude, GPT ve Gemini gibi güçlü modeller ilgili araçlardan sonra geniş bir
-  liste görüyor. VirusTotal araçları hiçbir cümleyle seçilemiyordu, düzeltildi.
-- **Onay sorulduğu anda pencere donuyordu** — onay hiçbir zaman
-  tıklanamıyordu. Ağ isteği yapan ayar ekranları da pencereyi donduruyordu.
-- Takılan bir komut (girdi bekleyen PowerShell gibi) asistanı sonsuza kadar
-  kilitliyordu; artık süre sınırı var.
-- Her konuşmada, tıklamada, tuşta siyah bir konsol penceresi yanıp sönüyordu.
-- Sesi durdurmak bilgisayardaki başka PowerShell süreçlerini de öldürüyordu.
-- Bir turda en fazla 5 adım atılabiliyordu; bilgisayar kontrolü işleri
-  yarıda kalıyordu. Artık 15, kod turlarında 40.
-- OpenAI'ın GPT-5 ve o-serisi modelleri her istekte hata veriyordu.
-- Almanca, Fransızca, İspanyolca seçenlere Türkçe cevap veriliyordu.
-- Cevap yazılırken tetiklenen otomasyon ya da söylenen cümle kayboluyordu;
-  artık sıraya alınıyor.
-- Paneldeki "+" düğmesi sohbeti onaysız siliyordu.
-- Tam yetki açıkken, okunan bir sayfanın verdiği komut sorulmadan
-  çalışabiliyordu. Claude Code'un kendi okuduğu sayfa ve dosyalar da artık
-  bu kontrolden geçiyor.
-- PowerShell çıktısındaki Türkçe karakterler bozuk geliyordu.
-- **Kod ekranında açılan bir proje bilgisayarda komut çalıştırabiliyordu.**
-  İndirilmiş bir deponun `.claude/settings.json` dosyasındaki hook'lar, Claude
-  Code'a ilk soru sorulduğunda onaysız çalışıyordu. Artık Claude Code yalnızca
-  senin kendi ayarlarını okuyor, projenin ayarlarını ve CLAUDE.md'sini değil.
-- Kod turunda Claude Code'un dosya okuma araçları bilgisayardaki **her
-  dosyayı** onaysız okuyabiliyordu (SSH anahtarları dahil). Artık yalnızca
-  açık proje klasörünün içini okuyabiliyor.
-- Kod araçları, proje içindeki bir kısayol (symlink) üzerinden proje dışına
-  yeni dosya yazabiliyordu; aramada kendine dönen bir kısayol sonsuz döngüye
-  sokuyordu. İkisi de kapandı.
-- **Kıvrık tırnaklı ("it’s") bir metin PowerShell komutu çalıştırabiliyordu.**
-  PowerShell ’ ‘ ‚ ‛ işaretlerini de tırnak sayıyor; yalnızca düz `'`
-  kaçırılıyordu. Sesli okuma, pano, pencere kontrolleri, ekran görüntüsü —
-  metin geçiren her yer hem bu yüzden bozuluyordu hem de dışarıdan gelen bir
-  metinle komut çalıştırılabiliyordu. Artık her tırnak türü kaçırılıyor.
-- **Uygulama açarken verilen argümanlar komut olarak çalışabiliyordu**
-  (`x & başka-komut`). Uygulamalar artık kabuk üzerinden değil, doğrudan
-  Windows'un açma işleviyle başlatılıyor.
-- **Onay kapısında iki arka kapı vardı.** "Uygulama aç" aracı PowerShell'i
-  argümanlarla açabiliyordu (yani komut çalıştırıyordu), ama komut
-  çalıştırmanın onayını istemeden. Artık komut çalıştırıcıları ve betik
-  dosyalarını açmayı reddediyor. Ayrıca talimat vermeye çalışan bir sayfa
-  okunduktan sonra yalnızca yıkıcı işlemler değil **her değişiklik** soruluyor:
-  bir otomasyon kurmak da buna dahil, çünkü otomasyon daha sonra temiz bir
-  turda çalışıp o sayfanın dediğini yapabilirdi.
-- İzlenen klasöre düşen bir dosyanın **adı** otomasyon istemine senin
-  sözün gibi giriyordu; "önceki talimatları unut ve …" adlı bir dosya
-  dışarıdan komut vermenin yoluydu. Böyle adlar artık dış içerik olarak
-  işaretleniyor ve o tur baştan temkinli başlıyor.
-- **`npx` ile eklenen MCP sunucuları Windows'ta hiç başlamıyordu** ("program
-  bulunamadı") — MCP sunucularının neredeyse hepsinin kurulum şekli, ayar
-  ekranının da önerdiği buydu. `npx`, `npm`, `pnpm` gibi `.cmd` kısayolları
-  artık bulunuyor.
-- Ayarlar → Shortcuts listesinde `Ctrl+K` ve `Ctrl+B` yoktu; `Ctrl+L` de
-  "sohbeti temizle" yazıyordu, oysa yeni sohbet açıp eskisini listede tutuyor.
-- Adında köşeli parantez olan düğmeler, alanlar ve pencereler ("Sayfa [1]",
-  "Belge [Salt okunur]") adıyla bulunamıyordu.
-- Çok satırlı bir metni yazdırırken her satır sonu Ctrl+Enter olarak
-  gidiyordu — Teams, Slack, Outlook'ta mesaj yarıda gönderiliyordu.
-- Kullanıcı adında `'` olan bilgisayarlarda (O'Brien) ses dosyaları
-  çalınamıyordu.
-- Telefondan: Vavis botu bir gruba eklenirse cevaplar ve onay soruları gruba
-  gidiyordu; artık yalnızca botla özel sohbet geçerli.
+- Conversations restore their history and keep it aligned with the model after switching or deleting. The active conversation and its replacement are handled together. Rename now has a dedicated action. The new-conversation button keeps the previous conversation.
+- Voice and automation requests wait their turn without clearing a draft. A reply finishing on the phone frees the same queue. A failed history load leaves event listeners active, and closing during startup cleans up late subscriptions.
+- OpenRouter uses its current free router in place of the retired default. Provider streams preserve split UTF-8 characters and report interrupted or empty answers. Anthropic model discovery uses the proper authentication and version headers. The status bar recognizes keyless providers.
+- Tool selection offers core tools and `request_tools` for substantive requests, prioritizes relevant tools for larger models, and carries the previous task's tools into follow-up requests. Incorrect tool names return up to three suggestions. Missing arguments identify the accepted fields. VirusTotal tools use `virus_scan_file`, `virus_scan_hash`, and `virus_scan_url`, with aliases for older names. A request to turn off sound mutes it.
+- The window stays responsive during approval and network checks. Hung commands have a timeout. Console windows no longer flash during common actions, and stopping speech targets the app's own process. Turn limits are 15 for regular tasks and 40 for code tasks.
+- OpenAI GPT-5 and o-series requests use their required parameters. German, French, and Spanish language selections are respected. The live voice command updates its label when the session changes.
+- The approval system checks content read directly by Claude Code and filenames supplied by folder automations. After suspicious outside instructions, all state-changing actions require approval, including scheduling an automation.
+- Claude Code ignores project-level hooks and instructions files. Direct reads during a code turn are confined to the project. Workspace writes reject links that escape the workspace, and search skips loops.
+- PowerShell text and its output preserve Turkish characters and curly quotes. App launching uses Windows directly and rejects command interpreters and script files. Windows MCP servers started through `.cmd` shims such as `npx`, `npm`, and `pnpm` are found correctly.
+- The shortcuts list includes `Ctrl+K` and `Ctrl+B`, and describes `Ctrl+L` as starting a new conversation. Window controls with square brackets are found by name. Multiline typing avoids accidental message submission. Speech works with apostrophes in Windows user names. Telegram replies and approvals are restricted to private chats.
 
 ## 0.7.4 — 2026-09-07
 
-0.7.0 ile 0.7.3 arası atlandı. O numaralar bu deponun önceki adıyla (AEGIS)
-verilmiş etiketlerde duruyor; silmek yerine üstünden devam edildi, böylece
-yeni sürüm GitHub'da gerçekten "latest" görünüyor.
+Versions 0.7.0 through 0.7.3 were already used by AEGIS. VAVIS continued from 0.7.4 so GitHub could correctly mark the newest release.
 
-### Eklendi
+### Added
 
-- **Ayarlarda model ve anahtarlar tek ekranda.** Sağlayıcı başına bir kart:
-  anahtarı var mı, hangi model, çalışıyor mu, ve üçünün de düğmesi orada.
-  Anahtar kutusu ait olduğu kartın içinde açılıyor, aynı anda yalnızca bir
-  tanesi. Eskiden "anahtar yok" yazan sağlayıcıyı seçmek sorunu söylüyor ama
-  düzeltmek için başka bir ekrana yolluyordu — orada da aynı sağlayıcılar bir
-  kez daha, başka bir biçimde listeleniyordu.
-- **Ayar kontrolleri dokunulabilir boyutta.** Giriş alanları 3 piksel dolgudan
-  8 piksele çıktı. Hedefler 20 pikselin altındaydı: işaretçinin güvenilir
-  şekilde yakalayamayacağı, normal bakış mesafesinde giriş alanı gibi
-  okunmayacağı kadar küçük.
-- **Tam yetki modu.** Ayarlar → Tools altında tek anahtar: bütün onaylar ve
-  bütçeler kapanıyor. Açarken bir kez uyarı çıkıyor, sonra bir daha
-  sorulmuyor. Açıkken durum çubuğunda kalıcı bir gösterge duruyor — etkisi
-  "hiçbir şey çıkmaması" olan bir modun kendisi de görünmez olmamalı.
-- **Model kendi aracını isteyebiliyor.** Elinde olmayan bir araca ihtiyaç
-  duyduğunda `arac_iste` ile ne yapmak istediğini yazıyor, ilgili araçlar bir
-  sonraki adımda sunuluyor. Anahtar kelime tablosu da yönlendirici de
-  kullanıcının cümlesine bakıyor; cümlenin söylemediği ihtiyacı ikisi de
-  göremiyordu.
-- **Model başına araç bütçesi.** Sabit "en fazla 12 araç" kuralı kalktı. O
-  sabit en zayıf modelin sınırını herkese dayatıyordu; artık sınır modelden
-  geliyor. Bütçe bir tavan, hedef değil — geniş bütçe listeyi doldurmak için
-  sebep değil.
-- **İki aşamalı araç seçimi.** Ucuz bir model hangi araçların gerektiğine
-  karar veriyor, pahalı model işi yapıyor. Varsayılan kapalı; Ayarlar → Model
-  altında bir model adı yazınca devreye giriyor. Çalışmazsa sessizce anahtar
-  kelime eşleşmesine düşüyor — asistan çalışmaya devam ediyor.
-- **Prompt injection savunması.** Dışarıdan gelen metin açık bir çerçeveye
-  alınıyor, bilinen saldırı kalıpları taranıyor, ve şüphe varsa o turda yıkıcı
-  işlemler kalıcı izne rağmen onay istiyor. İçerik sansürlenmiyor: yanlış
-  pozitifte veri kaybetmemek için sayfa yine gösteriliyor.
-- **Terminal tarzı geçmiş.** ↑/↓ ile son 20 mesaj arasında geziniyor. Çok
-  satırlı metinde imleci bozmuyor, yarım kalan yazı kaybolmuyor, uygulama
-  yeniden açılınca geçmiş duruyor.
-- **NVIDIA sağlayıcısı.** build.nvidia.com, OpenAI uyumlu.
-- **Arayüz testleri.** Markdown kaçışı (model cevabı `innerHTML`'e gidiyor),
-  komut geçmişi ve akan cevapların birleştirilmesi. Tip denetimi davranışı
-  görmüyordu.
-- **Sürüm betiği.** `node scripts/version.mjs` üç dosyayı birden değiştiriyor;
-  `--check` üçünün aynı olduğunu doğruluyor.
+- Model selection, API key entry, and connection testing appear on the same provider card. Settings controls have larger hit areas.
+- Full authority was introduced as an opt-in setting with a persistent status indicator.
+- Models can request additional tools when needed. Per-model budgets replaced a fixed 12-tool cap. An optional smaller routing model can suggest tools, with keyword routing as a fallback.
+- Outside text is framed and checked for prompt injection. Suspicious content causes approvals to be requested again in the current turn. The original content remains available to the model.
+- Up and down arrows navigate the last 20 messages, preserve an unfinished draft, and respect multiline caret movement. Recent messages are restored on restart.
+- Added NVIDIA as a provider and frontend tests for Markdown escaping, message history, and reply streaming. A version script keeps the three manifests in sync.
 
-### Düzeltildi
+### Fixed
 
-- **Saat soruluyordu, model uyduruyordu.** Çekirdek araçlar (saat, hesap
-  makinesi) pratikte hiçbir zaman modele sunulmuyordu: alan tablosunda
-  çekirdek satırı yoktu, alan eşleşmesi boş dönünce de seçim erkenden
-  çıkıyordu. Artık "saat kaç" saat aracını getiriyor, "bugün nasılsın" ise
-  hâlâ sohbet.
-- **Anahtarsız web araması hiçbir şey bulmuyordu.** Kullanılan uç nokta
-  yalnızca ansiklopedik varlıkları biliyor, dolayısıyla anahtarı olmayan
-  kullanıcının yazdığı hemen her şey boş dönüyordu. Genel sorgular artık
-  sonuç veriyor, hesaplanan cevap alanı okunuyor, ve hız kısıtlaması "sonuç
-  yok" ile karıştırılmıyor.
-- **Kenarlıksız pencere ekranı kaplamıyordu.** F11 yolu ile açılış yolu ayrı
-  ayrı yazılmıştı ve yalnızca açılıştaki çalışıyordu. Sohbet paneli de geniş
-  ekranda sağ kenardan taşıyor, metinler kesiliyordu.
-- **Hız sınırı turu bitiriyordu.** Sağlayıcı ne kadar bekleneceğini söylüyor,
-  bu bilgi atılıyordu. Kısa ve açıkça söylenmiş beklemeler artık bekleniyor —
-  en fazla iki kez, ve yalnızca süre verildiyse.
-- **Enjeksiyon çerçevesi ekrana sızıyordu.** Araç satırında "DIŞ İÇERİK
-  BAŞLANGICI" yazıyordu. Çerçeve modele yazılmış bir sözleşme, kullanıcı için
-  gürültü; artık yalnızca modele gidiyor.
+- Clock and calculator tools are offered for relevant questions, while ordinary greetings remain conversational.
+- Keyless web search can return general results, use calculated answers, and distinguish throttling from no results.
+- The borderless window fills its work area, and the chat panel stays inside wide windows.
+- Short, explicit rate-limit waits are honored up to twice. The outside-content framing is shown only to the model.
 
 ## 0.6.1 — 2026-08-30
 
-- Uzunluk reddi ile hız sınırı birbirine karışıyordu: iki kelimelik bir mesaja
-  "konuşma çok uzadı" deniyordu. Sebep, bazı sağlayıcıların dakikalık kota
-  aşımını boyut hatası gibi (413) bildirmesi.
-- Çok uzayan konuşmadan çıkış yolu kullanıcıya ulaşmıyordu.
-- Sığmayan araçlar yalnızca sayılıyor, listeden düşürülmüyordu.
-- Çalan parça kutusu, pencere izinleri ve arayüz dili ile ilgili düzeltmeler.
+- Rate limits are distinguished from context-length refusals, even when both use HTTP 413.
+- Oversized conversations offer a recovery action. Tool definitions that exceed the budget are dropped before sending the request.
+- Fixed the playback panel, window permissions, and interface language settings.
 
 ## 0.6.0 — 2026-08-30
 
-- Modal katmanı, bildirimler ve gerçek onay diyalogları.
-- Kod, kanvas ve konsey görünümleri yeniden yazıldı.
-- Çalan parça kutusu ekranda istenen yere konulabiliyor.
-- Reaktör 2B bir gösterge yüzü olarak çiziliyor.
-- Spotify tek tıkla bağlanıyor ve Windows'ta gerçekten çalışıyor.
+- Added modals, notifications, and approval dialogs.
+- Rebuilt the Code, Canvas, and Council views. The playback panel can be placed anywhere on the screen.
+- Replaced the reactor with a 2D instrument face. Added one-click Spotify connection on Windows.
 
-## 0.3.0 — daha önce
+## 0.3.0
 
-- Arayüz Tauri + Svelte üzerine yeniden kuruldu.
-- Kanvas, konsey ve kod arayüzleri; ayarlar yeniden tasarlandı.
-- Sürüm ikilisi Defender tarafından yanlışlıkla trojan olarak işaretleniyordu.
+- Rebuilt the interface with Tauri and Svelte.
+- Added Canvas, Council, and Code views and redesigned settings.
+- Addressed a Windows Defender false positive affecting the release executable.

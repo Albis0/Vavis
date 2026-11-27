@@ -21,7 +21,7 @@ if you chat through another provider. Press `Ctrl+M` to cycle voice modes. For
 the wake word, train it once in **Settings → Voice → Wake word**.
 
 **The assistant answers in the wrong language** — **Settings → General →
-Language** (English, Türkçe, Deutsch, Français, Español).
+Language** (English, Turkish, German, French, and Spanish).
 
 ## Something is broken
 

@@ -282,7 +282,10 @@ impl Registry {
 
     /// `old` keeps resolving to `current`.
     pub fn alias(&mut self, old: &'static str, current: &'static str) {
-        debug_assert!(self.tools.contains_key(current), "alias to unknown {current}");
+        debug_assert!(
+            self.tools.contains_key(current),
+            "alias to unknown {current}"
+        );
         self.aliases.insert(old, current);
     }
 

@@ -156,6 +156,7 @@ async fn test(state: &AppState, target: &str) -> ConnectionTest {
             }
 
             match client.list_models_at(parsed, &key, url.as_deref()).await {
+                Ok(models) if models.is_empty() => ConnectionTest::bad("no chat models available"),
                 Ok(models) => ConnectionTest::ok(format!("{} models available", models.len())),
                 Err(e) => ConnectionTest::bad(super::friendly_error(&e)),
             }

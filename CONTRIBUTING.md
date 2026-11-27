@@ -4,7 +4,7 @@ How to set up the project, the conventions it follows, and how to submit changes
 
 ## Development setup
 
-Requirements: **Windows 10/11**, **Rust 1.85+** and **[Bun](https://bun.sh)**
+Requirements: **Windows 10/11**, **stable Rust** and **[Bun](https://bun.sh)**
 (for the interface). The WebView2 runtime ships with Windows 11 and current
 Windows 10.
 

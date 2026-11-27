@@ -208,7 +208,10 @@ impl StreamState {
         let Ok(event) = serde_json::from_str::<Value>(data) else {
             return Chunk::Nothing;
         };
+        self.feed_event(&event)
+    }
 
+    pub(crate) fn feed_event(&mut self, event: &Value) -> Chunk {
         match event["type"].as_str().unwrap_or_default() {
             // Yeni içerik bloğu başladı — tool ise kaydını aç.
             "content_block_start" => {
@@ -246,12 +249,6 @@ impl StreamState {
             }
 
             "message_stop" => Chunk::Done,
-
-            // Sunucu hata olayı gönderdiyse akışı bitir.
-            "error" => {
-                tracing::warn!(?event, "anthropic akış hatası");
-                Chunk::Done
-            }
 
             _ => Chunk::Nothing,
         }

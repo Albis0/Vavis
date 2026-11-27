@@ -396,9 +396,9 @@ export const api = {
         invoke<StoredLine[]>("open_conversation", { id }),
     renameConversation: (id: number, title: string) =>
         invoke<void>("rename_conversation", { id, title }),
-    /** Returns the id of the conversation now current. */
+    /** Returns replacement messages if the active conversation was deleted. */
     deleteConversation: (id: number) =>
-        invoke<number>("delete_conversation", { id }),
+        invoke<StoredLine[] | null>("delete_conversation", { id }),
     memorySettings: () => invoke<MemorySettings>("get_memory_settings"),
     startWakeTraining: () => invoke<void>("start_wake_training"),
     cancelWakeTraining: () => invoke<void>("cancel_wake_training"),

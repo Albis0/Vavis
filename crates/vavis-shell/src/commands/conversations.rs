@@ -39,27 +39,23 @@ pub fn list_conversations(
         .collect())
 }
 
-/// Refuses to switch mid-reply: the reply would land in one conversation
-/// while the screen showed another.
-fn not_busy(state: &AppState) -> Result<(), String> {
-    if state.busy.load(Ordering::SeqCst) {
-        Err("wait for the reply to finish first".into())
-    } else {
-        Ok(())
-    }
+pub(super) fn claim(state: &AppState) -> Result<crate::state::BusyGuard, String> {
+    state
+        .try_claim()
+        .ok_or_else(|| "wait for the reply to finish first".into())
 }
 
 /// Starts a new conversation and makes it current. An empty current one is
 /// reused rather than piling up blank entries in the list.
 #[tauri::command]
 pub fn new_conversation(state: State<AppState>) -> Result<i64, String> {
-    not_busy(&state)?;
+    let _guard = claim(&state)?;
     let mut current = AppState::lock(&state.conversation);
     let store = AppState::lock(&state.store);
     let empty = store
         .messages_in(*current, 1)
-        .map(|m| m.is_empty())
-        .unwrap_or(false);
+        .map_err(|e| e.to_string())?
+        .is_empty();
     if !empty {
         *current = store.create_conversation("").map_err(|e| e.to_string())?;
     }
@@ -71,15 +67,17 @@ pub fn new_conversation(state: State<AppState>) -> Result<i64, String> {
 /// Switches to a conversation and returns its messages for the screen.
 #[tauri::command]
 pub fn open_conversation(state: State<AppState>, id: i64) -> Result<Vec<chat::StoredLine>, String> {
-    not_busy(&state)?;
-    let exists = AppState::lock(&state.store)
-        .conversation_exists(id)
-        .map_err(|e| e.to_string())?;
+    let _guard = claim(&state)?;
+    let mut current = AppState::lock(&state.conversation);
+    let store = AppState::lock(&state.store);
+    let exists = store.conversation_exists(id).map_err(|e| e.to_string())?;
     if !exists {
         return Err("that conversation no longer exists".into());
     }
-    *AppState::lock(&state.conversation) = id;
-    Ok(chat::restore(&state, id))
+    let lines = chat::saved_lines(&store, id)?;
+    *AppState::lock(&state.history) = chat::model_history(&lines);
+    *current = id;
+    Ok(lines)
 }
 
 #[tauri::command]
@@ -91,21 +89,24 @@ pub fn rename_conversation(state: State<AppState>, id: i64, title: String) -> Re
 }
 
 /// Deletes a conversation. Deleting the current one moves to the most
-/// recent other, or a fresh one; the new current id is returned so the
-/// interface can reload.
+/// recent other, or a fresh one, and returns its messages.
 #[tauri::command]
-pub fn delete_conversation(state: State<AppState>, id: i64) -> Result<i64, String> {
-    not_busy(&state)?;
+pub fn delete_conversation(
+    state: State<AppState>,
+    id: i64,
+) -> Result<Option<Vec<chat::StoredLine>>, String> {
+    let _guard = claim(&state)?;
     let mut current = AppState::lock(&state.conversation);
     let store = AppState::lock(&state.store);
-    store.delete_conversation(id).map_err(|e| e.to_string())?;
-    if *current == id {
-        *current = match store.latest_conversation().map_err(|e| e.to_string())? {
-            Some(next) => next,
-            None => store.create_conversation("").map_err(|e| e.to_string())?,
-        };
-        drop(store);
-        AppState::lock(&state.history).clear();
+    if *current != id {
+        store.delete_conversation(id).map_err(|e| e.to_string())?;
+        return Ok(None);
     }
-    Ok(*current)
+    let (next, messages) = store
+        .delete_current_conversation(id, chat::RESTORE_LIMIT)
+        .map_err(|e| e.to_string())?;
+    let lines = chat::visible_lines(messages);
+    *AppState::lock(&state.history) = chat::model_history(&lines);
+    *current = next;
+    Ok(Some(lines))
 }

@@ -7,11 +7,11 @@ Status legend: `[x]` done and tested · `[~]` partly done · `[ ]` not started
 
 ## Integrations
 
-- [x] **VirusTotal** — dosya ve adres itibarı, 3 tool. Dosya **hiçbir zaman
-      yüklenmiyor**: SHA-256 yerel hesaplanıp yalnızca o soruluyor, bilinmeyen
-      hash "bilinmiyor" dönüyor. Eşik oran üzerinden — sabit sayı google.com'u
-      "ciddi" diye işaretliyordu. Dakika sınırı istemcide de sayılıyor, anahtar
-      kaydedilirken gerçek bir sorguyla doğrulanıyor.
+- [x] **VirusTotal** — three tools for file and URL reputation. Files stay on
+      the device. VAVIS computes SHA-256 locally and queries the hash, reporting
+      unknown hashes as unknown. Severity uses the proportion of detections
+      because a fixed threshold flagged google.com. The client tracks its
+      per-minute allowance and validates a saved key with a real request.
       `crates/vavis-tools/src/virustotal/`
 
 - [x] **Web search chain** — Tavily → Brave → custom → DuckDuckGo, sequential

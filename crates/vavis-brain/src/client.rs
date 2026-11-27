@@ -12,6 +12,7 @@ use crate::message::{Message, ToolCall};
 use crate::provider::Provider;
 use futures_util::StreamExt;
 use serde::Deserialize;
+use serde_json::Value;
 use std::time::Duration;
 
 #[derive(Debug, thiserror::Error)]
@@ -288,63 +289,26 @@ impl BrainClient {
         }
 
         let mut full = String::new();
-        let mut buf = String::new();
-        // Tool çağrıları indekse göre biriktirilir: sağlayıcı adı bir parçada,
-        // argümanları sonraki parçalarda gönderir.
-        let mut pending: Vec<ToolCallBuilder> = Vec::new();
-        let mut stream = resp.bytes_stream();
-
-        while let Some(chunk) = stream.next().await {
-            let bytes = chunk?;
-            buf.push_str(&String::from_utf8_lossy(&bytes));
-
-            // SSE: olaylar boş satırla değil, `data: ` satırlarıyla gelir.
-            // Yarım satır kalabilir — tamponda bekletiriz.
-            while let Some(nl) = buf.find('\n') {
-                let line = buf[..nl].trim().to_string();
-                buf.drain(..=nl);
-
-                let Some(data) = line.strip_prefix("data:") else {
-                    continue;
-                };
-                let data = data.trim();
-
-                if data == "[DONE]" {
-                    let calls = finish_calls(pending);
-                    if !calls.is_empty() {
-                        on_event(StreamEvent::ToolCalls(calls.clone()));
-                    }
-                    on_event(StreamEvent::Done);
-                    return Ok(ChatResponse {
-                        text: full,
-                        tool_calls: calls,
-                    });
-                }
-                if data.is_empty() {
-                    continue;
-                }
-
-                match serde_json::from_str::<StreamChunk>(data) {
-                    Ok(parsed) => {
-                        if let Some(choice) = parsed.choices.into_iter().next() {
-                            if let Some(text) = choice.delta.content {
-                                if !text.is_empty() {
-                                    full.push_str(&text);
-                                    on_event(StreamEvent::Delta(text));
-                                }
-                            }
-                            if let Some(calls) = choice.delta.tool_calls {
-                                merge_tool_calls(&mut pending, calls);
-                            }
+        let mut pending = Vec::new();
+        read_sse(resp, &cfg.api_key, |data| {
+            match serde_json::from_value::<StreamChunk>(data) {
+                Ok(parsed) => {
+                    if let Some(choice) = parsed.choices.into_iter().next() {
+                        if let Some(text) = choice.delta.content.filter(|text| !text.is_empty()) {
+                            full.push_str(&text);
+                            on_event(StreamEvent::Delta(text));
+                        }
+                        if let Some(calls) = choice.delta.tool_calls {
+                            merge_tool_calls(&mut pending, calls);
                         }
                     }
-                    // Tek bozuk parça yüzünden akışı öldürme — atla, devam et.
-                    Err(e) => tracing::debug!(%e, data, "akış parçası çözümlenemedi"),
                 }
+                Err(e) => tracing::debug!(%e, "invalid chat stream chunk"),
             }
-        }
+            true
+        })
+        .await?;
 
-        // [DONE] gelmeden akış bitti (bazı sağlayıcılar göndermiyor).
         let calls = finish_calls(pending);
         if !calls.is_empty() {
             on_event(StreamEvent::ToolCalls(calls.clone()));
@@ -406,48 +370,20 @@ impl BrainClient {
         }
 
         let mut full = String::new();
-        let mut buf = String::new();
         let mut state = StreamState::default();
-        let mut stream = resp.bytes_stream();
-
-        while let Some(chunk) = stream.next().await {
-            buf.push_str(&String::from_utf8_lossy(&chunk?));
-
-            while let Some(nl) = buf.find('\n') {
-                let line = buf[..nl].trim().to_string();
-                buf.drain(..=nl);
-
-                // `event:` satırları yok sayılır — tip zaten veri içinde.
-                let Some(data) = line.strip_prefix("data:") else {
-                    continue;
-                };
-                let data = data.trim();
-                if data.is_empty() {
-                    continue;
+        read_sse(resp, &cfg.api_key, |event| {
+            match state.feed_event(&event) {
+                Chunk::Text(text) => {
+                    full.push_str(&text);
+                    on_event(StreamEvent::Delta(text));
                 }
-
-                match state.feed(data) {
-                    Chunk::Text(text) => {
-                        full.push_str(&text);
-                        on_event(StreamEvent::Delta(text));
-                    }
-                    Chunk::Done => {
-                        let calls = state.finish();
-                        if !calls.is_empty() {
-                            on_event(StreamEvent::ToolCalls(calls.clone()));
-                        }
-                        on_event(StreamEvent::Done);
-                        return Ok(ChatResponse {
-                            text: full,
-                            tool_calls: calls,
-                        });
-                    }
-                    Chunk::Nothing => {}
-                }
+                Chunk::Done => return false,
+                Chunk::Nothing => {}
             }
-        }
+            true
+        })
+        .await?;
 
-        // Akış `message_stop` gelmeden bitti.
         let calls = state.finish();
         if !calls.is_empty() {
             on_event(StreamEvent::ToolCalls(calls.clone()));
@@ -517,38 +453,22 @@ impl BrainClient {
         }
 
         let mut full = String::new();
-        let mut buf = String::new();
-        let mut calls: Vec<ToolCall> = Vec::new();
+        let mut calls = Vec::new();
         let mut state = StreamState::new();
-        let mut stream = resp.bytes_stream();
-
-        while let Some(chunk) = stream.next().await {
-            buf.push_str(&String::from_utf8_lossy(&chunk?));
-
-            while let Some(nl) = buf.find('\n') {
-                let line = buf[..nl].trim().to_string();
-                buf.drain(..=nl);
-
-                let Some(data) = line.strip_prefix("data:") else {
-                    continue;
-                };
-                let data = data.trim();
-                if data.is_empty() {
-                    continue;
-                }
-
-                for piece in state.feed(data) {
-                    match piece {
-                        Chunk::Text(text) => {
-                            full.push_str(&text);
-                            on_event(StreamEvent::Delta(text));
-                        }
-                        Chunk::Call(call) => calls.push(call),
-                        Chunk::Nothing => {}
+        read_sse(resp, &cfg.api_key, |event| {
+            for piece in state.feed_event(&event) {
+                match piece {
+                    Chunk::Text(text) => {
+                        full.push_str(&text);
+                        on_event(StreamEvent::Delta(text));
                     }
+                    Chunk::Call(call) => calls.push(call),
+                    Chunk::Nothing => {}
                 }
             }
-        }
+            true
+        })
+        .await?;
 
         if !calls.is_empty() {
             on_event(StreamEvent::ToolCalls(calls.clone()));
@@ -653,6 +573,9 @@ impl BrainClient {
             // Gemini's own endpoint takes the key in a header and answers
             // with `models[].name`, not `data[].id`.
             Provider::Gemini => req.header(crate::gemini::KEY_HEADER, api_key),
+            Provider::Anthropic => req
+                .header("x-api-key", api_key)
+                .header("anthropic-version", crate::anthropic::API_VERSION),
             Provider::Local => req,
             _ if !api_key.trim().is_empty() => req.bearer_auth(api_key),
             _ => req,
@@ -736,10 +659,91 @@ impl BrainClient {
         // OpenRouter lists several hundred, and the ones that cost nothing
         // are the ones a new key can actually use.
         out.sort_unstable_by(|a, b| {
-            (!a.ends_with(":free"), a.as_str()).cmp(&(!b.ends_with(":free"), b.as_str()))
+            let free = |id: &str| id.ends_with(":free") || id == "openrouter/free";
+            (!free(a), a.as_str()).cmp(&(!free(b), b.as_str()))
         });
         Ok(out)
     }
+}
+
+/// SSE lines can split inside a UTF-8 character at any network boundary.
+async fn read_sse(
+    response: reqwest::Response,
+    key: &str,
+    mut on_data: impl FnMut(Value) -> bool,
+) -> Result<()> {
+    let mut buffer = Vec::new();
+    let mut stream = response.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        for part in chunk?.split_inclusive(|byte| *byte == b'\n') {
+            buffer.extend_from_slice(part);
+            if part.ends_with(b"\n") {
+                if !handle_sse_line(&buffer, key, &mut on_data)? {
+                    return Ok(());
+                }
+                buffer.clear();
+            }
+        }
+    }
+    if !buffer.is_empty() {
+        handle_sse_line(&buffer, key, &mut on_data)?;
+    }
+    Ok(())
+}
+
+fn handle_sse_line(
+    line: &[u8],
+    key: &str,
+    on_data: &mut impl FnMut(Value) -> bool,
+) -> Result<bool> {
+    let line = String::from_utf8_lossy(line);
+    let Some(data) = line.trim().strip_prefix("data:").map(str::trim) else {
+        return Ok(true);
+    };
+    if data == "[DONE]" {
+        return Ok(false);
+    }
+    if data.is_empty() {
+        return Ok(true);
+    }
+    let value: Value = match serde_json::from_str(data) {
+        Ok(value) => value,
+        Err(e) => {
+            tracing::debug!(%e, "invalid SSE data");
+            return Ok(true);
+        }
+    };
+
+    let error = &value["error"];
+    if !error.is_null()
+        || value["type"] == "error"
+        || value["choices"][0]["finish_reason"] == "error"
+    {
+        let status = match error["code"].as_u64() {
+            Some(code @ 400..=599) => code as u16,
+            _ => match error["type"].as_str() {
+                Some("authentication_error") => 401,
+                Some("permission_error") => 403,
+                Some("rate_limit_error") => 429,
+                Some("overloaded_error") => 529,
+                _ => 502,
+            },
+        };
+        let body = error["message"]
+            .as_str()
+            .or_else(|| error.as_str())
+            .unwrap_or("the provider interrupted its response");
+        let body = if key.is_empty() {
+            body.to_string()
+        } else {
+            body.replace(key, "***")
+        };
+        return Err(BrainError::Api {
+            status,
+            body: body.chars().take(500).collect(),
+        });
+    }
+    Ok(on_data(value))
 }
 
 /// Mesajları OpenAI-uyumlu gövdeye çevirir.

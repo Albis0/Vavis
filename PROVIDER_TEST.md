@@ -1,382 +1,124 @@
-# Sağlayıcı test listesi
-
-Vavis'te **14 sağlayıcı** var. Çoğu uygulama tek modele basıp geçiyor; bizim
-her birinin ayrı tuhaflıklarıyla uğraşmamız gerekiyor. Bu dosya, bir sağlayıcıyı sağlama
-alırken **sırayla neye bakılacağını** tutuyor.
-
-Her madde Groq'ta gerçekten bulunmuş bir hatadan geliyor. Uydurma senaryo yok —
-hepsi canlı API'ye sorularak ortaya çıktı.
+# Provider test checklist
 
-> **Kural:** belgeye değil **API'ye** sor. Groq'un belgesi bu bulguların
-> yarısını söylemiyordu; bazılarında belgenin tersi çıktı.
+VAVIS exposes 14 chat provider options. Check both the advertised capabilities and what the service sends on a real request. Availability, quotas, and model IDs change independently of the app.
 
----
+## Verification snapshot
 
-## Sağlayıcı durumu
+The November 27, 2026 audit used one or more short synthetic prompts per available connection. It did not test every listed model or every account tier. The local socket suite exercised all 13 HTTP paths. Claude Code uses a separate CLI path.
 
-| Sağlayıcı | Denendi mi | Notlar |
-|---|---|---|
-| **Groq** | ✅ tam tarandı | 6 hata bulundu, hepsi düzeltildi — aşağıda |
-| OpenAI | ⬜ | |
-| **Gemini** | ✅ tam tarandı | Yerel API'ye taşındı; 3 hata bulundu ve düzeltildi |
-| Mistral | ⬜ | |
-| DeepSeek | ⬜ | |
-| XAI (Grok) | ⬜ | |
-| Nvidia NIM | ⬜ | |
-| Anthropic | ⬜ | Ayrı gövde şeması — kendi yolu var (`anthropic.rs`) |
-| **Claude Code** | ✅ canlı denendi | API değil, `claude -p` programı; araçlar yerel MCP köprüsünden. `claude_code_agent_e2e` testleri gerçek CLI'ye karşı |
-| OpenRouter | ⬜ | `:free` modeller |
-| Cerebras | ⬜ | |
-| GitHub Models | ⬜ | Kişisel erişim anahtarıyla |
-| Custom | ⬜ | Kullanıcının verdiği OpenAI uyumlu adres |
-| Local (Ollama/LM Studio) | ⬜ | Anahtar istemez; ayrı kontroller |
+| Provider | Live result | Local coverage |
+| --- | --- | --- |
+| Groq | Model list, default reply, and tool round trip passed | OpenAI-compatible stream and Groq built-in tools |
+| Gemini | Model list, default reply, and tool round trip passed | Native payload, stream, and tool state |
+| OpenRouter | Model list, `openrouter/free` reply, and tool round trip passed. The previous default returned HTTP 404. | Stream errors and retired saved default |
+| Claude Code | Signed-in Windows CLI produced a reply and called a test tool through the bridge | CLI stream events and MCP bridge |
+| Local | Model list and reply with a local llama.cpp/Qwen server | OpenAI-compatible stream and desktop flow |
+| Custom | Model list and reply from the same real local runtime configured as a custom endpoint | Configured endpoint, stream, and failover |
+| Anthropic API | Test account unavailable | Native stream, tool call, and model-list headers |
+| Cerebras, DeepSeek, GitHub Models, Mistral, NVIDIA, OpenAI, xAI | Test accounts unavailable | HTTP stream path using local responses |
 
----
+## How to test a provider
 
-## Nasıl test edilir
+Use a short-lived probe with a test account and synthetic prompts. Keep keys and probe output with account details out of source control. Start with one short request per model in the scope of the test. Avoid quota or load tests on shared accounts.
 
-Canlı API'ye soran geçici bir test yazılır, çalıştırılır, **silinir**.
+### 1. Model discovery
 
-```rust
-// crates/vavis-brain/tests/zz_probe.rs  — işin sonunda sil
-use vavis_brain::keys::KeyStore;
+- [ ] Check the live catalog against `budget.rs`, including context windows, output limits, published tool capabilities, and pricing when available.
+- [ ] Check that speech, embedding, image, and classification models are excluded from the chat picker.
+- [ ] Verify the default answers and send a request to each model in the intended test set. A retired model can remain in the catalog.
 
-fn key(provider: &str) -> String {
-    let root = std::path::PathBuf::from(std::env::var("APPDATA").unwrap())
-        .join("vavis").join("data");
-    KeyStore::load(&root).get(provider).unwrap().to_string()
-}
+### 2. Context and output budgets
 
-#[tokio::test]
-async fn probe() {
-    if std::env::var("VAVIS_PROBE").is_err() { return; }   // kazara çalışmasın
-    // ... sorular ...
-}
-```
+- [ ] Compare `ModelCaps::for_model` with provider metadata. Check broad family-name matches for smaller models.
+- [ ] Verify that a request fits the combined context and output budget. Verify that the output limit is accepted.
+- [ ] Check the per-minute input token limit separately from the context window. Waiting cannot help when a single request exceeds an entire minute's allowance.
 
-```bash
-VAVIS_PROBE=1 cargo test -p vavis-brain --test zz_probe -- --nocapture
-```
+### 3. Tools
 
-Sondaj dosyası depoya **girmez**. Bulgular teste ve bu dosyaya yazılır.
+- [ ] Send a harmless function schema, receive a tool call, and return a synthetic result. Verify that the provider binds the result to the call.
+- [ ] For providers with built-in tools, verify whether built-in and custom tools can coexist. Check that other model families do not receive unsupported built-in types.
+- [ ] Inspect the actual request at a local socket. A routing unit test alone cannot show whether the request builder applies its decision.
 
----
+### 4. Error shapes
 
-## Kontrol listesi
+- [ ] Record the status and sanitized response for an invalid test key, nonexistent model, oversized request, invalid output limit, and known rate-limit refusal.
+- [ ] Verify error classification and recovery. Context length, per-minute quota, and a retired model require different responses.
+- [ ] Confirm that error output and logging do not reflect keys.
 
-### 1. Model listesi — `/models` ne veriyor?
+### 5. Rate limits
 
-Sağlayıcının kendi listesi çoğu zaman bizim tahmin ettiğimizden fazlasını
-söylüyor. Groq her model için şunları veriyor:
+- [ ] Check `retry-after`, `x-ratelimit-*`, and whether reset values are durations or timestamps. Check the scope of the quota and time window.
+- [ ] Check that short delays the provider explicitly supplies can be honored. Large requests that cannot fit within the quota should offer guidance to shorten the input.
 
-```json
-{ "id": "...", "context_window": 131042, "max_completion_tokens": 16384,
-  "supported_features": ["tools","json_mode","reasoning"],
-  "pricing": { "prompt": "0.0000008", "completion": "0.000004" },
-  "active": true }
-```
-
-- [ ] `context_window` bizim `budget.rs` tablosuyla uyuşuyor mu?
-- [ ] `max_completion_tokens` tablodaki `max_output`'tan küçük mü? (küçükse 400 yeriz)
-- [ ] `supported_features` araç desteğini söylüyor mu?
-- [ ] Listede **sohbet olmayan** modeller var mı? (TTS, whisper, guard, embed)
-- [ ] Fiyat bilgisi var mı? (`PRICES` tablosu elle yazılmış, eskiyor)
-- [ ] **Listedeki her modele gerçekten istek at.** Groq ve Gemini'de
-      listede duran ama kullanılınca hata veren modeller çıktı. "Listede
-      var" ile "çalışıyor" aynı şey değil.
+### 6. Input throughput
 
-> **Groq'ta çıkan:** listedeki 13 modelin 4'ü sohbet modeli bile değildi ve
-> ikisi kullanıcıya gösteriliyordu. Tablomuz 7 modele gerçekte olmayan pencere
-> boyları veriyordu.
-
-### 2. Bağlam penceresi — tablomuz gerçeği söylüyor mu?
+- [ ] Compare advertised input tokens per minute with `input_budget()`.
+- [ ] Confirm that the app distinguishes rate-limit exhaustion from a permanent input-size problem.
+- The September Groq probe saw a Qwen context window of 131,042 tokens and a free-tier input limit of 7,000 tokens per minute. A request with 60,012 input tokens fit the context and still could not pass the throughput limit.
 
-İki yönlü hata var, ikisi de farklı zarar veriyor:
+### 7. Request body
 
-| Hata | Sonuç |
-|---|---|
-| Gerçekten **büyük** sanmak | İstek sağlayıcıda reddedilir, tur kaybolur |
-| Gerçekten **küçük** sanmak | Her turda boşuna geçmiş budanır |
+- [ ] Check `max_tokens` versus `max_completion_tokens`, supported fields, the temperature range, system message placement, and repeated roles.
+- [ ] Check empty content and the complete tool-call and tool-result exchange.
+- The historical Groq probe accepted `max_tokens`, ignored unknown fields, accepted repeated roles and system messages in different positions, and rejected temperature 2.5.
 
-- [ ] Her model için `ModelCaps::for_model(id)` ile `/models` karşılaştırıldı mı?
-- [ ] Genel bir satır (örn. `"llama"`) dar pencereli bir modeli yakalıyor mu?
-
-> **Groq'ta çıkan:** `"llama"` satırı `llama-prompt-guard` modellerini
-> yakalıyordu — gerçek penceresi **512**, biz **32000** diyorduk. O modele
-> giden her istek taşardı.
-
-### 3. Araç desteği — model bizim şemalarımızı alıyor mu?
+### 8. Streaming
 
-Bu, sağlayıcı bazında değil **model** bazında sorulmalı.
+- [ ] Check completion markers, UTF-8 text split across network packets, malformed and empty frames, and tool-call arguments split across frames.
+- [ ] Simulate an HTTP 200 followed by a stream error. Check that incomplete tool calls are discarded and a partial answer is not treated as successful.
+- [ ] Test a primary failure before output, then test one after output. The first can use a configured fallback. The second should surface the failed stream.
 
-- [ ] Tek bir fonksiyon şemasıyla istek at — kabul ediliyor mu?
-- [ ] Sağlayıcının kendi yerleşik araçları var mı? Bizimkilerle aynı dizide
-      yaşayabiliyorlar mı?
-- [ ] Yerleşik araç tipi gönderilirse sıradan model ne diyor?
-
-> **Groq'ta çıkan:** `groq/compound` tek şema görünce **400** veriyor —
-> o model bizde hiç çalışamazdı. Ve `qwen` yerleşik tipleri reddediyor, yani
-> "sağlayıcı Groq ise yerleşikleri ekle" demek varsayılan modelimizi kırardı.
-> Ayrıntı: [Groq yerleşik araçlar raporu](example/docs/rapor-groq-yerlesik-araclar.md)
-
-### 4. Hata biçimleri — sözlerimiz onların sözlerine uyuyor mu?
-
-Bizde üç sınıflandırıcı var (`commands.rs`): `is_quota_refusal`,
-`is_too_long`, `quota_too_small_for_request`. Her sağlayıcı aynı şeyi **başka
-kelimelerle** söylüyor ve tutmazsa kurtarma yolu hiç çalışmıyor.
-
-Sorulacaklar:
-
-- [ ] **Bağlam taşması** — çok büyük bir mesaj at. Ne diyor, hangi status?
-- [ ] **Geçersiz anahtar** — status ve gövde?
-- [ ] **Olmayan model** — status ve gövde?
-- [ ] **Hız sınırı** — art arda istek at. 429 mu, başka bir şey mi?
-- [ ] **`max_tokens` çok büyük** — reddediyor mu, kırpıyor mu?
-- [ ] Hata gövdesi **anahtarı yansıtıyor mu?** (yansıtıyorsa kullanıcıya
-      gösterilmeden önce temizlenmeli)
-
-> **Groq'ta çıkan:** bağlam taşmasını `"Please reduce the length of the
-> messages or completion."` diye ve **400** ile söylüyor — bizim aradığımız
-> kelimelerin **hiçbiri** yok. Kurtarma yolu vardı ve hiç çalışmıyordu.
+### 9. Credential storage
 
-### 5. Hız sınırı başlıkları
-
-- [ ] `x-ratelimit-*` başlıkları geliyor mu?
-- [ ] `retry-after` var mı? Saniye mi, tarih mi?
-- [ ] Limit **anahtar** başına mı, **kuruluş** başına mı?
-- [ ] Sınır dakikalık mı günlük mü? (günlükse beklemek anlamsız)
-
-> **Groq'ta çıkan:** her cevapta `x-ratelimit-limit-tokens`,
-> `-remaining-tokens`, `-reset-tokens` geliyor; 413'te `retry-after: 455`
-> geliyor. Sıfırlama süresi `"2m59.56s"` biçiminde — saniye değil.
-> **Limit kuruluş başına**, anahtar başına değil: ikinci anahtar açmak
-> kapasiteyi artırmıyor.
-
-### 6. Dakikalık token sınırı ≠ bağlam penceresi
-
-Bu ikisi karıştırılıyor ve karıştırılınca bütçe modülü yalan söylüyor.
-
-- [ ] Sağlayıcının dakikalık girdi token sınırı (ITPM/TPM) kaç?
-- [ ] Bizim `input_budget()` bu sayının üstünde istek kuruyor mu?
-
-> **Groq'ta çıkan:** `qwen` penceresi 131042, bizim bütçemiz ~101k tokenlık
-> istek kurmaya izin veriyor. Ama ücretsiz katmanda **ITPM 7000**. Yani
-> bütçeye rahatça sığan bir istek sağlayıcıda reddediliyor. Pencere doğru,
-> sınır başka yerde.
->
-> Beklemek de kurtarmıyor: 60012 tokenlık istek, dakikada 7000 veren bir
-> limitle **asla** geçmez. Artık kullanıcıya "biraz bekle" değil "mesajı
-> kısalt" diyoruz.
-
-### 7. İstek gövdesi uyumu
-
-- [ ] `max_tokens` mi kabul ediyor, `max_completion_tokens` mi?
-- [ ] Bilinmeyen alanlar (`seed`, `frequency_penalty`) hata veriyor mu?
-- [ ] `temperature` üst sınırı kaç?
-- [ ] Sistem mesajı ilk sırada olmak zorunda mı?
-- [ ] Ard arda aynı rol kabul ediliyor mu?
-- [ ] Boş içerikli mesaj kabul ediliyor mu?
-- [ ] Araç turu (`assistant.tool_calls` → `tool`) sorunsuz mu?
-
-> **Groq'ta çıkan:** hepsi temiz. `max_tokens` çalışıyor, bilinmeyen alanlar
-> sessizce yutuluyor, sistem mesajı herhangi bir yerde olabiliyor, ard arda
-> aynı rol sorun değil. `temperature` üst sınırı **2** (2.5 → 400).
-
-### 8. Akış (streaming)
-
-- [ ] `data: [DONE]` gönderiyor mu? (bazıları göndermiyor)
-- [ ] Araç çağrıları parça parça mı geliyor? İndeksle birleştirme gerekiyor mu?
-- [ ] Akış **başladıktan sonra** hata olursa ne oluyor?
-- [ ] Akış içinde boş/bozuk parça geliyor mu?
-
-### 9. Anahtar güvenliği
-
-- [ ] Anahtar loglara düşüyor mu? (`tracing` çağrılarını tara)
-- [ ] Hata gövdesi kullanıcıya gösteriliyor — anahtarı içerebilir mi?
-- [ ] Anahtar şifreli saklanıyor mu? (bizde Windows DPAPI, `keys.dat`)
-- [ ] Anahtar depoya girmiş mi? `git log --all -S "<önek>"`
-
-> **Groq'ta çıkan:** temiz. Anahtar hiçbir log çağrısında geçmiyor, hata
-> gövdesi anahtarı yansıtmıyor (`Invalid API Key`, anahtarın kendisi yok),
-> `keys.dat` DPAPI ile kullanıcı hesabına bağlı.
->
-> Groq anahtarları `gsk_` önekli, **tek tip ve tam yetkili** — kapsamlı
-> (scoped) anahtar yok. Sızarsa yapılacak tek şey konsoldan iptal etmek.
-
----
-
-## Groq — kapanan maddeler (2026-09-16)
-
-| # | Sorun | Nasıl bulundu | Durum |
-|---|---|---|---|
-| 1 | `groq/compound` tek araç şeması görünce 400; model kullanılamaz | canlı sondaj | ✅ araç gönderilmiyor |
-| 2 | Yerleşik `browser_search` gpt-oss'te vardı, kullanılmıyordu | belge + sondaj | ✅ ekleniyor |
-| 3 | `llama-prompt-guard` penceresi 512, biz 32000 diyorduk | `/models` karşılaştırması | ✅ tablo düzeltildi |
-| 4 | gpt-oss / compound penceresi 131072, biz 32768 diyorduk | `/models` karşılaştırması | ✅ tablo düzeltildi |
-| 5 | TTS ve guard modelleri sohbet modeli diye gösteriliyordu | süzgeç çıktısı | ✅ elendi |
-| 6 | `gpt-oss-safeguard-20b` "guard" diye eleniyordu ama tam sohbet modeli | süzgeç çıktısı | ✅ gösteriliyor |
-| 7 | Bağlam taşması mesajı hiçbir kalıba uymuyordu → kurtarma çalışmıyordu | canlı sondaj | ✅ kalıp eklendi |
-| 8 | Kotadan büyük istek "biraz bekle" diyordu, beklemek çözmüyordu | canlı sondaj | ✅ "mesajı kısalt" |
-
-**Açık kalan (Groq):**
-
-- Fiyat tablosu (`budget.rs` → `PRICES`) elle yazılmış ve Groq modelleri yok.
-  `/models` fiyatı veriyor; oradan okunabilir.
-- `ModelCaps` tablosu elle yazılmış. `/models` gerçeği veriyor — açılışta bir
-  kez çekip tabloyu doğrulamak bu sınıf hatanın tamamını kapatır.
-- Compound seçildiğinde Vavis'in araçları çalışmıyor; arayüzde bunu söyleyen
-  bir not yok.
-
----
-
-## Gemini — yerel API'ye geçiş (2026-09-16)
-
-**Neden OpenAI-uyumlu kapı bırakıldı:** o kapı bir **alt küme**. Düşünme
-(thinking) ayarları, güvenlik eşikleri, `systemInstruction`, çok parçalı
-içerik, `usageMetadata` — hiçbiri oradan geçmiyor. Google'ın kendi
-belgelediği yol `generateContent`.
-
-### Şekil farkları — OpenAI'a benzeyen hiçbir yanı yok
-
-| | OpenAI | Gemini |
-|---|---|---|
-| Mesaj dizisi | `messages` | `contents` |
-| Rol adları | `assistant` | `model` (`system` rolü **yok**) |
-| Sistem istemi | dizide bir mesaj | ayrı `systemInstruction` alanı |
-| Metin | `content` düz metin | `parts[].text` |
-| Araç şeması | `tools[].function` | `tools[].functionDeclarations[]` |
-| Araç çağrısı | `tool_calls[]` | `parts[].functionCall` |
-| Araç sonucu | `role: "tool"` | `role: "user"` + `functionResponse` |
-| Cevap sınırı | `max_tokens` | `generationConfig.maxOutputTokens` |
-| **Model adı** | gövdede | **URL'de** |
-| Model listesi | `data[].id` | `models[].name` (`models/` önekli) |
-
-### Dikkat edilenler
-
-- **Anahtar başlıkta gidiyor** (`x-goog-api-key`), sorgu parametresinde değil.
-  İki sebep: (1) URL'e giren anahtar istek kaydına, vekil sunucuya ve
-  kullanıcıya gösterdiğimiz hata gövdesine sızar; (2) Google'ın yeni biçimli
-  anahtarları sorgu parametresini zaten kabul etmiyor — o yolla **404**.
-- **`alt=sse` şart.** Olmadan Google akışı bir JSON **dizisi** olarak
-  gönderiyor, SSE olarak değil; satır satır çözümleyen kodumuz okuyamaz.
-- **Model adı yolda.** `models/` öneki iki kez eklenirse 404. Kullanıcı çıplak
-  ad yazıyor, Google önekli yayınlıyor; ikisi de kabul ediliyor.
-- **Şema temizliği.** Google OpenAPI'nin bir alt kümesini kabul ediyor;
-  tanımadığı bir anahtar görünce aracı yok saymak yerine **isteğin tamamını**
-  reddediyor. `additionalProperties` ve `$schema` bizim şemalarımızda var —
-  iç içe olanlar dahil ayıklanıyor.
-- **Araç sonucu ada göre bağlanıyor**, kimliğe göre değil: Gemini'de
-  `tool_call_id` diye bir şey yok.
-- **Argümanlar nesne**, metin değil. Bozuk JSON gelirse boş nesneye
-  düşürülüyor — olduğu gibi göndermek isteğin tamamını düşürür.
-- **Bitiş olayı yok.** Anthropic'teki `message_stop` gibi bir şey gelmiyor;
-  akış kapanınca bitiyor. Araç çağrısının o kapanışta kaybolmadığı teste
-  bağlandı.
-- **Model listesi süzgeci `supportedGenerationMethods` okuyor** — adına bakıp
-  tahmin etmek yerine modelin kendi beyanı. Alan yoksa model eleniyor değil,
-  ad süzgecine bırakılıyor.
-
-### Test durumu
-
-18 birim testi + 7 tel testi (`tests/gemini_wire.rs`). Tel testleri gerçek bir
-soket açıp gövdeyi ve **başlıkları** okuyor; anahtarın URL'e sızmadığı da
-orada ölçülüyor.
-
-> **Anahtar yok, canlı doğrulama yapılamadı.** Groq'ta yaptığımız gibi API'ye
-> sorulmadı — kod belgeye göre yazıldı. Anahtar girildiğinde şu 9 başlık
-> sırayla sorulmalı; özellikle **4 (hata biçimleri)** ve **6 (dakikalık
-> sınır)** Groq'ta sürpriz çıkmıştı.
-
-### Anahtar girilince ilk yapılacaklar
-
-1. Model listesi geliyor mu, `models/` öneki temizlenmiş mi?
-2. Basit bir tur — metin akıyor mu?
-3. Araçlı bir tur — `functionCall` geliyor mu, sonuç geri bağlanıyor mu?
-4. Şema reddi var mı? (`clean_schema` yeterli mi, başka yasak anahtar var mı)
-5. Hata biçimleri: geçersiz anahtar, olmayan model, bağlam taşması, hız sınırı
-6. Güvenlik eşikleri bir şeyi engelliyor mu? (`safetySettings` şu an
-   gönderilmiyor — Google varsayılanları uygulanıyor)
-
-### Anahtarla doğrulandı (2026-09-16)
-
-Kod yazıldıktan sonra anahtar girildi ve 9 başlık canlı API'ye soruldu.
-**Üç hata çıktı**, üçü de belge okuyarak görülemezdi.
-
-#### 1. Listede duran ama çalışmayan modeller
-
-`gemini-2.5-flash` — bizim **varsayılanımızdı** — kullanılınca 404 veriyor:
-
-```
-This model models/gemini-2.5-flash is no longer available to new users.
-Please update your code to use models/gemini-3.6-flash
-```
-
-`2.5-pro` ve `2.5-flash-lite` de aynı. Üçü de `/models` listesinde
-duruyor. Yani Gemini'yi seçen kullanıcı, ses modeline hiç dokunmasa bile
-ilk mesajda hata alırdı.
-
-> **Ders — bu listeye eklenmeli:** "`/models` listesinde var" ile
-> "çalışıyor" **aynı şey değil**. Sağlayıcı emekli ettiği modeli listeden
-> çıkarmayabiliyor. Süzgeçten geçen her modele bir istek atıp doğrulamak
-> gerekiyor.
-
-#### 2. Sadece WebSocket konuşan modeller
-
-`*-native-audio-*` ve `*-live` modelleri yalnızca `bidiGenerateContent`
-beyan ediyor. Kullanıcının aldığı hata buydu. Yetenek süzgeci zaten
-doğruydu, çalışan sürüm ondan eskiydi; yine de ada dayalı ikinci bir
-savunma eklendi.
-
-Bir alt ajan burada **yanlış bilgi verdi**: "ses modelleri
-`generateContent` de beyan ediyor, `streamGenerateContent` ile süz" dedi.
-Canlı API'ye sorunca ikisi de yanlış çıktı — ses modelleri
-`generateContent` beyan etmiyor, ve **58 modelin hiçbiri**
-`streamGenerateContent` beyan etmiyor. O süzgeç tüm listeyi silerdi.
-
-> **Ders:** alt ajan çıktısı da ölçülmeden kabul edilmemeli.
-
-#### 3. Sonuç
-
-Süzgeçten 11 model geçiyor, hiçbiri emekli ya da WebSocket-only değil.
-Düz sohbet ve araç çağırma canlı API'ye karşı doğrulandı.
-
-### Gemini TTS — yeni ses motoru
-
-Gemini'nin **gerçek** kendi sesi Live API'de (WebSocket), ona erişemiyoruz.
-Ama REST üzerinden çalışan TTS modeli var ve çalışıyor:
-
-| | |
-|---|---|
-| Model | `gemini-3.1-flash-tts-preview` |
-| Biçim | **ham PCM** (`audio/l16; rate=24000`) — başlıksız |
-| Doğrulandı | 111 KB, 24 kHz, mono, 2.32 sn, Windows oynatıcısı yükledi |
-
-> **Dikkat:** herkes MP3 dönerken Gemini başlıksız PCM dönüyor. Dosyaya
-> yazıp çalmaya kalkınca **hiçbir oynatıcı tanımıyor ve hata da vermiyor** —
-> sessiz başarısızlık. WAV başlığı eklemek gerekiyor.
-
-Sohbet sağlayıcısı Gemini iken ses motoru otomatik ona geçiyor
-(`voice.matchProvider`). Üç kural: kapatılabiliyor, anahtar şart, ve
-**anahtar istemeyen bir motor asla değiştirilmiyor** — SAPI/Edge seçen biri
-yerel ve ücretsiz olanı seçmiştir.
-
-
----
-
-## Bir sonraki sağlayıcıya geçerken
-
-1. Yukarıdaki 9 başlığı sırayla sor, cevapları not et.
-2. Bulunan her hatayı **önce teste yaz**, sonra düzelt.
-3. Testi telin üzerinden ölç: karar fonksiyonunu test etmek yetmiyor,
-   istemci onu çağırmayı unutabilir. Gerçek bir soket açıp gövdeyi oku
-   (örnek: `crates/vavis-brain/tests/groq_builtin_tools.rs`).
-4. Bu dosyadaki tabloyu güncelle.
-5. Sondaj dosyasını sil.
-
----
-
-## Kaynaklar
-
-- [Groq Rate Limits](https://console.groq.com/docs/rate-limits)
-- [Groq Built-In Tools](https://console.groq.com/docs/tool-use/built-in-tools)
-- [Groq Security Onboarding](https://console.groq.com/docs/production-readiness/security-onboarding)
+- [ ] Check that the client sends the key only in the expected authentication header and redacts it from error output.
+- [ ] Check that the Windows credential file is DPAPI-encrypted and that secrets are absent from tracked files and Git history.
+- [ ] Use only scoped test credentials where the provider supports them. Revoke a test key if it was exposed.
+
+## Groq findings from September 2026
+
+| Finding | Resolution |
+| --- | --- |
+| Compound rejected custom tool schemas with HTTP 400 | VAVIS skips custom schemas for that family |
+| GPT-OSS supported a built-in web search that was not used | The compatible models receive `browser_search` |
+| Prompt Guard had a 512-token context window and matched a 32,000-token family rule | Corrected the budget table and filtered classifier models |
+| GPT-OSS and Compound had larger context windows than the table stated | Updated the measured entries |
+| TTS and classifier models appeared in the chat picker | Filtered non-chat models while retaining `gpt-oss-safeguard-20b` |
+| Context-length errors did not match the recovery rule | Added the observed error shape |
+| The app advised waiting when the request exceeded the per-minute limit | Advises shortening the request |
+
+The probe recorded a limit at the organization level, duration strings such as `2m59.56s`, and HTTP 413 for some throughput-limit errors. A catalog-driven price and budget refresh and a visible note about Compound's custom-tool restriction were left open. See the [Groq built-in tools investigation](example/docs/rapor-groq-yerlesik-araclar.md) for historical request details.
+
+## Gemini native API
+
+The native path uses `generateContent` and `streamGenerateContent`. It exposes system instructions, multiple content parts, generation settings, and function calls directly.
+
+| Field | OpenAI-compatible shape | Gemini shape |
+| --- | --- | --- |
+| Message list | `messages` | `contents` |
+| Model role | `assistant` | `model` |
+| System prompt | A message | `systemInstruction` |
+| Text | `content` | `parts[].text` |
+| Tools | `tools[].function` | `tools[].functionDeclarations[]` |
+| Tool call | `tool_calls[]` | `parts[].functionCall` |
+| Tool result | `role: "tool"` | `role: "user"` with `functionResponse` |
+| Output limit | `max_tokens` | `generationConfig.maxOutputTokens` |
+| Model name | Request body | URL path |
+| Catalog ID | `data[].id` | `models[].name` |
+
+- The key uses `x-goog-api-key`. Streaming uses `alt=sse`. Model names accept a single optional `models/` prefix.
+- Function schemas strip unsupported fields such as `$schema` and `additionalProperties`. Arguments use JSON objects. A tool result is linked by function name, and opaque thought signatures are returned with the original call.
+- Gemini may close an SSE stream without a stop event. The client retains completed tool calls through EOF. Model discovery uses `supportedGenerationMethods` when available and falls back to name filtering when absent.
+- The September probe found that `gemini-2.5-flash`, `gemini-2.5-pro`, and `gemini-2.5-flash-lite` remained listed after returning HTTP 404 to requests. Native audio and live models supported `bidiGenerateContent` only. Filtering for the literal name `streamGenerateContent` would have excluded all 58 entries observed at that time.
+- Its separate TTS model returned raw mono PCM at 24 kHz. VAVIS adds a WAV header for playback. Provider-matched voice can be disabled and preserves a configured keyless engine.
+
+## Recording results
+
+Add the date, model, and status to the table. Add a local-socket regression test before changing request or stream handling. Record live account access separately from simulated API behavior, and remove temporary probes from the checkout after use.
+
+## References
+
+- [Groq rate limits](https://console.groq.com/docs/rate-limits)
+- [Groq built-in tools](https://console.groq.com/docs/tool-use/built-in-tools)
+- [Groq security onboarding](https://console.groq.com/docs/production-readiness/security-onboarding)
+- [OpenRouter streaming errors](https://learn.openrouter.ai/courses/first-request/stream-it)
+- [Anthropic model listing](https://platform.claude.com/docs/en/api/models/list)

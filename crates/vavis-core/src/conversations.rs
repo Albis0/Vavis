@@ -173,15 +173,28 @@ impl Store {
 
     /// Deletes a conversation and every message in it.
     pub fn delete_conversation(&self, id: i64) -> Result<bool> {
-        // Explicit rather than trusting the cascade alone: foreign keys are
-        // a per-connection setting, and a database opened elsewhere without
-        // it would leave the messages behind.
-        self.connection()
-            .execute("DELETE FROM messages WHERE conversation_id = ?1", [id])?;
+        // Store::init enables foreign keys, so the messages cascade in the same statement.
         let n = self
             .connection()
             .execute("DELETE FROM conversations WHERE id = ?1", [id])?;
         Ok(n > 0)
+    }
+
+    /// Deletes the active conversation and reads its replacement in one transaction.
+    pub fn delete_current_conversation(
+        &self,
+        id: i64,
+        limit: usize,
+    ) -> Result<(i64, Vec<StoredMessage>)> {
+        let transaction = self.connection().unchecked_transaction()?;
+        self.delete_conversation(id)?;
+        let next = match self.latest_conversation()? {
+            Some(next) => next,
+            None => self.create_conversation("")?,
+        };
+        let messages = self.messages_in(next, limit)?;
+        transaction.commit()?;
+        Ok((next, messages))
     }
 
     /// Adds a message to a conversation and moves it to the top of the
@@ -221,21 +234,23 @@ impl Store {
                 created_at: r.get(3)?,
             })
         })?;
-        let mut out: Vec<StoredMessage> = rows.filter_map(std::result::Result::ok).collect();
+        let mut out = rows.collect::<rusqlite::Result<Vec<_>>>()?;
         out.reverse();
         Ok(out)
     }
 
     /// Empties a conversation but keeps it in the list.
     pub fn clear_conversation(&self, conversation: i64) -> Result<()> {
-        self.connection().execute(
+        let transaction = self.connection().unchecked_transaction()?;
+        transaction.execute(
             "DELETE FROM messages WHERE conversation_id = ?1",
             [conversation],
         )?;
-        self.connection().execute(
+        transaction.execute(
             "UPDATE conversations SET title = '' WHERE id = ?1",
             [conversation],
         )?;
+        transaction.commit()?;
         Ok(())
     }
 
@@ -325,6 +340,42 @@ mod tests {
         assert!(s.delete_conversation(c).unwrap());
         assert_eq!(s.message_count().unwrap(), 0);
         assert!(s.list_conversations(5).unwrap().is_empty());
+    }
+
+    #[test]
+    fn deleting_current_restores_the_previous_conversation_or_starts_an_empty_one() {
+        let s = Store::open_in_memory().unwrap();
+        let previous = s.create_conversation("previous").unwrap();
+        s.add_message_to(previous, "user", "keep this").unwrap();
+        let current = s.create_conversation("current").unwrap();
+        s.add_message_to(current, "user", "delete this").unwrap();
+
+        let (next, lines) = s.delete_current_conversation(current, 20).unwrap();
+        assert_eq!(next, previous);
+        assert_eq!(lines[0].content, "keep this");
+        assert!(!s.conversation_exists(current).unwrap());
+
+        let (fresh, lines) = s.delete_current_conversation(previous, 20).unwrap();
+        assert_ne!(fresh, previous);
+        assert_eq!(s.latest_conversation().unwrap(), Some(fresh));
+        assert!(lines.is_empty());
+    }
+
+    #[test]
+    fn if_creating_a_replacement_fails_the_deleted_chat_is_recovered() {
+        let s = Store::open_in_memory().unwrap();
+        let current = s.create_conversation("current").unwrap();
+        s.add_message_to(current, "user", "keep this").unwrap();
+        s.connection()
+            .execute_batch(
+                "CREATE TRIGGER refuse_insert BEFORE INSERT ON conversations
+                 BEGIN SELECT RAISE(ABORT, 'could not create conversation'); END;",
+            )
+            .unwrap();
+
+        assert!(s.delete_current_conversation(current, 20).is_err());
+        assert_eq!(s.latest_conversation().unwrap(), Some(current));
+        assert_eq!(s.messages_in(current, 20).unwrap()[0].content, "keep this");
     }
 
     #[test]

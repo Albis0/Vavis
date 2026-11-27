@@ -22,7 +22,7 @@ use tauri::{Emitter, Manager};
 use vavis_core::{App as CoreApp, Paths};
 
 fn main() {
-    let paths = match Paths::discover() {
+    let paths = match app_paths() {
         Ok(p) => p,
         Err(e) => {
             eprintln!("could not determine the data directory: {e}");
@@ -165,6 +165,18 @@ fn main() {
         });
 
     tracing::info!("vavis closed");
+}
+
+fn app_paths() -> anyhow::Result<Paths> {
+    let Some(root) = std::env::var_os("VAVIS_DATA_DIR") else {
+        return Ok(Paths::discover()?);
+    };
+    let root = std::path::PathBuf::from(root);
+    anyhow::ensure!(
+        root.is_absolute(),
+        "VAVIS_DATA_DIR must be an absolute path"
+    );
+    Ok(Paths::with_root(root))
 }
 
 /// Makes silent Spotify token refreshes survive a restart.

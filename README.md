@@ -1,199 +1,113 @@
 # VAVIS
 
-> Telaffuz: **veyvis**
-> Windows için kişisel AI asistanı.
+> Pronounced **VAY-vis**. A personal AI assistant for Windows.
 
-AEGIS/RealJarvis'in (TypeScript + Electron, ~1 GB) yerine sıfırdan yazıldı:
-arka taraf Rust, pencere Tauri, arayüz React + TypeScript.
+VAVIS replaces the TypeScript and Electron version of AEGIS/RealJarvis. The current app uses Rust, Tauri, and a React and TypeScript interface.
 
----
+## Getting started
 
-## Hızlı başlangıç
+Download the portable Windows executable and its checksum from [Releases](https://github.com/Albis0/Vavis/releases/latest). It requires WebView2. See [Security](SECURITY.md) for download verification.
 
-```bash
-cd ui && bun install && bun run build && cd ..
-cargo run --release
-```
+On first launch, open **Settings → Model & keys** (`Ctrl+,`), and select a provider.
 
-İlk açılışta **Ayarlar → Model & keys** (`Ctrl+,`) ekranından bir sağlayıcı
-seç. Para vermeden çalışan seçenekler:
+| Option | What you need |
+| --- | --- |
+| **Claude Code** | A Claude subscription with Claude Code access. [Install the CLI](https://claude.com/code) and sign in by running `claude` in a terminal. VAVIS can detect the installation. |
+| **Gemini** | An API key from [Google AI Studio](https://aistudio.google.com). The same key can be used for live voice and semantic memory. |
+| **Groq** | An API key from [Groq Console](https://console.groq.com). Groq also handles Whisper speech recognition. |
+| **Cerebras, OpenRouter, GitHub Models, Mistral, NVIDIA** | A provider account and an API key. Check each provider's model access and usage limits. OpenRouter's default is `openrouter/free`. |
+| **Local** | A local server such as Ollama or LM Studio. Enter its address if it uses a non-default port. |
 
-| Seçenek | Ne gerekiyor |
-|---|---|
-| **Claude Code** | Claude Pro/Max aboneliğin. [Claude Code](https://claude.com/code)'u kur, bir kez terminalde `claude` yazıp giriş yap. Anahtar yok — Vavis kurulu olduğunu görürse kendisi seçer. |
-| **Gemini** | Ücretsiz anahtar: [aistudio.google.com](https://aistudio.google.com). Canlı sesli konuşma ve anlamsal hafıza da bununla çalışır. |
-| **Groq** | Ücretsiz anahtar: [console.groq.com](https://console.groq.com). Ses tanıma (Whisper) için de en iyisi. |
-| **Cerebras** · **OpenRouter** (`:free` modeller) · **GitHub Models** · **Mistral** · **NVIDIA** | Hepsinin ücretsiz katmanı var. |
-| **Local** | Ollama / LM Studio — kendi bilgisayarın. |
+Use **Fallback** to set a provider order for requests that fail before an answer or a tool action starts. Limits, availability, and model access depend on each provider.
 
-Bir sağlayıcının kotası dolarsa mesaj yarıda kalmasın diye **Fallback**
-bölümüne yedek sağlayıcılar ekleyebilirsin.
+## Features
 
----
+- **Conversations and memory.** The clock icon opens past conversations. Search, open, rename, or delete them. VAVIS can extract lasting facts from what you say and retrieve relevant ones by meaning. Facts are saved locally and can be viewed or removed in **Settings → Memory**.
+- **Voice.** Train your wake word by saying it three times in **Settings → Voice → Wake word**. Wake-word recognition runs on the device. In wake-word mode, speech is sent for transcription after a match. The conversation microphone starts Gemini Live, which supports interruptions and tool calls. Regular transcription uses Groq Whisper or Gemini.
+- **Windows controls and integrations.** Use Windows UI Automation to address controls by name, scroll, or drag. Other tools cover files, apps, sound and brightness, the clipboard, PowerShell, Spotify, Steam, Obsidian, VirusTotal, web search, image generation, and MCP servers.
+- **Automations.** Schedule tasks or trigger them by CPU or battery usage, a new file, an app starting or stopping, VAVIS starting, or returning after an absence.
+- **Phone access.** Connect a Telegram bot in **Settings → Phone**. It replies in private to the paired account and asks for approval on the phone before destructive actions.
+- **Code.** Open a workspace through `Ctrl+K` → **Code**. The assistant can search, read, make exact-text edits, and run tests. Changes pass through the approval system, and the open file refreshes after edits.
+- **Council.** Ask several models the same question and compare their answers side by side.
 
-## Neler yapabiliyor
+## Security
 
-**Sohbet ve hafıza**
-- Birden çok sohbet: sağ paneldeki saat simgesi; ara, aç, yeniden adlandır, sil.
-- Seni tanıyan hafıza: kendinden bahsettiğinde kalıcı bilgileri kendisi çıkarıp
-  hatırlar, her mesajda ilgili olanları modele verir. Kelimeye değil anlama
-  göre arar ("kahve" deyince "espresso içer"i bulur). Hepsi bu bilgisayarda
-  durur; Ayarlar → Memory'den görülür ve silinir.
+- Destructive actions ask for approval. After three destructive actions in one turn, the app can ask again even if you chose **Always allow**.
+- If outside content tries to give the model instructions, every state-changing action in that turn asks again, even with full authority enabled. This includes content read directly by Claude Code and filenames from watched folders.
+- Destructive requests from the phone ask for approval, and the Telegram bot only replies in private chats.
+- API keys are encrypted with Windows DPAPI and kept separately from the settings file.
+- Claude Code's own shell and write tools are disabled. VAVIS tools use the approval system. During a code turn, Claude Code's file reads are confined to the open project. Project-level hooks and `CLAUDE.md` are excluded.
+- Text sent to PowerShell passes through a shared quoting routine. The app launcher rejects command interpreters and script files.
 
-**Ses**
-- Uyandırma kelimesi **bu bilgisayarda** tanınır (Ayarlar → Voice → Wake word:
-  adını üç kez söyle). Adın geçmeyen hiçbir cümle buluta gitmez.
-- **Canlı konuşma** (Gemini Live): kesintisiz konuşur, sözünü kesebilirsin,
-  araçları kullanmaya devam eder. Sohbet panelinin başındaki mikrofon.
-- Ses tanıma Groq'ta Whisper, Groq anahtarı yoksa Gemini.
+See [SECURITY.md](SECURITY.md) for the security policy and how to report problems privately.
 
-**Bilgisayar**
-- Pencerelerdeki düğmelere, alanlara, menülere **adıyla** ulaşır (Windows UI
-  Automation) — ekran görüntüsü tahmini yerine. Kaydırma ve sürükleme de var.
-- Dosyalar, uygulamalar, ses/parlaklık, pano, PowerShell, medya, Spotify,
-  Steam, Obsidian, VirusTotal, web araması, görsel üretimi, MCP sunucuları.
+## Keyboard shortcuts
 
-**Kendiliğinden**
-- Otomasyonlar saate, pile, CPU'ya ve **olaylara** bağlanabilir: indirilenlere
-  dosya düşünce ("VirusTotal ile kontrol et: {file}"), bir program açılınca ya
-  da kapanınca, Vavis açılınca (sabah özeti), uzun aradan dönünce.
+| Key | Action |
+| --- | --- |
+| `Ctrl+K` | Open the command palette |
+| `Ctrl+,` | Open settings |
+| `Ctrl+L` | Start a new conversation and keep the old one in the list |
+| `Ctrl+B` | Show or hide the conversation panel |
+| `Ctrl+M` | Cycle voice modes |
+| `Ctrl+S` | Save the open file in Code |
+| `Esc` | Stop speech or deny a pending approval |
+| `F11` | Cycle window modes |
 
-**Telefon**
-- Kendi Telegram botunla dışarıdan yaz (Ayarlar → Phone). Yalnızca eşleştirdiğin
-  hesap cevap alır; yıkıcı her işlem telefonda butonla onayına gelir.
+## Architecture
 
-**Kod**
-- Kod ekranında (`Ctrl+K` → Code) bir klasör aç ve iste: projeyi okur, arar,
-  birebir metin değiştirerek düzenler, testleri çalıştırır, hata varsa düzeltir.
-  Her değişiklik onaydan geçer; ekrandaki dosya güncellenir.
+| Component | Responsibility |
+| --- | --- |
+| `ui/` | React and TypeScript interface built with Vite |
+| `vavis-shell` | Tauri window, commands, conversations, memory, event monitoring, and Telegram |
+| `vavis-tools` | Tools, approvals, agent loop, MCP client, and Claude Code bridge |
+| `vavis-brain` | Providers, Claude Code CLI, embeddings, context budgets, and keys |
+| `vavis-audio` | Microphone, voice activity detection, wake word, transcription, synthesis, and Gemini Live |
+| `vavis-core` | Settings, SQLite storage, conversations, memory, automations, gallery, and search |
 
-**Konsey** — aynı soruyu birkaç modele birden sor, cevapları yan yana gör.
+Dependencies point downward. Tool selection uses the request and the model's budget. Ordinary small talk can run without tools. The model can request additional tools with `request_tools`. Claude Code and code turns have their own selection paths.
 
----
+The app starts Claude Code with `claude -p` and reads stream JSON. The tool bridge uses an authenticated loopback MCP endpoint that only accepts tool calls while a turn is active. A shared audio lock keeps queued playback and interruptions consistent. Context budgeting includes tool schemas and images.
 
-## Güvenlik
+## Build and test
 
-- **Yıkıcı işlemler onay ister** (dosya yazma, komut, tıklama…). Bir turda
-  üçten fazla yıkıcı işlem olursa "hep izin ver" bile yeniden sorar.
-- Okunan bir sayfa, dosya ya da indirilen bir dosyanın adı modele talimat
-  vermeye çalışırsa, o turda bir şeyi değiştiren her işlem yeniden sorulur —
-  **tam yetki açıkken bile**. Claude Code'un kendi okuduğu sayfalar da buna
-  dahil.
-- Telefondan gelen istekler her zaman sorar; bot yalnızca özel sohbette cevap
-  verir.
-- Anahtarlar Windows DPAPI ile şifreli; ayar dosyasına yazılmaz.
-- Claude Code'un kendi yazma/kabuk araçları kapalıdır; bilgisayarda yapılan
-  her şey Vavis'in araçlarından ve onay kapısından geçer. Kod turunda yalnızca
-  açık projenin içini okuyabilir; projenin kendi `.claude` ayarları (hook'lar)
-  ve CLAUDE.md'si yüklenmez.
-- PowerShell'e giden her metin (sesli okunan cümle, pano, pencere adı) tek bir
-  yerden, her tırnak türü kaçırılarak geçer; "Uygulama aç" komut
-  çalıştırıcılarını açmaz.
-
----
-
-## Kısayollar
-
-| Tuş | Ne yapar |
-|---|---|
-| `Ctrl+K` | Komut paleti — her eylem burada |
-| `Ctrl+,` | Ayarlar |
-| `Ctrl+L` | Yeni sohbet (eskisi listede kalır) |
-| `Ctrl+B` | Sohbet panelini gizle / göster |
-| `Ctrl+M` | Ses modunu değiştir |
-| `Ctrl+S` | Açık dosyayı kaydet (kod ekranı) |
-| `Esc` | Konuşmayı kes (bekleyen onay varsa reddeder) |
-| `F11` | Pencere modu |
-
----
-
-## Mimari
-
-```
-┌──────────────────────────────────┐
-│  ui/           ARAYÜZ            │  React + TypeScript (Vite)
-├──────────────────────────────────┤
-│  vavis-shell   KABUK             │  Tauri penceresi, komutlar, sohbet turu,
-│                                  │  hafıza, olay izleyici, Telegram
-├──────────────────────────────────┤
-│  vavis-tools   ELLER             │  araçlar, izin kapısı, ajan döngüsü,
-│                                  │  MCP (istemci + Claude Code köprüsü)
-├──────────────────────────────────┤
-│  vavis-brain   BEYİN             │  sağlayıcılar, Claude Code CLI,
-│                                  │  embedding, bağlam bütçesi, anahtarlar
-├──────────────────────────────────┤
-│  vavis-audio   DUYULAR           │  mikrofon, VAD, uyandırma kelimesi,
-│                                  │  STT, TTS, Gemini Live, akışlı çıkış
-├──────────────────────────────────┤
-│  vavis-core    ÇEKİRDEK          │  ayarlar, SQLite (sohbetler, hafıza,
-│                                  │  otomasyonlar, galeri), arama
-└──────────────────────────────────┘
-```
-
-**Bağımlılık tek yönlüdür.** Alt katman üstünü tanımaz.
-
-### Tasarımın kritik kararları
-
-- **Modele her istekte bütün araçlar gönderilmez.** Mesajdan alan çıkarılır,
-  o alanın araçları sunulur; büyük alanlar mesajın andığı araçları öne alıp
-  altıda kesilir. Sohbet mesajlarına hiç araç gitmez. Model elinde olmayan bir
-  araca ihtiyaç duyarsa `request_tools` ile ister. (Claude Code ve kod turları
-  istisna: onlara işin gerektirdiği araçların hepsi verilir.)
-- **Claude Code bir program, API değil.** Her tur `claude -p` ile çalışır, cevap
-  stream-json ile kelime kelime gelir. Vavis'in araçları ona yerel bir MCP
-  sunucusundan verilir (token'lı, yalnızca 127.0.0.1, yalnızca tur sürerken
-  açık); her çağrı aynı izin kapısından geçer.
-- **Barge-in yapısal olarak doğru.** Kuyruk ve oynatma tek kilit altında;
-  durdurulmuş bir konuşmanın geç gelen sesi yenisine karışamaz.
-- **Bağlam bütçesinde her şey sayılır** — araç şemaları ve görüntüler dahil.
-
----
-
-## Geliştirme
+Build the interface once before running the app or checking Rust on a fresh checkout.
 
 ```bash
-cargo test --all                         # Rust testleri (1000+)
-cd ui && bun run check && bun run test   # tip kontrolü + arayüz testleri
-cargo clippy --all-targets -- -D warnings
+cd ui && bun install --frozen-lockfile && bun run build && cd ..
+cargo run --release --locked -p vavis-shell
+```
 
-# Tool seçim kalitesi (%100 kalmalı)
+```bash
+cargo test --workspace --locked
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test -p vavis-tools --test selection_eval -- --nocapture
 
-# Gerçek Claude Code'a karşı uçtan uca (kurulu ve giriş yapılmış olmalı)
+# Requires a local Claude Code installation and a signed-in account.
 cargo test -p vavis-tools --test claude_code_agent_e2e -- --ignored --nocapture
 ```
 
-Uygulama yalnızca Windows için; ama çekirdek, beyin, araç ve ses katmanları
-Linux'ta da derlenip test ediliyor (Windows'a özel kod orada saplanıyor).
-Windows hedefi için çapraz kontrol:
-`cargo clippy --target x86_64-pc-windows-gnu --all-targets -- -D warnings`.
+Run `bun run check` and `bun run test` from `ui/`. The application targets Windows. The core, provider, tool, and audio crates also have platform-independent logic and tests. See the [manual checklist](MANUEL_TEST.md) and [provider checklist](PROVIDER_TEST.md).
 
-### Veri konumu
+### Data directory
 
-`%APPDATA%\vavis\data\`
+The default is `%APPDATA%\vavis\data\`. Use the `VAVIS_DATA_DIR` environment variable with an absolute path to run a separate profile.
 
-| Dosya | İçerik |
-|---|---|
-| `vavis.toml` | Ayarlar |
-| `vavis.db` | Sohbetler, hafıza, otomasyonlar, galeri dizini (SQLite) |
-| `keys.dat` | API anahtarları (DPAPI ile şifreli) |
-| `wake.json` | Eğitilmiş uyandırma kelimesi |
-| `media/` | Üretilen görseller ve videolar |
-| `logs/` | Günlük log dosyaları + çökme kaydı |
+| File or directory | Contents |
+| --- | --- |
+| `vavis.toml` | Settings |
+| `vavis.db` | Conversations, memory, automations, and the gallery index |
+| `keys.dat` | Windows DPAPI-encrypted API keys |
+| `wake.json` | Trained wake-word data |
+| `media/` | Generated images and videos |
+| `logs/` | Daily logs and crash log |
 
----
+## Known limits
 
-## Bilinen sınırlar
-
-- **Edge TTS** servisi zaman zaman 403 döndürüyor; başarısızlıkta otomatik
-  olarak SAPI'ye düşülüyor.
-- **Canlı konuşmada yankı engelleme yok**: hoparlörle kullanırken asistan
-  konuşurken sessiz girdi tutuluyor, net konuşarak sözünü kesebilirsin.
-  Kulaklıkla bu sorun olmaz.
-- **Uyandırma kelimesi** onu eğiten sese göre ayarlı; başka biri söyleyince
-  uyanmayabilir.
-- **Parlaklık** sadece dizüstü panelinde çalışır, harici monitörde değil.
-
----
+- Edge TTS may return HTTP 403. The app can fall back to Windows SAPI.
+- Live voice has no acoustic echo cancellation. The app holds back quiet input during playback, and clear speech can interrupt it. Headphones reduce speaker feedback.
+- A trained wake word is tuned to the voice that trained it.
+- The brightness control targets built-in laptop displays.
 
 *Apache-2.0*

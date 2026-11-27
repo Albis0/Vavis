@@ -15,52 +15,42 @@ pub struct StoredLine {
 /// Only the last few turns: loading everything would fill the context
 /// budget before the user typed a word.
 #[tauri::command]
-pub fn load_history(state: State<AppState>) -> Vec<StoredLine> {
-    let conversation = *AppState::lock(&state.conversation);
-    restore(&state, conversation)
+pub fn load_history(state: State<AppState>) -> Result<Vec<StoredLine>, String> {
+    let conversation = AppState::lock(&state.conversation);
+    saved_lines(&AppState::lock(&state.store), *conversation)
 }
 
-/// Loads a conversation's tail into the model's history and returns it for
-/// the interface to draw.
-pub(super) fn restore(state: &AppState, conversation: i64) -> Vec<StoredLine> {
-    const RESTORE: usize = 20;
+pub(super) const RESTORE_LIMIT: usize = 20;
 
-    let stored = AppState::lock(&state.store).messages_in(conversation, RESTORE);
-    let Ok(messages) = stored else {
-        return Vec::new();
-    };
+pub(crate) fn saved_lines(
+    store: &vavis_core::Store,
+    conversation: i64,
+) -> Result<Vec<StoredLine>, String> {
+    store
+        .messages_in(conversation, RESTORE_LIMIT)
+        .map(visible_lines)
+        .map_err(|e| e.to_string())
+}
 
-    let mut history = AppState::lock(&state.history);
-
-    // Replaced, not appended. This is called once on startup today, so
-    // appending happens to work -- but a second call would hand the model
-    // every restored turn twice, and nothing about the name suggests it can
-    // only be called once.
-    history.clear();
-
-    let mut out = Vec::new();
-
-    for m in messages {
-        let role = match m.role.as_str() {
-            "user" => vavis_brain::Role::User,
-            "assistant" => vavis_brain::Role::Assistant,
-            _ => continue, // tool and system messages are not replayed
-        };
-
-        history.push(Message {
-            role,
-            content: m.content.clone(),
-            tool_call_id: None,
-            tool_calls: None,
-            image: None,
-        });
-        out.push(StoredLine {
+pub(super) fn visible_lines(messages: Vec<vavis_core::StoredMessage>) -> Vec<StoredLine> {
+    messages
+        .into_iter()
+        .filter(|m| matches!(m.role.as_str(), "user" | "assistant"))
+        .map(|m| StoredLine {
             role: m.role,
             content: m.content,
-        });
-    }
+        })
+        .collect()
+}
 
-    out
+pub(crate) fn model_history(lines: &[StoredLine]) -> Vec<Message> {
+    lines
+        .iter()
+        .map(|line| match line.role.as_str() {
+            "user" => Message::user(line.content.clone()),
+            _ => Message::assistant(line.content.clone()),
+        })
+        .collect()
 }
 
 /// Sends a message to the model.
@@ -94,22 +84,16 @@ pub fn send_message(
         return Err("empty message".into());
     }
 
-    if !state.try_claim() {
+    let Some(guard) = state.try_claim() else {
         return Err("a reply is already in progress".into());
-    }
+    };
 
     let conversation = *AppState::lock(&state.conversation);
     let (chain, router_model, full_authority, mut identity, history, plan) = {
         let core = AppState::lock(&state.core);
         let keys = AppState::lock(&state.keys);
 
-        let chain = match build_chain(&core.config, &keys, code) {
-            Ok(chain) => chain,
-            Err(e) => {
-                state.release();
-                return Err(e);
-            }
-        };
+        let chain = build_chain(&core.config, &keys, code)?;
 
         // Rebuilt each turn so a settings change takes effect on the very
         // next message.
@@ -162,22 +146,20 @@ pub fn send_message(
 
     let client = state.client.clone();
     let agent = state.agent.clone();
-    let busy = state.busy.clone();
     let approval_rx = state.approval_rx.clone();
     let voice = state.voice.clone();
     let store = state.store.clone();
     let history_handle = state.history.clone();
-    let current = state.conversation.clone();
 
     std::thread::spawn(move || {
-        // Released however this thread ends, panics included.
-        let guard = crate::state::BusyGuard(busy.clone());
         let runtime = match tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
         {
             Ok(r) => r,
             Err(e) => {
+                AppState::lock(&history_handle).pop();
+                drop(guard);
                 let _ = app.emit(
                     "chat:error",
                     ErrorPayload {
@@ -221,12 +203,7 @@ pub fn send_message(
         match result {
             Ok(reply) => {
                 if !reply.trim().is_empty() {
-                    // The reply belongs to the conversation it was asked in.
-                    // Switching is refused while a reply runs, so this only
-                    // guards against that rule changing.
-                    if *AppState::lock(&current) == conversation {
-                        AppState::lock(&history_handle).push(Message::assistant(reply.clone()));
-                    }
+                    AppState::lock(&history_handle).push(Message::assistant(reply.clone()));
                     if let Err(e) =
                         AppState::lock(&store).add_message_to(conversation, "assistant", &reply)
                     {
@@ -237,6 +214,7 @@ pub fn send_message(
                     // streamed; this is the last, unfinished sentence.
                     AppState::lock(&voice).finish_stream();
                 }
+                drop(guard);
                 let _ = app.emit("chat:done", DonePayload { text: reply });
             }
             Err(TurnError {
@@ -250,11 +228,10 @@ pub fn send_message(
                 }
                 drop(h);
 
+                drop(guard);
                 let _ = app.emit("chat:error", ErrorPayload { message, too_long });
             }
         }
-
-        drop(guard);
 
         // After the turn, and after the user has their input back: nothing
         // below is worth making them wait for.
@@ -295,10 +272,9 @@ pub(crate) fn run_remote(
     asker: Asker,
 ) -> Result<String, String> {
     let state = app.state::<AppState>();
-    if !state.try_claim() {
+    let Some(_guard) = state.try_claim() else {
         return Err("busy".into());
-    }
-    let _guard = crate::state::BusyGuard(state.busy.clone());
+    };
     let prepared = (|| {
         let core = AppState::lock(&state.core);
         let keys = AppState::lock(&state.keys);
@@ -1080,7 +1056,7 @@ impl Turn<'_> {
                 // size is coming from something a second halving will not
                 // fix, and the interface offers the same thing as a button by
                 // then.
-                Err(e) if error_is_too_long(&e) && !shrunk => {
+                Err(e) if error_is_too_long(&e) && !shrunk && !streamed.load(Ordering::SeqCst) => {
                     shrunk = true;
 
                     let kept = drop_oldest_half(&mut messages);
@@ -1104,7 +1080,10 @@ impl Turn<'_> {
                 // unbounded retry against a daily quota would hang the turn
                 // until the user gave up, and the message they get instead
                 // ("try again in ...") is at least true.
-                Err(e) if rate_limit_waits < MAX_RATE_LIMIT_WAITS => {
+                Err(e)
+                    if rate_limit_waits < MAX_RATE_LIMIT_WAITS
+                        && !streamed.load(Ordering::SeqCst) =>
+                {
                     let Some(secs) = wait_before_retry(&e) else {
                         return Err(fail(&e, step));
                     };
@@ -1135,6 +1114,12 @@ impl Turn<'_> {
             }
 
             if response.tool_calls.is_empty() {
+                if final_text.trim().is_empty() {
+                    let error = vavis_brain::BrainError::Parse(
+                        "the provider returned an empty answer".into(),
+                    );
+                    return Err(fail(&error, step));
+                }
                 return Ok(final_text);
             }
 
@@ -1375,14 +1360,13 @@ pub fn answer_approval(state: State<AppState>, decision: String) {
 /// something with "remember this" must not lose it to a clear.
 #[tauri::command]
 pub fn clear_conversation(state: State<AppState>) -> Result<(), String> {
-    if state.busy.load(Ordering::SeqCst) {
-        return Err("a reply is in progress".into());
-    }
+    let _guard = super::conversations::claim(&state)?;
     let conversation = *AppState::lock(&state.conversation);
-    AppState::lock(&state.history).clear();
     AppState::lock(&state.store)
         .clear_conversation(conversation)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    AppState::lock(&state.history).clear();
+    Ok(())
 }
 
 /// How much of the conversation `forget_oldest` keeps.
@@ -1407,6 +1391,7 @@ const KEEP_FRACTION: usize = 2;
 /// problem would be a poor trade.
 #[tauri::command]
 pub fn forget_oldest(state: State<AppState>) -> Result<usize, String> {
+    let _guard = super::conversations::claim(&state)?;
     let mut history = AppState::lock(&state.history);
     let drop = how_many_to_forget(history.len());
     history.drain(..drop);

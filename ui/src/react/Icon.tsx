@@ -36,6 +36,7 @@ export type IconName =
     | "maximise"
     | "copy"
     | "check"
+    | "edit"
     | "trash"
     | "panelRight"
     | "chevronDown"
@@ -112,6 +113,7 @@ const PATHS: Record<IconName, readonly string[]> = {
         "M15 7V6.5A2.5 2.5 0 0 0 12.5 4h-6A2.5 2.5 0 0 0 4 6.5v6A2.5 2.5 0 0 0 6.5 15H7",
     ],
     check: ["M4.5 12.5 9.5 17.5 19.5 7"],
+    edit: ["M4.5 19.5 6 14l10-10 4 4-10 10-5.5 1.5Z", "m13.5 6.5 4 4"],
     trash: [
         "M4.5 6.5h15",
         "M9 6.5V5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 5v1.5",

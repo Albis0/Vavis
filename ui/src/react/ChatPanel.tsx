@@ -343,13 +343,13 @@ function ChatPanel({ onClose }: Props, ref: ForwardedRef<ChatPanelHandle>) {
             ) : null}
 
             <div className="composer">
-                <div className={status?.busy ? "input-wrap busy" : "input-wrap"}>
+                <div className={state.busy ? "input-wrap busy" : "input-wrap"}>
                     <textarea
                         ref={inputRef}
                         value={chat.input}
                         onKeyDown={onKeydown}
                         onChange={onInput}
-                        placeholder={status?.busy ? "Working…" : "Message Vavis…"}
+                        placeholder={state.busy ? "Working…" : "Message Vavis…"}
                         rows={1}
                         spellCheck={false}
                     ></textarea>
@@ -386,7 +386,7 @@ function ChatPanel({ onClose }: Props, ref: ForwardedRef<ChatPanelHandle>) {
                         <button
                             className="icon-btn send"
                             onClick={submit}
-                            disabled={!chat.input.trim() || status?.busy}
+                            disabled={!chat.input.trim() || state.busy}
                             title="Send (Enter)"
                         >
                             <Icon name="send" size={16} />

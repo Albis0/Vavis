@@ -80,6 +80,12 @@ impl AppState {
             Some(id) => id,
             None => store.create_conversation("")?,
         };
+        let history = crate::commands::chat::saved_lines(&store, conversation)
+            .map(|lines| crate::commands::chat::model_history(&lines))
+            .unwrap_or_else(|e| {
+                tracing::warn!(%e, "could not load saved messages");
+                Vec::new()
+            });
         let store = Arc::new(Mutex::new(store));
         // Memory and automation tools reach the database through these —
         // one store, one source of truth.
@@ -130,7 +136,7 @@ impl AppState {
             store,
             agent: Arc::new(Mutex::new(Agent::new(registry))),
             client: Arc::new(BrainClient::new()),
-            history: Arc::new(Mutex::new(Vec::new())),
+            history: Arc::new(Mutex::new(history)),
             conversation: Arc::new(Mutex::new(conversation)),
             busy: Arc::new(AtomicBool::new(false)),
             approval_tx,
@@ -162,20 +168,19 @@ impl AppState {
         Ok(bridge)
     }
 
-    /// Claims the busy flag. Returns false if a request is already running.
-    pub fn try_claim(&self) -> bool {
-        !self.busy.swap(true, Ordering::SeqCst)
-    }
-
-    pub fn release(&self) {
-        self.busy.store(false, Ordering::SeqCst);
+    /// Holds the conversation still until this operation finishes.
+    pub fn try_claim(&self) -> Option<BusyGuard> {
+        self.busy
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .ok()
+            .map(|_| BusyGuard(self.busy.clone()))
     }
 }
 
 /// Clears the busy flag when dropped -- including when the turn holding it
 /// panics. Without it, one panicking tool left every later message refused
 /// with "a reply is already in progress" until the app was restarted.
-pub struct BusyGuard(pub Arc<AtomicBool>);
+pub struct BusyGuard(Arc<AtomicBool>);
 
 impl Drop for BusyGuard {
     fn drop(&mut self) {

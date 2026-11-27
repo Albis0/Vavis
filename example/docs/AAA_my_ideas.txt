@@ -1,28 +1,22 @@
-total virus api entegrasyonu
-böylece kullanıcı isterse virus taraması yapabilecek
-kendi apisini girebilecek kullanıcı fakat isterse bizim apiyide kullanabilecek ( farklı hesaplardan birden fazla api alıp free tierleri zincirleyesim var)
-bizim api kullanılırsa sınırlandırmaları olacak .
+VirusTotal integration
+Let users scan a file using their own API key. If the app supplies a shared key,
+apply usage limits to that option. The initial idea was to try several free tiers.
 
-    hdfilmcehennemi&fullhddiziizlesene vs gibi sitelerin kullandığı ücretsiz film db sini bağlamak,
-bununlar birlikte app e Watch modu eklenecek 
-ayrı bir ekranı olacak app tamamaen bir video player gibi olcak isterse kullanıcı geri döncebilecek ai kısmına
-son izlenenler tavsiye edilenler vs vs olcak kullanıcı misal filmin yarısında kapadı diyelim orayı kayda alcaz sonra tekrar açtığında ordan devam edebilecek
-ek fikir : watch together yapıp birlikte izlemelerinide sağlayabiliriz .
-bi oda oluşturulur (ai a tool olacak anlattıklarımın hepsi ) birisi yönetmen olur sadece o durdur devam et değiştir yapabilir diğerleri sadece talep edebilir bunu 
-film bulma,film durrdurma devam ettirme, belirtilen zamana sarma , film açma değiştirme kapama , oda yönetmenliği .
-gibi şeyler ai a tool olacak watch ekranı kullanıcı kendi açamicak ai açabilecek 
+Watch mode
+Connect a movie catalog and add a video-player view that users can leave to
+return to the assistant. Show recent and recommended titles and resume from the
+last saved position.
 
+Explore a shared viewing room. The host can stop, resume or change playback.
+Other members can request those actions. Tools would cover finding and opening a
+film, playback, seeking to a time, and room management. The assistant would open
+the Watch view.
 
-    app in code kısmına vscode extensionları entegre ettirme
-bu nasıl yapılır bilmiom ama o bölmede claude code çalıştırmak şahane olurdu
+Code
+Explore VS Code extension support in the Code view and running Claude Code there.
+Build a reliable coding workflow with provider-specific handling where needed.
+Aim for the quality of established coding tools.
 
-
-    improve:
-code bölümünün harness i sağlam olmalı gerekirse providera özel olmalı 
-claude code codex kalitesinde
-
-
-niyeyse diğer insanlar bazıları opus 4.8 gibi bir canavar kullanırken geri cevap almaları 2sn sürerken bizim gemini flash 10 saniyede falan tool kullanmaya başlıo orda bi sıkıntı var
-
-(canvas komple siki tutmuş)
-
+Performance and Canvas
+Investigate why some systems return a reply in roughly two seconds while Gemini
+Flash here takes around ten seconds to start using tools. Canvas needs repair.

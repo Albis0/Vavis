@@ -109,3 +109,34 @@ async fn missing_key_fails_before_network() {
         .unwrap_err();
     assert!(matches!(err, vavis_brain::BrainError::MissingKey { .. }));
 }
+
+#[tokio::test]
+async fn model_listing_uses_anthropic_key_and_version_headers() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let request: Vec<_> = BufReader::new(stream.try_clone().unwrap())
+            .lines()
+            .map(|line| line.unwrap().to_ascii_lowercase())
+            .take_while(|line| !line.is_empty())
+            .collect();
+        let correct = request[0].starts_with("get /v1/models ")
+            && request.iter().any(|line| line == "x-api-key: fake-key")
+            && request
+                .iter()
+                .any(|line| line == "anthropic-version: 2023-06-01");
+        let (status, body) = if correct {
+            ("200 OK", r#"{"data":[{"id":"claude-test"}]}"#)
+        } else {
+            ("401 Unauthorized", "{}")
+        };
+        write!(stream, "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+    });
+    let address = format!("http://127.0.0.1:{port}/v1/chat/completions");
+    let models = BrainClient::new()
+        .list_models_at(Provider::Anthropic, "fake-key", Some(&address))
+        .await;
+    server.join().unwrap();
+    assert_eq!(models.unwrap(), ["claude-test"]);
+}

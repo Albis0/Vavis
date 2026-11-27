@@ -45,12 +45,21 @@ const CASES: &[(&str, Want)] = &[
     ("müziği duraklat", Any(&["media_control"])),
     ("spotify'da ne çalıyor", Any(&["get_now_playing"])),
     ("masaüstündeki dosyaları listele", Any(&["list_directory"])),
-    ("masaüstüne deneme.txt diye bir dosya yaz, içinde merhaba olsun", Any(&["write_file"])),
+    (
+        "masaüstüne deneme.txt diye bir dosya yaz, içinde merhaba olsun",
+        Any(&["write_file"]),
+    ),
     ("beni hatırla: kahveyi sade içerim", Any(&["remember"])),
     ("hakkımda ne biliyorsun", Any(&["search_memory"])),
-    ("10 dakika sonra bana su içmeyi hatırlat", Any(&["create_automation"])),
+    (
+        "10 dakika sonra bana su içmeyi hatırlat",
+        Any(&["create_automation"]),
+    ),
     ("kurulu otomasyonlarım neler", Any(&["list_automations"])),
-    ("bu linkin güvenli olduğundan emin misin: http://example.com", Any(&["virus_scan_url"])),
+    (
+        "bu linkin güvenli olduğundan emin misin: http://example.com",
+        Any(&["virus_scan_url"]),
+    ),
     // Direct, but phrased the way people really type.
     ("dolar kaç tl", Web),
     ("yarın istanbul'da yağmur var mı", Web),
@@ -58,12 +67,24 @@ const CASES: &[(&str, Want)] = &[
     ("ip adresim ne", Any(&["run_command", "get_system_status"])),
     ("ekranı kilitle", Any(&["run_command"])),
     ("wifi'yi kapat", Any(&["run_command"])),
-    ("notlarıma bak, alışveriş listesi var mı", Any(&["search_notes", "read_note"])),
-    ("kaç gb boş yerim var", Any(&["get_system_status", "run_command"])),
-    ("open spotify and play something", Any(&["launch_app", "media_control"])),
+    (
+        "notlarıma bak, alışveriş listesi var mı",
+        Any(&["search_notes", "read_note"]),
+    ),
+    (
+        "kaç gb boş yerim var",
+        Any(&["get_system_status", "run_command"]),
+    ),
+    (
+        "open spotify and play something",
+        Any(&["launch_app", "media_control"]),
+    ),
     ("şarkıyı değiştir", Any(&["media_control"])),
     // Broad: several steps, the first call is what counts.
-    ("bilgisayar yavaş, neden olabilir", Any(&["get_system_status", "list_processes"])),
+    (
+        "bilgisayar yavaş, neden olabilir",
+        Any(&["get_system_status", "list_processes"]),
+    ),
     ("masaüstümü topla", Any(&["list_directory", "run_command"])),
     // Negatives: no tool at all.
     ("merhaba nasılsın", Nothing),
@@ -84,7 +105,10 @@ impl Handler for Recorder {
         self.tools.lock().unwrap().clone()
     }
     fn call(&self, _id: &str, name: &str, arguments: Value) -> CallResult {
-        self.calls.lock().unwrap().push((name.to_string(), arguments));
+        self.calls
+            .lock()
+            .unwrap()
+            .push((name.to_string(), arguments));
         CallResult {
             text: "Tamam, yapıldı. (test: gerçek bir işlem yapılmadı)".into(),
             is_error: false,
@@ -175,15 +199,21 @@ async fn the_model_calls_the_right_tool_for_real_sentences() {
         } else {
             format!("\n    model dedi ki: {}", reply.trim().replace('\n', " "))
         };
-        rows.push(format!(
-            "{} {:<58} bekl={:<28} çağrı={:?}{}{}",
-            if ok { "✓" } else { "✗" },
-            msg,
-            expect,
-            called,
-            if offered_ok { "" } else { " [araç sunulmadı!]" },
-            err
-        ) + &said);
+        rows.push(
+            format!(
+                "{} {:<58} bekl={:<28} çağrı={:?}{}{}",
+                if ok { "✓" } else { "✗" },
+                msg,
+                expect,
+                called,
+                if offered_ok {
+                    ""
+                } else {
+                    " [araç sunulmadı!]"
+                },
+                err
+            ) + &said,
+        );
     }
 
     println!("\n{}\n", rows.join("\n"));

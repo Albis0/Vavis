@@ -329,6 +329,7 @@ export default function App() {
         [
             chatOpen,
             playing.visible,
+            status?.live,
             status?.voiceMode,
             status?.windowMode,
             theme,

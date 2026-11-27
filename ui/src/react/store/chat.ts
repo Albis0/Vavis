@@ -186,13 +186,21 @@ export class ChatStore {
      */
     codeContext = false;
 
+    private lifecycle: AbortController | null = null;
+    private initializing = false;
+    private submitting = false;
+    private changingConversation = false;
     private unlisteners: (() => void)[] = [];
+
+    get busy(): boolean {
+        return this.initializing || this.submitting || this.changingConversation || this.status?.busy === true;
+    }
 
     /** The state the core visual should show. */
     get coreState(): CoreState {
         if (this.status?.speaking) return "speaking";
         if (this.runningTool) return "working";
-        if (this.status?.busy) return "thinking";
+        if (this.busy) return "thinking";
         if (this.status && this.status.voiceMode !== "off") return "listening";
         return "idle";
     }
@@ -242,42 +250,60 @@ export class ChatStore {
             : this.messages.slice(0, -1);
     }
 
-    async refresh() {
+    async refresh(signal?: AbortSignal) {
         try {
-            this.status = await api.status();
+            const status = await api.status();
+            if (!signal?.aborted) this.status = status;
         } catch (e) {
-            console.error("status failed", e);
+            if (!signal?.aborted) console.error("status failed", e);
         }
     }
 
-    async send(text: string) {
+    async send(text: string, background = false): Promise<boolean> {
         const trimmed = text.trim();
-        if (!trimmed || this.status?.busy) return;
+        if (!trimmed) return true;
+        if (this.busy) return false;
 
-        this.add("user", trimmed);
-        this.remember(trimmed);
-        this.input = "";
-
-        // Read and cleared together: the flag marks one handed-over turn,
-        // not every turn after it. Anything typed while the code screen is
-        // showing is code work too -- that is what the screen is for.
-        const code = this.codeContext || this.view === "code";
-        this.codeContext = false;
+        this.submitting = true;
+        const input = this.input;
+        const codeContext = this.codeContext;
+        const code = !background && (codeContext || this.view === "code");
+        const message = this.add("user", trimmed);
+        if (!background) {
+            this.input = "";
+            this.codeContext = false;
+        }
 
         try {
             await api.send(trimmed, code);
-            await this.refresh();
+            if (!background) this.remember(trimmed);
+            return true;
         } catch (e) {
+            this.messages = this.messages.filter((line) => line.id !== message.id);
+            if (!background && !this.input) {
+                this.input = input || trimmed;
+                this.codeContext = codeContext;
+            }
+            if (background && String(e) === "a reply is already in progress") return false;
             this.add("error", String(e));
+            return true;
+        } finally {
+            await this.refresh();
+            this.submitting = false;
         }
     }
 
     /** Sends the next queued automation prompt, if the way is clear. */
     private async sendQueued() {
-        if (this.queued.length === 0 || this.status?.busy) return;
+        if (this.queued.length === 0 || this.busy) return;
         const [next, ...rest] = this.queued;
         this.queued = rest;
-        await this.send(next);
+        if (!(await this.send(next, true))) this.queued = [next, ...this.queued];
+    }
+
+    private async refreshAndSendQueued(signal: AbortSignal) {
+        await this.refresh(signal);
+        if (!signal.aborted) await this.sendQueued();
     }
 
     /**
@@ -375,7 +401,7 @@ export class ChatStore {
             // would leave the button reading "Done." over a retry that never
             // happened. The room has been made either way, so say what state
             // things are actually in rather than pretending it went.
-            if (this.status?.busy) {
+            if (this.busy) {
                 toast.info("Made room. Send your message again when the reply finishes.");
                 return;
             }
@@ -397,12 +423,19 @@ export class ChatStore {
 
     /** Conversations for the list, newest first. */
     conversations: ConversationView[] = [];
+    private conversationQuery = "";
+    private conversationListRequest = 0;
 
-    async loadConversations(query?: string) {
+    async loadConversations(query = this.conversationQuery) {
+        this.conversationQuery = query;
+        const request = ++this.conversationListRequest;
         try {
-            this.conversations = await api.listConversations(query);
+            const results = await api.listConversations(query);
+            if (request === this.conversationListRequest) this.conversations = results;
         } catch (e) {
-            toast.failure("Could not load conversations.", e);
+            if (request === this.conversationListRequest) {
+                toast.failure("Could not load conversations.", e);
+            }
         }
     }
 
@@ -426,6 +459,8 @@ export class ChatStore {
      * replaced the old "discard everything?" dialog on Ctrl+L.
      */
     async newConversation() {
+        if (this.changingConversation) return;
+        this.changingConversation = true;
         try {
             await api.newConversation();
             this.show([]);
@@ -433,16 +468,22 @@ export class ChatStore {
             await this.loadConversations();
         } catch (e) {
             toast.failure("Could not start a new conversation.", e);
+        } finally {
+            this.changingConversation = false;
         }
     }
 
     async openConversation(id: number) {
+        if (this.changingConversation) return;
+        this.changingConversation = true;
         try {
             this.show(await api.openConversation(id));
             await this.refresh();
             await this.loadConversations();
         } catch (e) {
             toast.failure("Could not open that conversation.", e);
+        } finally {
+            this.changingConversation = false;
         }
     }
 
@@ -465,15 +506,17 @@ export class ChatStore {
             cancelLabel: "Keep it",
             danger: true,
         });
-        if (!confirmed) return;
+        if (!confirmed || this.changingConversation) return;
+        this.changingConversation = true;
         try {
-            const wasCurrent = target?.current ?? false;
-            const now = await api.deleteConversation(id);
-            if (wasCurrent) this.show(await api.openConversation(now));
+            const replacement = await api.deleteConversation(id);
+            if (replacement !== null) this.show(replacement);
             await this.refresh();
             await this.loadConversations();
         } catch (e) {
             toast.failure("Could not delete it.", e);
+        } finally {
+            this.changingConversation = false;
         }
     }
 
@@ -533,22 +576,26 @@ export class ChatStore {
 
     /** Wires up backend events and the status poll. */
     async start() {
-        const restored = await api.loadHistory();
-        for (const line of restored) {
-            this.add(line.role === "user" ? "user" : "assistant", line.content);
+        if (this.lifecycle) return;
+        const lifecycle = new AbortController();
+        this.lifecycle = lifecycle;
+        this.initializing = true;
+
+        const { signal } = lifecycle;
+        try {
+            const restored = await api.loadHistory();
+            if (signal.aborted) return;
+            this.show(restored);
+            if (restored.length > 0) {
+                this.add("system", `${restored.length} messages restored`);
+            }
+        } catch (e) {
+            if (signal.aborted) return;
+            toast.failure("Could not load saved messages.", e);
         }
 
-        // Seed ↑ from the restored conversation, so history survives a
-        // restart the way a shell's does.
-        this.history = restored
-            .filter((line) => line.role === "user")
-            .map((line) => line.content)
-            .slice(-HISTORY_LIMIT);
-        if (restored.length > 0) {
-            this.add("system", `${restored.length} messages restored`);
-        }
-
-        await this.refresh();
+        await this.refresh(signal);
+        if (signal.aborted) return;
 
         // Claude Code and local servers need no key, so "no keys stored"
         // says nothing; what matters is whether the chosen provider can
@@ -561,16 +608,24 @@ export class ChatStore {
             );
         }
 
-        this.unlisteners = await Promise.all([
-            on<DeltaEvent>("chat:delta", (p) => this.appendDelta(p.text)),
+        const listen = async <T>(event: string, handler: (payload: T) => void) => {
+            const off = await on<T>(event, (payload) => {
+                if (!signal.aborted) handler(payload);
+            });
+            if (signal.aborted) off();
+            else this.unlisteners.push(off);
+        };
 
-            on<DoneEvent>("chat:done", () => {
+        const subscriptions = await Promise.allSettled([
+            listen<DeltaEvent>("chat:delta", (p) => this.appendDelta(p.text)),
+
+            listen<DoneEvent>("chat:done", () => {
                 this.finishStreaming();
                 this.runningTool = null;
-                void this.refresh().then(() => this.sendQueued());
+                void this.refreshAndSendQueued(signal);
             }),
 
-            on<ErrorEvent>("chat:error", (p) => {
+            listen<ErrorEvent>("chat:error", (p) => {
                 this.finishStreaming();
                 this.runningTool = null;
 
@@ -588,17 +643,17 @@ export class ChatStore {
                           }
                         : undefined,
                 });
-                void this.refresh().then(() => this.sendQueued());
+                void this.refreshAndSendQueued(signal);
             }),
 
             // A rate-limit wait, said out loud. Without it the turn just
             // stops for twenty seconds and reads as a hang.
-            on<NoticeEvent>("chat:notice", (p) => {
+            listen<NoticeEvent>("chat:notice", (p) => {
                 this.finishStreaming();
                 this.add("system", p.text);
             }),
 
-            on<ToolStartEvent>("chat:tool-start", (p) => {
+            listen<ToolStartEvent>("chat:tool-start", (p) => {
                 // Close the streaming bubble: the tool line belongs between the
                 // model's text and whatever it says next.
                 this.finishStreaming();
@@ -606,7 +661,7 @@ export class ChatStore {
                 this.runningArgs = p.args;
             }),
 
-            on<ToolDoneEvent>("chat:tool-done", (p) => {
+            listen<ToolDoneEvent>("chat:tool-done", (p) => {
                 this.add("tool", `${p.tool} — ${p.summary}`, {
                     ok: p.ok,
                     // Kept on the message so the line can be opened later, not only
@@ -618,7 +673,7 @@ export class ChatStore {
                 this.runningArgs = "";
             }),
 
-            on<ApprovalEvent>("chat:approval", (p) => {
+            listen<ApprovalEvent>("chat:approval", (p) => {
                 this.finishStreaming();
                 const message = this.add("approval", p.tool, {
                     args: p.args,
@@ -627,17 +682,16 @@ export class ChatStore {
                 this.approval = { ...p, messageId: message.id };
             }),
 
-            on<VoiceEvent>("voice", (event) => {
+            listen<VoiceEvent>("voice", (event) => {
                 switch (event.kind) {
                     case "heard":
                         // Said while a reply was running: queued like an
                         // automation, not dropped the way send() would.
-                        if (this.status?.busy) {
-                            this.queued = [...this.queued, event.text];
+                        if (this.busy || this.queued.length > 0) {
                             this.add("system", `Heard “${event.text}” — queued until the reply finishes.`);
-                        } else {
-                            void this.send(event.text);
                         }
+                        this.queued = [...this.queued, event.text];
+                        void this.sendQueued();
                         break;
                     case "woke":
                         this.add("system", "Listening…");
@@ -677,31 +731,37 @@ export class ChatStore {
             // Something picked out of the conversation and remembered. Said
             // quietly, but said: memory the user cannot see forming is
             // memory they cannot correct.
-            on<LearnedEvent>("memory:learned", (p) => {
+            listen<LearnedEvent>("memory:learned", (p) => {
                 const list = p.facts.join(" · ");
                 toast.info(`Remembered: ${list}`);
             }),
 
-            on<AutomationEvent>("automation", (p) => {
+            listen<AutomationEvent>("automation", (p) => {
                 this.add("system", `Automation fired — ${p.trigger}`);
-                if (this.status?.busy) {
-                    this.queued = [...this.queued, p.prompt];
+                if (this.busy || this.queued.length > 0) {
                     this.add("system", "Queued until the current reply finishes.");
-                } else {
-                    void this.send(p.prompt);
                 }
+                this.queued = [...this.queued, p.prompt];
+                void this.sendQueued();
             }),
 
             // The Spotify consent round trip finishes on a worker thread, long
             // after the command that started it returned.
-            on<{ ok: boolean; message: string }>("spotify:auth", (p) => {
+            listen<{ ok: boolean; message: string }>("spotify:auth", (p) => {
                 this.add("system", p.message);
             }),
         ]);
+        if (signal.aborted) return;
+        const failed = subscriptions.find((result) => result.status === "rejected");
+        if (failed?.status === "rejected") {
+            toast.failure("Could not connect to all desktop events.", failed.reason);
+        }
+        this.initializing = false;
+        void this.sendQueued();
 
         // Poll for telemetry. One second is enough for CPU and battery, and
         // the core animation runs on CSS, not on this.
-        const timer = setInterval(() => void this.refresh(), 1000);
+        const timer = setInterval(() => void this.refreshAndSendQueued(signal), 1000);
         this.unlisteners.push(() => clearInterval(timer));
 
         // The level meter needs to move with the voice, not once a second — but
@@ -721,6 +781,9 @@ export class ChatStore {
     }
 
     stop() {
+        this.lifecycle?.abort();
+        this.lifecycle = null;
+        this.initializing = false;
         for (const off of this.unlisteners) off();
         this.unlisteners = [];
     }

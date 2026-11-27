@@ -384,6 +384,14 @@ mod tests {
         assert_eq!(model_for(&c, Provider::Gemini), "gemini-3.5-flash");
     }
 
+    #[test]
+    fn the_retired_openrouter_default_is_replaced_in_saved_settings() {
+        let mut config = vavis_core::Config::default();
+        config.llm.provider = "openrouter".into();
+        config.llm.model = "meta-llama/llama-3.3-70b-instruct:free".into();
+        assert_eq!(model_for(&config, Provider::OpenRouter), "openrouter/free");
+    }
+
     /// Google publishes names with a `models/` prefix and the settings screen
     /// can store one that way. The path builder adds the prefix itself, so
     /// sending it again is a 404.
